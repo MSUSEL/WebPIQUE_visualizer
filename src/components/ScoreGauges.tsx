@@ -1,7 +1,7 @@
 // component to display scores with gauges under header
 import GaugeComponent from "react-gauge-component";
 import '../styles/ScoreGauges.css';
-import { ParsedScore } from '../components/DataParser';
+import { ParsedScore } from '../Utilities/DataParser';
 
 interface ScoreGaugesProps {
     scores: ParsedScore;
@@ -16,7 +16,7 @@ interface GaugeProps {
 
 const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
     <div className="gauge-item" onClick={onClick} style={{ cursor: onClick ? "pointer" : "default" }}>
-        <h3 className="gauge-title" style={{ fontSize: title === "TQI Score" ? "1.75rem" : "0.9rem" }}>{title}</h3>
+        <h3 className="gauge-title" style={{ fontSize: title === "TQI Score" ? "1.75rem" : "1.1rem" }}>{title}</h3>
         <GaugeComponent
             arc={{
                 nbSubArcs: 150,

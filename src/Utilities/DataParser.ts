@@ -15,11 +15,17 @@ export interface ParsedScore {
     tqiScore: number;
     aspects: { name: string; value: number }[];
     productFactorsByAspect: ProductFactorsByAspect;
+    vulnerabilitySummary?: VulnerabilitySummary;
 };
 
 
 export interface ProductFactorsByAspect {
     [aspectName: string]: ProductFactor[];
+}
+
+export interface VulnerabilitySummary {
+    cweCount: number;
+    cveCount: number;
 }
 
 export function parsePIQUEJSON(json: any): {
@@ -96,11 +102,27 @@ export function parsePIQUEJSON(json: any): {
         productFactorsByAspect[aspectName] = pfList;
     }
 
+    // Extract CWE and CVE counts
+    const allPFKeys = Object.keys(json.product_factors || {});
+
+    const cweSet = new Set(
+        allPFKeys.filter(key => key.startsWith("Product_Factor:CWE"))
+    );
+    const cveSet = new Set(
+        allPFKeys.filter(key => key.startsWith("Product_Factor:CVE"))
+    );
+
+    const vulnerabilitySummary = {
+        cweCount: cweSet.size,
+        cveCount: cveSet.size,
+    };
+
     return {
         scores: {
             tqiScore,
             aspects,
             productFactorsByAspect,
+            vulnerabilitySummary,
         },
         productFactorsByAspect,
     };
