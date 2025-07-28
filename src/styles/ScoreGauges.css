@@ -1,0 +1,95 @@
+/* stylesheet for score guages */
+.gauge-header-row {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 2rem 0 1rem 0;
+    box-sizing: border-box;
+}
+
+.tqi-section {
+    width: auto;
+    height: auto;
+    font-size: 1.25rem;
+    background-color: #46666f;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+}
+
+/* TQI gauge font adjustments */
+.tqi-section .gauge-score {
+    font-size: 1rem;
+}
+
+.tqi-gauge-item {
+    background-color: #46666f;
+    border-radius: 8px;
+    margin-top: 20px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    text-align: center;
+    align-items: center;
+    font-size: 1.25rem;
+}
+
+.aspects-section {
+    background-color: #d5e187;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.aspects-header {
+    font-size: 1.25rem;
+    font-weight: bold;
+    text-align: center;
+}
+
+.aspects-gauges {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    height: auto;
+    width: auto;
+}
+
+.aspect-gauge-item {
+    background-color: #3d90b7;
+    border-radius: 8px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    text-align: center;
+    padding-bottom: 5px;
+}
+
+.gauge-item .value-text {
+    display: none !important;
+}
+
+.gauge-item text {
+    fill: white !important;
+    font-size: 18px !important;
+}
+
+.aspect-gauge-item:hover {
+    transform: scale(1.05);
+}
+
+.gauge-title {
+    margin-bottom: -20px;
+}

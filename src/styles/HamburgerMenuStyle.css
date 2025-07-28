@@ -1,0 +1,125 @@
+/*hamburger menu style*/
+/* Header bar container */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #5B6F75;
+}
+
+/* Hamburger icon container */
+.hamburger-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    z-index: 1001;
+    margin-left: 10px;
+}
+
+/* Main menu container */
+.menu-container {
+    position: relative;
+    z-index: 1000;
+}
+
+.menu {
+    position: absolute;
+    top: 40x;
+    left: 0;
+    width: 220px;
+    background: white;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    color: black;
+}
+
+.menu-title {
+    font-weight: bold;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: black;
+}
+
+.menu-divider {
+    border: none;
+    border-top: 2px solid #ccc;
+    margin: 10px 0;
+}
+
+/* Menu items */
+.menu-item {
+    font-size: 16px;
+    cursor: pointer;
+    color: #333;
+    padding: 6px 0;
+}
+
+.menu-item:hover {
+    background-color: #f2f2f2;
+}
+
+.menu-item.active {
+    background-color: #e0e0e0;
+    /* or your hover color */
+    font-weight: bold;
+}
+
+.submenu-container {
+    position: absolute;
+    top: 100px;
+    /* Adjust based on header + menu item heights */
+    left: 330px;
+    /* Align next to main menu */
+    background-color: white;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+    padding: 16px;
+    z-index: 1000;
+}
+
+/* Submenu container (pops to right of menu) */
+.submenu {
+    position: absolute;
+    top: 190px;
+    left: 220px;
+    width: 250px;
+    background: white;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    color: black;
+}
+
+/* Submenu title and layout */
+.submenu-title {
+    font-weight: bold;
+    font-size: 1rem;
+    color: black;
+}
+
+/* Left and right side file input */
+.file-input {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    font-size: 15px;
+}
+
+/* Align label and file input cleanly */
+.file-input label {
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Compare button styling */
+.compare-button {
+    background-color: #5B6F75;
+    color: white;
+    border: none;
+    padding: 8px 8px;
+    border-radius: 15px;
+    cursor: pointer;
+    width: 70%;
+    font-weight: bold;
+    font-size: 17px;
+}

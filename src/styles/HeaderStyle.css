@@ -1,0 +1,30 @@
+/*Stylesheet for header*/
+.header {
+    text-align: center;
+    margin: auto;
+    color: white;
+    font-size: 55px;
+    margin: 0;
+    position: fixed;
+    height: 110px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 30px;
+    align-items: center;
+    padding-left: 10px;
+    top: 0;
+    /* Position the header at the top of the viewport */
+    left: 0;
+    /* Ensures the header spans the full width from the left edge */
+    width: 100%;
+    /* Stretch the header across the full width of the page */
+    background-color: #5B6F75;
+    z-index: 999;
+    /* Ensure the header stays on top */
+    text-align: center;
+}
+
+.logo {
+    height: 65px;
+    width: 110px;
+}
