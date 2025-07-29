@@ -1,5 +1,7 @@
-// Data parser to extract information from PIQUE json output
-export interface ProductFactor {
+// Data parser to extract information from WebPIQUE json output
+// The parser works for TQI and Quality Aspects on other PIQUE outputs
+// Parser is unique to display WebPIQUE product factors...updata Product Factor section for other PIQUE models
+export interface ProductFactor { //this is specific to WebPIQUE
     name: string;
     value: number;
     description: string;
@@ -15,7 +17,8 @@ export interface ParsedScore {
     tqiScore: number;
     aspects: { name: string; value: number }[];
     productFactorsByAspect: ProductFactorsByAspect;
-    vulnerabilitySummary?: VulnerabilitySummary;
+    vulnerabilitySummary?: VulnerabilitySummary; //this is specific to WebPIQUE
+    cweProductFactors?: ProductFactor[]; //this is specific to WebPIQUE
 };
 
 
@@ -23,7 +26,7 @@ export interface ProductFactorsByAspect {
     [aspectName: string]: ProductFactor[];
 }
 
-export interface VulnerabilitySummary {
+export interface VulnerabilitySummary { //this is specific to WebPIQUE
     cweCount: number;
     cveCount: number;
 }
@@ -32,30 +35,30 @@ export function parsePIQUEJSON(json: any): {
     scores: ParsedScore;
     productFactorsByAspect: ProductFactorsByAspect;
 } {
-    const measuresRaw = json.factors.measures || {};
-    const qualityAspectsRaw = json.factors.quality_aspects || {};
-    const productFactorsRaw = json.factors.product_factors || {};
-
+    //variables for TQI and quality aspect scores, and product factor infomration
     const tqiRaw = json.factors?.tqi;
     const tqiNode = tqiRaw ? Object.values(tqiRaw)[0] : null;
+    const qualityAspectsRaw = json.factors.quality_aspects || {};
+    const productFactorsRaw = json.factors.product_factors || {};
+    const measuresRaw = json.factors.measures || {};
 
+    //extract and store TQI score
     let tqiScore = 0;
     if (tqiNode && typeof (tqiNode as any).value === 'number') {
         tqiScore = (tqiNode as any).value;
     }
 
+    //extract and store aspect scores
     const aspects = Object.entries(qualityAspectsRaw).map(([aspectName, aspectData]: any) => ({
         name: aspectName,
         value: typeof aspectData?.value === 'number' ? aspectData.value : 0,
     }));
 
+    //extract and store product factor information by aspect
     const productFactorsByAspect: ProductFactorsByAspect = {};
-
     for (const [aspectName, rawData] of Object.entries(qualityAspectsRaw)) {
         const aspectData = rawData as { value: number; children?: unknown };
         const children: string[] = Array.isArray(aspectData.children) ? aspectData.children as string[] : [];
-
-
         const pfList: ProductFactor[] = [];
 
         for (const pfKey of children) {
@@ -65,35 +68,8 @@ export function parsePIQUEJSON(json: any): {
                 const cleanName = pfName.replace(/^Product_Factor:/, '');
                 let type: string | undefined = undefined;
 
-                // Extract measures
-                const measures: { name: string; description: string }[] = [];
-                if (Array.isArray(pfData.children)) {
-                    for (const measureKey of pfData.children) {
-                        const measureName = measureKey as string;
-                        const measureData = measuresRaw[measureName];
-                        if (measureData) {
-                            measures.push({
-                                name: measureName.replace(/^Measure:/, ''),
-                                description: measureData.description ?? '',
-                            });
-                        }
-                    }
-                }
-
                 pfList.push({
                     name: pfName as string,
-                    value: pfData.value ?? 0,
-                    description: pfData.description ?? '',
-                    measures: Array.isArray(pfData.children)
-                        ? (pfData.children as string[]).map((measureName: string) => {
-                            const measureData = measuresRaw[measureName];
-                            return {
-                                name: measureName,
-                                description: measureData?.description ?? '',
-                            };
-                        })
-                        : [],
-                    type,
                     aspect: aspectName,
                 } as any);
             }
@@ -102,19 +78,73 @@ export function parsePIQUEJSON(json: any): {
         productFactorsByAspect[aspectName] = pfList;
     }
 
-    // Extract CWE and CVE counts
-    const allPFKeys = Object.keys(json.product_factors || {});
+    //extract CWE product factors
+    const cweProductFactors: ProductFactor[] = [];
 
-    const cweSet = new Set(
-        allPFKeys.filter(key => key.startsWith("Product_Factor:CWE"))
-    );
-    const cveSet = new Set(
-        allPFKeys.filter(key => key.startsWith("Product_Factor:CVE"))
-    );
+    for (const [key, pfDataRaw] of Object.entries(json.factors?.product_factors || {})) {
+        const pfData = pfDataRaw as {
+            value?: number;
+            description?: string;
+            children?: string[];
+        };
+        if (key.startsWith("Product_Factor CWE-")) {
+            const children = pfData.children;
+            const measures: { name: string; description: string }[] = [];
+
+            if (children && typeof children === 'object') {
+                for (const [measureKey, measureObj] of Object.entries(children)) {
+                    if (typeof measureObj === 'object' && measureObj !== null) {
+                        measures.push({
+                            name: (measureObj as any).name ?? measureKey,
+                            description: (measureObj as any).description ?? '',
+                        });
+                    }
+                }
+            }
+
+            cweProductFactors.push({
+                name: key,
+                value: pfData.value ?? 0,
+                description: pfData.description ?? '',
+                measures,
+                type: 'CWE',
+                aspect: '',
+            });
+        }
+    }
+
+    // Extract CWE product factors and CVE counts
+    const cweCount = Object.keys(json.factors?.product_factors || {}).filter(key =>
+        key.startsWith("Product_Factor CWE-")
+    ).length;
+
+    // Recursively traverse diagnostics to extract CVEs
+    function collectCVEs(obj: any): Set<string> {
+        const found = new Set<string>();
+        const stack = [obj];
+
+        while (stack.length > 0) {
+            const current = stack.pop();
+            if (!current || typeof current !== 'object') continue;
+
+            for (const [key, value] of Object.entries(current)) {
+                if (key.startsWith("CVE-")) {
+                    found.add(key);
+                } else if (typeof value === 'object') {
+                    stack.push(value);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    const allCVEs = collectCVEs(json.factors?.product_factors || {});
+    const cveCount = allCVEs.size;
 
     const vulnerabilitySummary = {
-        cweCount: cweSet.size,
-        cveCount: cveSet.size,
+        cweCount,
+        cveCount,
     };
 
     return {
@@ -123,6 +153,7 @@ export function parsePIQUEJSON(json: any): {
             aspects,
             productFactorsByAspect,
             vulnerabilitySummary,
+            cweProductFactors,
         },
         productFactorsByAspect,
     };

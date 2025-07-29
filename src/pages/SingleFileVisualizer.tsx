@@ -11,6 +11,7 @@ import '../styles/Pages.css';
 import { TabItem } from '../components/Tabs';
 
 
+
 const SingleFileVisualizer = () => {
     //check for json location and give error is not correct
     const location = useLocation();
@@ -35,7 +36,32 @@ const SingleFileVisualizer = () => {
             label: "CWE",
             content: (
                 <Box sx={{ padding: 2 }}>
-                    <h3># of Findings: {scores.vulnerabilitySummary?.cweCount ?? 0}</h3>
+                    <h3># of CWE Pillars: {scores.vulnerabilitySummary?.cweCount ?? 0}</h3>
+                    <hr style={{ margin: '0.5rem 0', width: '250px' }} />
+                    {scores.cweProductFactors?.map((pf) => (
+                        <Box key={pf.name} sx={{ marginBottom: 4 }}>
+                            <h4 style={{ marginBottom: '0.5rem' }}>
+                                {pf.name.replace('Product_Factor ', '')}
+                            </h4>
+                            <ul>
+                                <li><strong>Score:</strong> {pf.value}</li>
+                                <li><strong>Description:</strong> {pf.description}</li>
+                                <li><strong>Measures:</strong></li>
+                                {pf.measures && pf.measures.length > 0 && (
+                                    <>
+                                        <ul>
+                                            {pf.measures.map((measure, idx) => (
+                                                <li key={idx}>
+                                                    <strong>{measure.name}:</strong> {measure.description}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
+                            </ul>
+                            <hr style={{ margin: '1rem 0' }} />
+                        </Box>
+                    ))}
                 </Box>
             ),
         });
@@ -44,7 +70,8 @@ const SingleFileVisualizer = () => {
             label: "CVE",
             content: (
                 <Box sx={{ padding: 2 }}>
-                    <h3># of Findings: {scores.vulnerabilitySummary?.cveCount ?? 0}</h3>
+                    <h3># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? 0}</h3>
+                    <hr style={{ margin: '1rem 0', width: '200px' }} />
                 </Box>
             ),
         });
