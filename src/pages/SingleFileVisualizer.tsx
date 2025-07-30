@@ -54,7 +54,7 @@ const SingleFileVisualizer = () => {
                                 <ul>
                                     <li><strong>Score:</strong> {pf.value}</li>
                                     <li><strong>Description:</strong> {pf.description}</li>
-                                    <li style={{ listStyle: 'none', marginTop: '0.5rem' }}>
+                                    <li>
                                         <div
                                             onClick={toggleExpand}
                                             style={{
@@ -65,7 +65,7 @@ const SingleFileVisualizer = () => {
                                                 userSelect: 'none',
                                             }}
                                         >
-                                            <span style={{ marginRight: '0.5rem' }}>Measures</span>
+                                            <span style={{ marginRight: '0.5rem' }}>Measures (n = {pf.measures.length}): </span>
                                             {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                         </div>
 
