@@ -47,14 +47,13 @@ const FileUpload = () => {
     });
 
     return (
-        <div className="upload-container">
-            <div {...getRootProps()} className="dropzone">
-                <input {...getInputProps()} />
+        <div {...getRootProps()} className={`upload-container ${isDragActive ? 'drag-active' : ''}`}>
+            <input {...getInputProps()} />
+            <div className="dropzone">
                 {isDragActive
                     ? <p>Drop the JSON file here...</p>
                     : <p>Drag JSON file here<br />or<br /><button className="upload-button">Browse Files</button></p>}
             </div>
-
             {status === 'uploading' && <p className="status-msg">Uploading file...</p>}
             {status === 'parsing' && <p className="status-msg">Parsing file...</p>}
             {status === 'error' && <p className="status-msg error">Something went wrong. Please try again.</p>}

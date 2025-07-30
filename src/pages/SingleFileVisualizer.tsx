@@ -3,7 +3,10 @@ import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import ScoreGauges from '../components/ScoreGauges';
 import MuiTabs from '../components/Tabs';
+import ProbabilityDensity from '../components/ProbabilityDensity';
 import { Box } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { parsePIQUEJSON } from '../Utilities/DataParser';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -19,49 +22,91 @@ const SingleFileVisualizer = () => {
         console.warn("❌ No JSON data found in router state.");
         return <div>No file loaded. Please go back to upload.</div>;
     }
+
     const jsonData = location.state?.jsonData;
-    //state handeling
     const [selectedAspect, setSelectedAspect] = useState<string | null>(null);
+    const [visiblePlotIndex, setVisiblePlotIndex] = useState<number | null>(null);
+    const [expandedCWEIndex, setExpandedCWEIndex] = useState<number | null>(null);
 
-    if (!jsonData) return <p>No file loaded.</p>;
-
-    const { scores, productFactorsByAspect } = parsePIQUEJSON(jsonData);
-
-    const productFactors = selectedAspect ? productFactorsByAspect[selectedAspect] || [] : [];
+    const { scores } = parsePIQUEJSON(jsonData);
 
     const tabs: TabItem[] = [];
 
-    if (scores) {
+    if (scores && selectedAspect === 'Security') {
         tabs.push({
             label: "CWE",
             content: (
                 <Box sx={{ padding: 2 }}>
                     <h3># of CWE Pillars: {scores.vulnerabilitySummary?.cweCount ?? 0}</h3>
                     <hr style={{ margin: '0.5rem 0', width: '250px' }} />
-                    {scores.cweProductFactors?.map((pf) => (
-                        <Box key={pf.name} sx={{ marginBottom: 4 }}>
-                            <h4 style={{ marginBottom: '0.5rem' }}>
-                                {pf.name.replace('Product_Factor ', '')}
-                            </h4>
-                            <ul>
-                                <li><strong>Score:</strong> {pf.value}</li>
-                                <li><strong>Description:</strong> {pf.description}</li>
-                                <li><strong>Measures:</strong></li>
-                                {pf.measures && pf.measures.length > 0 && (
-                                    <>
-                                        <ul>
-                                            {pf.measures.map((measure, idx) => (
-                                                <li key={idx}>
-                                                    <strong>{measure.name}:</strong> {measure.description}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </>
-                                )}
-                            </ul>
-                            <hr style={{ margin: '1rem 0' }} />
-                        </Box>
-                    ))}
+
+                    {scores.cweProductFactors?.map((pf, pfIndex) => {
+                        const isExpanded = expandedCWEIndex === pfIndex;
+                        const toggleExpand = () => {
+                            setExpandedCWEIndex(isExpanded ? null : pfIndex);
+                        };
+
+                        return (
+                            <Box key={pf.name} sx={{ marginBottom: 4 }}>
+                                <h4 style={{ marginBottom: '0.5rem' }}>
+                                    {pf.name.replace('Product_Factor ', '')}
+                                </h4>
+                                <ul>
+                                    <li><strong>Score:</strong> {pf.value}</li>
+                                    <li><strong>Description:</strong> {pf.description}</li>
+                                    <li style={{ listStyle: 'none', marginTop: '0.5rem' }}>
+                                        <div
+                                            onClick={toggleExpand}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                cursor: 'pointer',
+                                                fontWeight: 'bold',
+                                                userSelect: 'none',
+                                            }}
+                                        >
+                                            <span style={{ marginRight: '0.5rem' }}>Measures</span>
+                                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                        </div>
+
+                                        <div
+                                            style={{
+                                                maxHeight: isExpanded ? '1000px' : '0px',
+                                                overflow: 'hidden',
+                                                transition: 'max-height 0.3s ease',
+                                                paddingLeft: isExpanded ? '1rem' : '0',
+                                            }}
+                                        >
+                                            {pf.measures && pf.measures.length > 0 && (
+                                                <ul style={{ marginTop: '0.5rem' }}>
+                                                    {pf.measures.map((measure, idx) => {
+                                                        const cumulativeProbability =
+                                                            (measure.threshold.filter(t => measure.score >= t).length ?? 0) /
+                                                            (measure.threshold.length || 1);
+
+                                                        return (
+                                                            <li key={idx}>
+                                                                <strong>{measure.name}:</strong> {measure.description}
+                                                                <ul>
+                                                                    <li>Score: {measure.score}</li>
+                                                                    <li>Benchmark Size: {measure.threshold.length}</li>
+                                                                    <li>
+                                                                        Cumulative Probability: {(cumulativeProbability * 100).toFixed(1)}%
+                                                                    </li>
+                                                                    <li>Plot</li>
+                                                                </ul>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    </li>
+                                </ul>
+                                <hr style={{ margin: '1rem 0' }} />
+                            </Box>
+                        );
+                    })}
                 </Box>
             ),
         });

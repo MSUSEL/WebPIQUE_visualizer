@@ -16,7 +16,7 @@ interface GaugeProps {
 
 const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
     <div className="gauge-item" onClick={onClick} style={{ cursor: onClick ? "pointer" : "default" }}>
-        <h3 className="gauge-title" style={{ fontSize: title === "TQI Score" ? "1.75rem" : "1.1rem" }}>{title}</h3>
+        <h3 className="gauge-title" style={{ fontSize: title === "TQI Score" ? "1.75rem" : "1.25rem" }}>{title}</h3>
         <GaugeComponent
             arc={{
                 nbSubArcs: 150,
@@ -48,7 +48,7 @@ const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
             }}
             value={value}
             maxValue={1}
-            style={{ transform: title === "TQI Score" ? "scale(0.9)" : "scale(0.75)" }}
+            style={{ transform: title === "TQI Score" ? "scale(0.95)" : "scale(0.9)" }}
         />
         <div className="gauge-score">Current score: {value.toFixed(4)}</div>
     </div>

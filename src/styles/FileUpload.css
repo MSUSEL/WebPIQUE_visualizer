@@ -1,12 +1,14 @@
 /* stylesheet for file uploader */
 .upload-container {
-    border: 2px dashed #aaa;
-    padding: 40px;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
     text-align: center;
-    margin: 300px auto;
-    width: 50%;
-    background-color: #f9f9f9;
-    border-radius: 10px;
 }
 
 .upload-container p {
@@ -32,4 +34,10 @@
 
 .status-msg.error {
     color: #b00020;
+}
+
+/* change screen color when an file is dragged into drop zone */
+.upload-container.drag-active {
+    background-color: #bebdbd;
+    transition: background-color 0.2s ease-in-out;
 }

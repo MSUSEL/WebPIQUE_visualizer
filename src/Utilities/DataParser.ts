@@ -10,6 +10,8 @@ export interface ProductFactor { //this is specific to WebPIQUE
     measures: {
         name: string;
         description: string;
+        score: number,
+        threshold: number[],
     }[];
 }
 
@@ -89,7 +91,8 @@ export function parsePIQUEJSON(json: any): {
         };
         if (key.startsWith("Product_Factor CWE-")) {
             const children = pfData.children;
-            const measures: { name: string; description: string }[] = [];
+            const measures: { name: string; description: string; score: number; threshold: number[]; }[] = [];
+            const thresholds: number[] = [];
 
             if (children && typeof children === 'object') {
                 for (const [measureKey, measureObj] of Object.entries(children)) {
@@ -97,6 +100,10 @@ export function parsePIQUEJSON(json: any): {
                         measures.push({
                             name: (measureObj as any).name ?? measureKey,
                             description: (measureObj as any).description ?? '',
+                            score: (measureObj as any).value ?? 0,
+                            threshold: Array.isArray((measureObj as any).thresholds)
+                                ? (measureObj as any).thresholds.map(Number)
+                                : [],
                         });
                     }
                 }

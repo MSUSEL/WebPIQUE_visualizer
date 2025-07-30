@@ -25,6 +25,7 @@
     font-size: 1rem;
 }
 
+/* TQI gauge item adjustments */
 .tqi-gauge-item {
     background-color: #46666f;
     border-radius: 8px;
@@ -39,19 +40,20 @@
     font-size: 1.25rem;
 }
 
+/* Aspect gauge adjustments */
 .aspects-section {
     background-color: #d5e187;
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1rem;
     width: 100%;
     box-sizing: border-box;
+    padding-top: 10px;
 }
 
 .aspects-header {
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     font-weight: bold;
     text-align: center;
 }
@@ -63,18 +65,29 @@
     gap: 1rem;
     height: auto;
     width: auto;
+    transform: scale(0.9);
+    overflow: visible;
+}
+
+.aspect-gauge-item .gauge-score {
+    margin-top: 15px;
+    font-size: 17px;
 }
 
 .aspect-gauge-item {
     background-color: #3d90b7;
     border-radius: 8px;
-    padding: 0.5rem;
+    padding: 0.75rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     color: white;
     text-align: center;
-    padding-bottom: 10px;
+    overflow: visible;
+}
+
+.aspect-gauge-item svg {
+    overflow: visible !important;
 }
 
 .gauge-item .value-text {

@@ -1,6 +1,8 @@
 //component for hamburger menu and it's functionality
 import React, { useState, useRef } from 'react';
 import Hamburger from 'hamburger-react';
+import { useNavigate } from 'react-router-dom';
+import { useCallback } from 'react';
 import "../styles/HamburgerMenuStyle.css"; //hamburger menu stylesheet
 
 const FileInput = ({
@@ -41,17 +43,31 @@ const HamburgerMenu = () => {
         if (file) console.log('Right file selected:', file.name);
     };
 
-    const handleNewUpload = () => {
+    const navigate = useNavigate();
+
+    const handleNewUpload = useCallback(() => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
         input.onchange = (e: Event) => {
             const target = e.target as HTMLInputElement;
             const file = target.files?.[0];
-            if (file) console.log('Uploaded:', file.name);
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const json = JSON.parse(event.target?.result as string);
+                    navigate('/visualizer', { state: { jsonData: json } });
+                } catch (err) {
+                    alert('Invalid JSON file');
+                }
+            };
+            reader.onerror = () => alert('Error reading file');
+            reader.readAsText(file);
         };
         input.click();
-    };
+    }, [navigate]);
 
     return (
         <>
