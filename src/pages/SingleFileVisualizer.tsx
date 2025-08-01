@@ -1,18 +1,17 @@
 //Page to display single PIQIUE output file (page 2)
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import ScoreGauges from '../components/ScoreGauges';
-import MuiTabs from '../components/Tabs';
-import ProbabilityDensity from '../components/ProbabilityDensity';
 import { Box } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ScoreGauges from '../components/ScoreGauges';
+import MuiTabs from '../components/Tabs';
+import { TabItem } from '../components/Tabs';
 import { parsePIQUEJSON } from '../Utilities/DataParser';
+import ProbabilityDensity from '../components/ProbabilityDensity';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import '../styles/Pages.css';
-import { TabItem } from '../components/Tabs';
-
 
 
 const SingleFileVisualizer = () => {
@@ -23,20 +22,22 @@ const SingleFileVisualizer = () => {
         return <div>No file loaded. Please go back to upload.</div>;
     }
 
+    // set variables 
     const jsonData = location.state?.jsonData;
     const [selectedAspect, setSelectedAspect] = useState<string | null>(null);
-    const [visiblePlotIndex, setVisiblePlotIndex] = useState<number | null>(null);
     const [expandedCWEIndex, setExpandedCWEIndex] = useState<number | null>(null);
-
+    const [popoutIndex, setPopoutIndex] = useState<string | null>(null);
     const { scores } = parsePIQUEJSON(jsonData);
 
     const tabs: TabItem[] = [];
 
+    // unique display for WebPIQUE to show CWE and CVE in separate tabs in quality aspect 'security' is selected
+    // change this for other PIQIUE models so the layout is automatically parsed from data structure
     if (scores && selectedAspect === 'Security') {
         tabs.push({
             label: "CWE",
             content: (
-                <Box sx={{ padding: 2 }}>
+                <Box sx={{ padding: 2, fontSize: '15px' }}>
                     <h3># of CWE Pillars: {scores.vulnerabilitySummary?.cweCount ?? 0}</h3>
                     <hr style={{ margin: '0.5rem 0', width: '250px' }} />
 
@@ -69,38 +70,45 @@ const SingleFileVisualizer = () => {
                                             {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                         </div>
 
-                                        <div
-                                            style={{
-                                                maxHeight: isExpanded ? '1000px' : '0px',
-                                                overflow: 'hidden',
-                                                transition: 'max-height 0.3s ease',
-                                                paddingLeft: isExpanded ? '1rem' : '0',
-                                            }}
-                                        >
-                                            {pf.measures && pf.measures.length > 0 && (
-                                                <ul style={{ marginTop: '0.5rem' }}>
-                                                    {pf.measures.map((measure, idx) => {
-                                                        const cumulativeProbability =
-                                                            (measure.threshold.filter(t => measure.score >= t).length ?? 0) /
-                                                            (measure.threshold.length || 1);
+                                        {isExpanded && (
+                                            <div style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
+                                                {pf.measures && pf.measures.length > 0 && (
+                                                    <ul>
+                                                        {pf.measures.map((measure, idx) => {
 
-                                                        return (
-                                                            <li key={idx}>
-                                                                <strong>{measure.name}:</strong> {measure.description}
-                                                                <ul>
-                                                                    <li>Score: {measure.score}</li>
-                                                                    <li>Benchmark Size: {measure.threshold.length}</li>
-                                                                    <li>
-                                                                        Cumulative Probability: {(cumulativeProbability * 100).toFixed(1)}%
-                                                                    </li>
-                                                                    <li>Plot</li>
-                                                                </ul>
-                                                            </li>
-                                                        );
-                                                    })}
-                                                </ul>
-                                            )}
-                                        </div>
+                                                            const plotId = `${pfIndex}-${idx}`; // allows density plot to
+
+                                                            return (
+                                                                <li key={idx}>
+                                                                    <strong>{measure.name.replace(" Measure", '')}:</strong> {measure.description}
+                                                                    <ul>
+                                                                        <li>Score: {measure.score}</li>
+                                                                        <li>Benchmark Size: {measure.threshold.length}</li>
+                                                                        <li>
+                                                                            {/*calculates the fraction of benchmark scores where the CWE is >= */}
+                                                                            Cumulative Probability: % better than the benchmark set.
+                                                                        </li>
+                                                                        <li>
+                                                                            <span
+                                                                                onClick={() => setPopoutIndex(plotId)}
+                                                                                style={{
+                                                                                    cursor: 'pointer',
+                                                                                    color: '#3d90b7',
+                                                                                    textDecoration: 'underline',
+                                                                                }}
+                                                                            >
+                                                                                Density Plot {/*Density plot I normalized the benchmark thresholds to range from 0 to 1. Is this correct?*/}
+                                                                            </span>
+                                                                        </li>
+                                                                    </ul>
+                                                                </li>
+                                                            );
+                                                        })}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                        )}
+
                                     </li>
                                 </ul>
                                 <hr style={{ margin: '1rem 0' }} />
@@ -114,7 +122,7 @@ const SingleFileVisualizer = () => {
         tabs.push({
             label: "CVE",
             content: (
-                <Box sx={{ padding: 2 }}>
+                <Box sx={{ padding: 2, fontSize: '15px' }}>
                     <h3># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? 0}</h3>
                     <hr style={{ margin: '1rem 0', width: '200px' }} />
                 </Box>
@@ -136,6 +144,36 @@ const SingleFileVisualizer = () => {
                     <p style={{ textAlign: 'center', marginTop: '2rem' }}>
                         <strong>Click on a Quality Aspect above to view more information</strong>
                     </p>
+                )}
+                {popoutIndex && (
+                    <div className='densityPlot'
+                        style={{
+                            position: 'fixed',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            backgroundColor: '#fff',
+                            padding: '1rem',
+                            border: '1px solid #ccc',
+                            boxShadow: '0px 0px 10px rgba(0,0,0,0.3)',
+                            zIndex: 1000,
+                            maxWidth: '95%',
+                            maxHeight: '90vh',
+                            overflow: 'auto',
+                        }}
+                    >
+                        <button
+                            onClick={() => setPopoutIndex(null)}
+                            style={{ float: 'right', cursor: 'pointer' }}
+                        >
+                            X
+                        </button>
+                        <ProbabilityDensity
+                            thresholds={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.threshold ?? []}
+                            score={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.score ?? 0}
+                            cweName={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.name}
+                        />
+                    </div>
                 )}
             </main>
             <Footer />

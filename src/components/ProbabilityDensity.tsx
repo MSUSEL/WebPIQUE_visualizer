@@ -5,27 +5,42 @@ import { Box } from '@mui/material';
 interface Props {
     thresholds: number[];
     score: number;
+    cweName?: string;
+    setCumulativeProbability?: (value: number) => void;
 }
 
-const ProbabilityDensity: React.FC<Props> = ({ thresholds, score }) => {
+
+
+const ProbabilityDensity: React.FC<Props> = ({ thresholds, score, cweName, setCumulativeProbability }) => {
     const ref = React.useRef<SVGSVGElement | null>(null);
+    const max = d3.max(thresholds) ?? 1;
+    const min = d3.min(thresholds) ?? 0;
+    const normalized = thresholds.map(t => (t - min) / (max - min));
+    const normalizedScore = score;
+
+    const cumulativeProbability =
+        (normalized.filter(t => score >= t).length ?? 0) / (normalized.length || 1);
+
+    if (setCumulativeProbability) {
+        setCumulativeProbability(cumulativeProbability);
+    }
 
     React.useEffect(() => {
-        if (!ref.current || thresholds.length === 0) return;
+        if (!ref.current || normalized.length === 0) return;
 
         const svg = d3.select(ref.current);
         svg.selectAll('*').remove(); // Clear previous
 
-        const width = 400;
-        const height = 200;
-        const margin = { top: 10, right: 30, bottom: 30, left: 40 };
+        const width = 450;
+        const height = 240;
+        const margin = { top: 40, right: 30, bottom: 30, left: 40 };
 
         const x = d3.scaleLinear()
             .domain([0, 1])
             .range([margin.left, width - margin.right]);
 
         const kde = kernelDensityEstimator(kernelEpanechnikov(0.05), x.ticks(40));
-        const density = kde(thresholds);
+        const density = kde(normalized);
 
         const y = d3.scaleLinear()
             .domain([0, d3.max(density, d => d[1]) || 1])
@@ -40,49 +55,65 @@ const ProbabilityDensity: React.FC<Props> = ({ thresholds, score }) => {
             .attr("transform", `translate(${margin.left},0)`)
             .call(d3.axisLeft(y));
 
-        // Density path
-        const line = d3.line<[number, number]>()
+        // Density area under the curve
+        const area = d3.area<[number, number]>()
             .curve(d3.curveBasis)
             .x(d => x(d[0]))
-            .y(d => y(d[1]));
+            .y0(y(0))
+            .y1(d => y(d[1]));
 
         svg.append("path")
             .datum(density)
             .attr("fill", "#cce5df")
             .attr("stroke", "#3d90b7")
             .attr("stroke-width", 1.5)
-            .attr("d", line(density) ?? "");
+            .attr("d", area(density) ?? "");
 
-        // Vertical score line
+        // Vertical score line 
         svg.append("line")
-            .attr("x1", x(score))
-            .attr("x2", x(score))
+            .attr("x1", x(normalizedScore))
+            .attr("x2", x(normalizedScore))
             .attr("y1", margin.top)
             .attr("y2", height - margin.bottom)
             .attr("stroke", "#EA4228")
             .attr("stroke-width", 2)
             .attr("stroke-dasharray", "4");
 
+        svg.append("text")
+            .attr("x", x(normalizedScore) + 6)
+            .attr("y", (height + margin.top - margin.bottom) / 2.25)
+            .attr("transform", `rotate(-90, ${x(normalizedScore) + 6}, ${(height + margin.top - margin.bottom) / 2})`)
+            .attr("fill", "black")
+            .style("font-size", "11px")
+            .style("text-anchor", "middle")
+            .text("CWE Score");
+
         // Y-axis label
         svg.append("text")
             .attr("text-anchor", "middle")
             .attr("transform", `rotate(-90)`)
             .attr("x", -height / 2)
-            .attr("y", margin.left - 35)
-            .style("font-size", "12px")
-            .text("Probability Density");
+            .attr("y", margin.left - 30)
+            .style("font-size", "14px")
+            .text("# of benchmark items");
 
         // X-axis label
         svg.append("text")
             .attr("text-anchor", "middle")
             .attr("x", width / 2)
-            .attr("y", height - 5)
-            .style("font-size", "12px")
-            .text("CWE Score");
+            .attr("y", height - 5 + 5)
+            .style("font-size", "14px")
+            .text("Score");
 
-    }, [thresholds, score]);
+        // title
+        svg.append("text")
+            .attr("x", width - 375)
+            .attr("y", margin.top - 20)
+            .style("font-size", "15px")
+            .text(`${cweName ?? 'CWE'} – Benchmark Density Plot`);
+    }, [normalized, normalizedScore]);
 
-    return <Box><svg ref={ref} width={400} height={200} /></Box>;
+    return <Box><svg ref={ref} width={450} height={240} /></Box>;
 };
 
 // Kernel functions

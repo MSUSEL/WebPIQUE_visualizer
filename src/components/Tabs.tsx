@@ -24,7 +24,7 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs }) => {
     }
 
     return (
-        <Box sx={{ width: '100%' }}>
+        <Box sx={{ width: '90%' }}>
             <Tabs
                 value={activeTab}
                 onChange={handleChange}
@@ -32,10 +32,15 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs }) => {
                 scrollButtons="auto"
                 allowScrollButtonsMobile
                 aria-label="scrollable tabs"
-                sx={{ borderBottom: 1, borderColor: 'divider' }}
+                indicatorColor='secondary'
+                textColor='secondary'
+                sx={{ borderBottom: 1, borderColor: 'divider', width: '95%' }}
             >
                 {tabs.map((tab, index) => (
-                    <Tab key={index} label={tab.label} />
+                    <Tab key={index} label={tab.label} sx={{
+                        fontSize: '25px',
+                        fontWeight: 'bold',
+                    }} />
                 ))}
             </Tabs>
 

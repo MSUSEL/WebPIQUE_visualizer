@@ -12,7 +12,7 @@ const FileUpload = () => {
         const file = acceptedFiles[0];
 
         if (!file || !file.name.endsWith('.json')) {
-            alert('Only .json files are allowed');
+            alert('Only JSON files are allowed');
             setStatus('error');
             return;
         }

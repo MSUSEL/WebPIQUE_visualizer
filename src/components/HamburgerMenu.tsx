@@ -58,9 +58,10 @@ const HamburgerMenu = () => {
             reader.onload = (event) => {
                 try {
                     const json = JSON.parse(event.target?.result as string);
+                    setOpen(false);
                     navigate('/visualizer', { state: { jsonData: json } });
                 } catch (err) {
-                    alert('Invalid JSON file');
+                    alert('Only JSON files are allowed');
                 }
             };
             reader.onerror = () => alert('Error reading file');
