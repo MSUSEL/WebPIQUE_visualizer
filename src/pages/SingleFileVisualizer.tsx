@@ -5,6 +5,7 @@ import { Box } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ScoreGauges from '../components/ScoreGauges';
+import CVEScoreMiniChart from "../components/CVEChart";
 import MuiTabs from '../components/Tabs';
 import { TabItem } from '../components/Tabs';
 import { parsePIQUEJSON } from '../Utilities/DataParser';
@@ -28,6 +29,7 @@ const SingleFileVisualizer = () => {
     const [expandedCWEIndex, setExpandedCWEIndex] = useState<number | null>(null);
     const [popoutIndex, setPopoutIndex] = useState<string | null>(null);
     const { scores } = parsePIQUEJSON(jsonData);
+
 
     const tabs: TabItem[] = [];
 
@@ -82,12 +84,8 @@ const SingleFileVisualizer = () => {
                                                                 <li key={idx}>
                                                                     <strong>{measure.name.replace(" Measure", '')}:</strong> {measure.description}
                                                                     <ul>
-                                                                        <li>Score: {measure.score}</li>
+                                                                        <li>Score: {measure.score * 100}% better than the benchmark set.</li>
                                                                         <li>Benchmark Size: {measure.threshold.length}</li>
-                                                                        <li>
-                                                                            {/*calculates the fraction of benchmark scores where the CWE is >= */}
-                                                                            Cumulative Probability: % better than the benchmark set.
-                                                                        </li>
                                                                         <li>
                                                                             <span
                                                                                 onClick={() => setPopoutIndex(plotId)}
@@ -119,12 +117,44 @@ const SingleFileVisualizer = () => {
             ),
         });
 
+
+
         tabs.push({
             label: "CVE",
             content: (
                 <Box sx={{ padding: 2, fontSize: '15px' }}>
                     <h3># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? 0}</h3>
                     <hr style={{ margin: '1rem 0', width: '200px' }} />
+
+
+                    {scores.cweProductFactors?.map((pf) => (
+                        <Box key={pf.name} sx={{ mb: 4 }}>
+                            <h4 style={{ marginBottom: '0.25rem' }}>
+                                {pf.name.replace('Product_Factor ', '')}
+                            </h4>
+                            {pf.cves.length === 0 ? (
+                                <div style={{ opacity: 0.7 }}>No CVEs found for this CWE.</div>
+                            ) : (
+                                pf.cves.map((cve) => (
+                                    <Box key={cve.name} sx={{ borderTop: '1px solid #ddd', pt: 2, mt: 2 }}>
+                                        <h5 style={{ margin: 0 }}>{cve.name}</h5>
+                                        <ul>
+                                            <li><strong>Associated CWE:</strong> {pf.name.replace('Product_Factor ', '')}</li>
+                                            <li><strong>Package name:</strong> {cve.vulnSource || '—'}</li>
+                                            <li><strong>Package version:</strong> {cve.vulnSourceVersion || '—'}</li>
+                                            <li><strong>Fixed status:</strong> {cve.fixed || 'Not fixed'}</li>
+                                            <li><strong>Fixed version:</strong> {cve.fixedVersion || '—'}</li>
+                                            <li><strong>Description:</strong> {cve.description || 'Coming soon'}</li>
+                                        </ul>
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                            <div style={{ fontSize: 12, marginBottom: 2 }}>CVE Score</div>
+                                            <CVEScoreMiniChart byTool={cve.byTool} />
+                                        </div>
+                                    </Box>
+                                ))
+                            )}
+                        </Box>
+                    ))}
                 </Box>
             ),
         });

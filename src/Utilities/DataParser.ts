@@ -1,6 +1,21 @@
 // Data parser to extract information from WebPIQUE json output
 // The parser works for TQI and Quality Aspects on other PIQUE outputs
 // Parser is unique to display WebPIQUE product factors...updata Product Factor section for other PIQUE models
+export interface CVEByTool {  //this is specific to WebPIQUE
+    tool: string;
+    score: number;
+}
+
+export interface CVEItem { //this is specific to WebPIQUE
+    name: string;
+    description?: string;
+    fixed?: string;
+    vulnSource?: string;
+    vulnSourceVersion?: string;
+    fixedVersion?: string;
+    byTool: CVEByTool[];
+}
+
 export interface ProductFactor { //this is specific to WebPIQUE
     name: string;
     value: number;
@@ -13,6 +28,7 @@ export interface ProductFactor { //this is specific to WebPIQUE
         score: number,
         threshold: number[],
     }[];
+    cves: CVEItem[];
 }
 
 export interface ParsedScore {
@@ -84,11 +100,8 @@ export function parsePIQUEJSON(json: any): {
     const cweProductFactors: ProductFactor[] = [];
 
     for (const [key, pfDataRaw] of Object.entries(json.factors?.product_factors || {})) {
-        const pfData = pfDataRaw as {
-            value?: number;
-            description?: string;
-            children?: string[];
-        };
+        const pfData = pfDataRaw as any;
+
         if (key.startsWith("Product_Factor CWE-")) {
             const children = pfData.children;
             const measures: { name: string; description: string; score: number; threshold: number[]; }[] = [];
@@ -109,6 +122,45 @@ export function parsePIQUEJSON(json: any): {
                 }
             }
 
+            //extract CVE
+            const cveMap = new Map<string, CVEItem>();
+
+            for (const measureObj of Object.values(pfData.children ?? {})) {
+                if (!measureObj || typeof measureObj !== 'object') continue;
+
+                for (const [diagKey, diagObj] of Object.entries((measureObj as any).children ?? {})) {
+                    const diag = diagObj as any;
+                    const tool = diag?.toolName ?? diagKey; // Grype / Trivy / etc.
+
+                    for (const [findingKey, findingObj] of Object.entries(diag?.children ?? {})) {
+                        if (!findingKey.startsWith("CVE-")) continue;
+
+                        const f = findingObj as any;
+                        const name = f.name ?? findingKey;
+
+                        // get CVE item
+                        let item = cveMap.get(name);
+                        if (!item) {
+                            item = {
+                                name,
+                                description: f.description ?? '',
+                                fixed: f.fixed ?? '',
+                                vulnSource: f.vulnSource ?? '',
+                                vulnSourceVersion: f.vulnSourceVersion ?? '',
+                                fixedVersion: f.fixedVersion ?? '',
+                                byTool: [],
+                            };
+                            cveMap.set(name, item);
+                        }
+
+                        item.byTool.push({
+                            tool,
+                            score: Number(f.value ?? 0),
+                        });
+                    }
+                }
+            }
+
             cweProductFactors.push({
                 name: key,
                 value: pfData.value ?? 0,
@@ -116,8 +168,11 @@ export function parsePIQUEJSON(json: any): {
                 measures,
                 type: 'CWE',
                 aspect: '',
+                cves: Array.from(cveMap.values()),
             });
         }
+
+
     }
 
     // Extract CWE product factors and CVE counts
