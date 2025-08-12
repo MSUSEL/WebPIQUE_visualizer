@@ -1,28 +1,59 @@
-// Mini inline chart for two tools on 0–10 scale
+//Mini inline chart for two tools on 0–10 scale
 import * as React from "react";
 
+//tool name and tool score
 export interface CVEByTool {
-    tool: string;   // e.g., "Grype", "Trivy"
-    score: number;  // 0–10 scale
+    tool: string;
+    score: number;
 }
 
+//CVE info by tool and set height/width parameters
 interface Props {
     byTool: CVEByTool[];
-    width?: number;   // optional, defaults below
-    height?: number;  // optional, defaults below
+    width?: number;
+    height?: number;
 }
 
 const CVEScoreMiniChart: React.FC<Props> = ({ byTool, width = 260, height = 50 }) => {
+    //bounding box dimensions for CVE score line graph
     const pad = 20;
     const chartWidth = width - 80;
     const cx = (s: number) => pad + (Math.max(0, Math.min(10, s)) / 10) * (chartWidth - 2 * pad);
     const cy = height / 2;
 
-    // Determine colors: grey if both have same score
-    const bothSame = byTool.length === 2 && byTool[0].score === byTool[1].score;
-    const colorMap: Record<string, string> = bothSame
-        ? { Grype: "#888", Trivy: "#888" }
-        : { Grype: "#1f77b4", Trivy: "#ff7f0e" };
+    //extract tool specific scores
+    const scores = byTool.map(tool => tool.score);
+
+    //check if all scores are the same
+    const allSame = byTool.length > 1 && new Set(scores).size === 1;
+
+    //color palette for up to 10 tools
+    const palette = [
+        "#1f77b4", // blue
+        "#ff7f0e", // orange
+        "#2ca02c", // green
+        "#d62728", // red
+        "#9467bd", // purple
+        "#8c564b", // brown
+        "#e377c2", // pink
+        "#7f7f7f", // grey
+        "#bcbd22", // yellow-green
+        "#17becf"  // cyan
+    ];
+
+    //assign colors and legend labels
+    let colorMap: Record<string, string> = {};
+
+    if (allSame) {
+        byTool.forEach(t => (colorMap[t.tool] = "#000"));     // grey markers on the chart
+    } else {
+        byTool.forEach((t, i) => (colorMap[t.tool] = palette[i % palette.length]));
+    }
+
+    //build legend items (either "All tools" if scores are the same, or one marker per tool)
+    const legendItems = allSame
+        ? [{ label: "All tools", color: "#000" }]
+        : byTool.map(t => ({ label: t.tool, color: colorMap[t.tool] }));
 
     return (
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -45,18 +76,18 @@ const CVEScoreMiniChart: React.FC<Props> = ({ byTool, width = 260, height = 50 }
 
             {/* legend */}
             <div style={{ marginLeft: "10px", fontSize: "10px" }}>
-                {Object.keys(colorMap).map((tool) => (
-                    <div key={tool} style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+                {legendItems.map(item => (
+                    <div key={item.label} style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
                         <div
                             style={{
                                 width: 10,
                                 height: 10,
-                                backgroundColor: colorMap[tool],
+                                backgroundColor: item.color,
                                 marginRight: 5,
-                                borderRadius: "50%",
+                                borderRadius: "50%", // round legend marker
                             }}
                         />
-                        {tool}
+                        {item.label}
                     </div>
                 ))}
             </div>

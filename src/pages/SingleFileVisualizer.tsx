@@ -55,7 +55,7 @@ const SingleFileVisualizer = () => {
                                     {pf.name.replace('Product_Factor ', '')}
                                 </h4>
                                 <ul>
-                                    <li><strong>Score:</strong> {pf.value}</li>
+                                    <li><strong>Score:</strong> {pf.value} out of 1</li>
                                     <li><strong>Description:</strong> {pf.description}</li>
                                     <li>
                                         <div
@@ -106,7 +106,6 @@ const SingleFileVisualizer = () => {
                                                 )}
                                             </div>
                                         )}
-
                                     </li>
                                 </ul>
                                 <hr style={{ margin: '1rem 0' }} />
@@ -124,35 +123,30 @@ const SingleFileVisualizer = () => {
             content: (
                 <Box sx={{ padding: 2, fontSize: '15px' }}>
                     <h3># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? 0}</h3>
-                    <hr style={{ margin: '1rem 0', width: '200px' }} />
-
+                    <hr style={{ margin: '0.5rem 0', width: '250px' }} />
 
                     {scores.cweProductFactors?.map((pf) => (
-                        <Box key={pf.name} sx={{ mb: 4 }}>
-                            <h4 style={{ marginBottom: '0.25rem' }}>
-                                {pf.name.replace('Product_Factor ', '')}
-                            </h4>
-                            {pf.cves.length === 0 ? (
-                                <div style={{ opacity: 0.7 }}>No CVEs found for this CWE.</div>
-                            ) : (
-                                pf.cves.map((cve) => (
-                                    <Box key={cve.name} sx={{ borderTop: '1px solid #ddd', pt: 2, mt: 2 }}>
-                                        <h5 style={{ margin: 0 }}>{cve.name}</h5>
-                                        <ul>
-                                            <li><strong>Associated CWE:</strong> {pf.name.replace('Product_Factor ', '')}</li>
-                                            <li><strong>Package name:</strong> {cve.vulnSource || '—'}</li>
-                                            <li><strong>Package version:</strong> {cve.vulnSourceVersion || '—'}</li>
-                                            <li><strong>Fixed status:</strong> {cve.fixed || 'Not fixed'}</li>
-                                            <li><strong>Fixed version:</strong> {cve.fixedVersion || '—'}</li>
-                                            <li><strong>Description:</strong> {cve.description || 'Coming soon'}</li>
-                                        </ul>
-                                        <div style={{ marginTop: '0.5rem' }}>
-                                            <div style={{ fontSize: 12, marginBottom: 2 }}>CVE Score</div>
-                                            <CVEScoreMiniChart byTool={cve.byTool} />
-                                        </div>
-                                    </Box>
-                                ))
-                            )}
+                        <Box key={pf.name}>
+                            {pf.cves.map((cve) => (
+                                <Box key={cve.name} sx={{ borderBottom: '1px solid #ddd', mt: 2, fontSize: '16px' }}>
+                                    <h4 style={{ margin: 0 }}>{cve.name}</h4>
+                                    <ul>
+                                        <li><strong>Package name:</strong> {cve.vulnSource || '—'}</li>
+                                        <li><strong>Package version:</strong> {cve.vulnSourceVersion || '—'}</li>
+                                        <li><strong>Description:</strong> {cve.description || 'Coming soon'}</li>
+                                        <li><strong>Fixed status:</strong> {cve.fixed || 'Not fixed'}</li>
+                                        <li><strong>Fixed version:</strong> {cve.fixedVersion || '—'}</li>
+                                        <li><strong>Associated CWE pillar:</strong> {pf.name.replace('Product_Factor ', '')}</li>
+                                        <li><strong>Associated CWE measure:</strong> {cve.CWEmeasureName?.replace('Measure', '')} </li>
+                                        <li><strong>Tools used:</strong> {cve.byTool.map(t => t.tool).join(", ")}</li>
+                                    </ul>
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <div style={{ fontSize: 12, marginBottom: 2 }}>CVE Score</div>
+                                        <CVEScoreMiniChart byTool={cve.byTool} />
+                                    </div>
+                                </Box>
+                            ))
+                            }
                         </Box>
                     ))}
                 </Box>

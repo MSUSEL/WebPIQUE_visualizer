@@ -14,6 +14,7 @@ export interface CVEItem { //this is specific to WebPIQUE
     vulnSourceVersion?: string;
     fixedVersion?: string;
     byTool: CVEByTool[];
+    CWEmeasureName?: string;
 }
 
 export interface ProductFactor { //this is specific to WebPIQUE
@@ -149,6 +150,7 @@ export function parsePIQUEJSON(json: any): {
                                 vulnSourceVersion: f.vulnSourceVersion ?? '',
                                 fixedVersion: f.fixedVersion ?? '',
                                 byTool: [],
+                                CWEmeasureName: (measureObj as any).name
                             };
                             cveMap.set(name, item);
                         }
