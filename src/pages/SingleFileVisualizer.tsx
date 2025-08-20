@@ -16,20 +16,18 @@ import '../styles/Pages.css';
 
 
 const SingleFileVisualizer = () => {
-    //check for json location and give error is not correct
-    const location = useLocation();
-    if (!location.state?.jsonData) {
-        console.warn("❌ No JSON data found in router state.");
-        return <div>No file loaded. Please go back to upload.</div>;
-    }
+
 
     // set variables 
+    const location = useLocation();
     const jsonData = location.state?.jsonData;
     const [selectedAspect, setSelectedAspect] = useState<string | null>(null);
-    const [expandedCWEIndex, setExpandedCWEIndex] = useState<number | null>(null);
-    const [popoutIndex, setPopoutIndex] = useState<string | null>(null);
+    const [expandedCWEKey, setExpandedCWEKey] = useState<string | null>(null);
+    const [popoutKey, setPopoutKey] = useState<{ pfName: string; measureIndex: number } | null>(null);
     const { scores } = parsePIQUEJSON(jsonData);
 
+    const sortedPFs = [...(scores.cweProductFactors ?? [])]
+        .sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
 
     const tabs: TabItem[] = [];
 
@@ -41,69 +39,61 @@ const SingleFileVisualizer = () => {
             content: (
                 <Box sx={{ padding: 2, fontSize: '15px' }}>
                     <h3># of CWE Pillars: {scores.vulnerabilitySummary?.cweCount ?? 0}</h3>
-                    <hr style={{ margin: '0.5rem 0', width: '250px' }} />
 
-                    {scores.cweProductFactors?.map((pf, pfIndex) => {
-                        const isExpanded = expandedCWEIndex === pfIndex;
-                        const toggleExpand = () => {
-                            setExpandedCWEIndex(isExpanded ? null : pfIndex);
-                        };
+                    <h4><strong>Critical: </strong></h4>
+                    <h4><strong>Severe: </strong></h4>
+                    <h4><strong>Moderate: </strong></h4>
+                    <h6>Categories denoted as Critical (score 0-0.6), Severe (score 0.61-0.8), and Moderate (score 0.81-1)</h6>
+
+                    <hr style={{ margin: '0.5rem 0' }} />
+
+                    {sortedPFs.map((pf) => {
+                        const isExpanded = expandedCWEKey === pf.name;
+                        const toggleExpand = () => setExpandedCWEKey(isExpanded ? null : pf.name);
+                        const setBackgroundColor = (score: number) => {
+                            if (score < 0.6) return "#ffcccc";
+                            if (score < 0.8) return "#fff3cd";
+                            return "#d4edda"
+                        }
 
                         return (
-                            <Box key={pf.name} sx={{ marginBottom: 4 }}>
-                                <h4 style={{ marginBottom: '0.5rem' }}>
-                                    {pf.name.replace('Product_Factor ', '')}
-                                </h4>
+                            <Box key={pf.name} sx={{ marginBottom: 4, backgroundColor: setBackgroundColor(pf.value) }}>
+                                <h4 style={{ marginBottom: '0.5rem' }}>{pf.name.replace('Product_Factor ', '')}</h4>
                                 <ul>
                                     <li><strong>Score:</strong> {pf.value} out of 1</li>
                                     <li><strong>Description:</strong> {pf.description}</li>
                                     <li>
                                         <div
                                             onClick={toggleExpand}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                cursor: 'pointer',
-                                                fontWeight: 'bold',
-                                                userSelect: 'none',
-                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold', userSelect: 'none' }}
                                         >
-                                            <span style={{ marginRight: '0.5rem' }}>Measures (n = {pf.measures.length}): </span>
+                                            <span style={{ marginRight: '0.5rem' }}>
+                                                Measures (n = {pf.measures.length}):
+                                            </span>
                                             {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                         </div>
 
-                                        {isExpanded && (
+                                        {isExpanded && pf.measures?.length > 0 && (
                                             <div style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
-                                                {pf.measures && pf.measures.length > 0 && (
-                                                    <ul>
-                                                        {pf.measures.map((measure, idx) => {
-
-                                                            const plotId = `${pfIndex}-${idx}`; // allows density plot to
-
-                                                            return (
-                                                                <li key={idx}>
-                                                                    <strong>{measure.name.replace(" Measure", '')}:</strong> {measure.description}
-                                                                    <ul>
-                                                                        <li>Score: {measure.score * 100}% better than the benchmark set.</li>
-                                                                        <li>Benchmark Size: {measure.threshold.length}</li>
-                                                                        <li>
-                                                                            <span
-                                                                                onClick={() => setPopoutIndex(plotId)}
-                                                                                style={{
-                                                                                    cursor: 'pointer',
-                                                                                    color: '#3d90b7',
-                                                                                    textDecoration: 'underline',
-                                                                                }}
-                                                                            >
-                                                                                Density Plot {/*Density plot I normalized the benchmark thresholds to range from 0 to 1. Is this correct?*/}
-                                                                            </span>
-                                                                        </li>
-                                                                    </ul>
+                                                <ul>
+                                                    {pf.measures.map((measure, idx) => (
+                                                        <li key={idx} style={{ backgroundColor: setBackgroundColor(measure.score) }}>
+                                                            <strong>{measure.name.replace(' Measure', '')}:</strong> {measure.description}
+                                                            <ul>
+                                                                <li>Score: {measure.score * 100}% better than the benchmark set.</li>
+                                                                <li>Benchmark Size: {measure.threshold.length}</li>
+                                                                <li>
+                                                                    <span
+                                                                        onClick={() => setPopoutKey({ pfName: pf.name, measureIndex: idx })}
+                                                                        style={{ cursor: 'pointer', color: '#3d90b7', textDecoration: 'underline' }}
+                                                                    >
+                                                                        Density Plot
+                                                                    </span>
                                                                 </li>
-                                                            );
-                                                        })}
-                                                    </ul>
-                                                )}
+                                                            </ul>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
                                         )}
                                     </li>
@@ -112,6 +102,7 @@ const SingleFileVisualizer = () => {
                             </Box>
                         );
                     })}
+
                 </Box>
             ),
         });
@@ -169,7 +160,7 @@ const SingleFileVisualizer = () => {
                         <strong>Click on a Quality Aspect above to view more information</strong>
                     </p>
                 )}
-                {popoutIndex && (
+                {popoutKey && (
                     <div className='densityPlot'
                         style={{
                             position: 'fixed',
@@ -186,17 +177,18 @@ const SingleFileVisualizer = () => {
                             overflow: 'auto',
                         }}
                     >
-                        <button
-                            onClick={() => setPopoutIndex(null)}
-                            style={{ float: 'right', cursor: 'pointer' }}
-                        >
-                            X
-                        </button>
-                        <ProbabilityDensity
-                            thresholds={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.threshold ?? []}
-                            score={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.score ?? 0}
-                            cweName={scores?.cweProductFactors?.[Number(popoutIndex.split('-')[0])]?.measures?.[Number(popoutIndex.split('-')[1])]?.name}
-                        />
+                        <button onClick={() => setPopoutKey(null)} style={{ float: 'right', cursor: 'pointer' }}>X</button>
+                        {(() => {
+                            const pf = scores?.cweProductFactors?.find(p => p.name === popoutKey.pfName);
+                            const m = pf?.measures?.[popoutKey.measureIndex];
+                            return m ? (
+                                <ProbabilityDensity
+                                    thresholds={m.threshold ?? []}
+                                    score={m.score ?? 0}
+                                    cweName={m.name}
+                                />
+                            ) : null;
+                        })()}
                     </div>
                 )}
             </main>

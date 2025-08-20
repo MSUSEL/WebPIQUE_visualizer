@@ -14,6 +14,32 @@ interface Props {
     height?: number;
 }
 
+//global color palette for up to 10 tools
+const palette = [
+    "#1f77b4", // blue
+    "#ff7f0e", // orange
+    "#2ca02c", // green
+    "#d62728", // red
+    "#9467bd", // purple
+    "#8c564b", // brown
+    "#e377c2", // pink
+    "#7f7f7f", // grey
+    "#bcbd22", // yellow-green
+    "#17becf"  // cyan
+];
+
+//assign colors to unique tools
+const toolColorRegistry = new Map<string, string>();
+
+function getToolColor(tool: string): string {
+    const existing = toolColorRegistry.get(tool);
+    if (existing) return existing;
+    const color = palette[toolColorRegistry.size % palette.length];
+    toolColorRegistry.set(tool, color);
+    return color;
+}
+
+// create line chart
 const CVEScoreMiniChart: React.FC<Props> = ({ byTool, width = 260, height = 50 }) => {
     //bounding box dimensions for CVE score line graph
     const pad = 20;
@@ -27,32 +53,21 @@ const CVEScoreMiniChart: React.FC<Props> = ({ byTool, width = 260, height = 50 }
     //check if all scores are the same
     const allSame = byTool.length > 1 && new Set(scores).size === 1;
 
-    //color palette for up to 10 tools
-    const palette = [
-        "#1f77b4", // blue
-        "#ff7f0e", // orange
-        "#2ca02c", // green
-        "#d62728", // red
-        "#9467bd", // purple
-        "#8c564b", // brown
-        "#e377c2", // pink
-        "#7f7f7f", // grey
-        "#bcbd22", // yellow-green
-        "#17becf"  // cyan
-    ];
-
-    //assign colors and legend labels
-    let colorMap: Record<string, string> = {};
+    const colorMap: Record<string, string> = {};
 
     if (allSame) {
-        byTool.forEach(t => (colorMap[t.tool] = "#000"));     // grey markers on the chart
+        // markers black when all tools have the same score
+        byTool.forEach(t => (colorMap[t.tool] = "#000"));
     } else {
-        byTool.forEach((t, i) => (colorMap[t.tool] = palette[i % palette.length]));
+        // stable, palette-ordered color per *tool name* across the whole app
+        byTool.forEach(t => {
+            colorMap[t.tool] = getToolColor(t.tool);
+        });
     }
 
     //build legend items (either "All tools" if scores are the same, or one marker per tool)
     const legendItems = allSame
-        ? [{ label: "All tools", color: "#000" }]
+        ? [{ label: byTool.map(t => t.tool).join(", "), color: "#000" }]
         : byTool.map(t => ({ label: t.tool, color: colorMap[t.tool] }));
 
     return (

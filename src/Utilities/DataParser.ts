@@ -1,6 +1,8 @@
 // Data parser to extract information from WebPIQUE json output
 // The parser works for TQI and Quality Aspects on other PIQUE outputs
 // Parser is unique to display WebPIQUE product factors...updata Product Factor section for other PIQUE models
+
+// Interfaces for parser
 export interface CVEByTool {  //this is specific to WebPIQUE
     tool: string;
     score: number;
@@ -145,7 +147,11 @@ export function parsePIQUEJSON(json: any): {
                             item = {
                                 name,
                                 description: f.description ?? '',
-                                fixed: f.fixed ?? '',
+                                fixed: f.fixed === true || f.fixed === "true"
+                                    ? "Fixed"
+                                    : f.fixed === false || f.fixed === "false"
+                                        ? "Not fixed"
+                                        : f.fixed || "Not fixed", //set fixed status to either "Fixed" or "Not fixed"
                                 vulnSource: f.vulnSource ?? '',
                                 vulnSourceVersion: f.vulnSourceVersion ?? '',
                                 fixedVersion: f.fixedVersion ?? '',
