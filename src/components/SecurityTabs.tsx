@@ -58,9 +58,9 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
 
     // set CWE card background color by severity score
     const setBackgroundColor = (score: number) => {
-        if (score < 0.6) return '#fab0b0ff';  // Critical
-        if (score < 0.8) return '#fff3cd';  // Severe
-        return '#a9f0b9ff';                   // Moderate
+        if (score < 0.6) return '#E78181';  // Critical
+        if (score < 0.8) return '#f0e98cff';  // Severe
+        return '#88CC88';                   // Moderate
     };
 
     // Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "not fixed" | ""
@@ -149,8 +149,6 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                     </button>
                 </div>
 
-                <hr className="st-divider" />
-
                 {filteredPFs.map((pf: PF) => {
                     const isExpanded = expandedCWEKey === pf.name;
                     const toggleExpand = () => setExpandedCWEKey(isExpanded ? null : pf.name);
@@ -169,7 +167,7 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                                 <li>
                                     <div className="measure-toggle" onClick={toggleExpand}>
                                         <span className="measure-toggle-label">
-                                            Measures (n = {pf.measures.length}):
+                                            <strong>Measures</strong> (n = {pf.measures.length})<strong>:</strong>
                                         </span>
                                         {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                     </div>
@@ -206,7 +204,6 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                                     )}
                                 </li>
                             </ul>
-                            <hr className="pf-sep" />
                         </Box>
                     );
                 })}
