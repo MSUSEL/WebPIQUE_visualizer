@@ -187,7 +187,7 @@
 }
 
 .st-chip--severe .st-chip-dot {
-    background: #f0c24b;
+    background: #f0ca6a;
 }
 
 .st-chip--moderate .st-chip-dot {
@@ -200,7 +200,7 @@
 }
 
 .st-chip.is-active.st-chip--severe {
-    border-color: #f0c24b;
+    border-color: #f0ca6a;
 }
 
 .st-chip.is-active.st-chip--moderate {

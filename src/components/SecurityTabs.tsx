@@ -58,9 +58,9 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
 
     // set CWE card background color by severity score
     const setBackgroundColor = (score: number) => {
-        if (score < 0.6) return '#ffcccc';  // Critical
+        if (score < 0.6) return '#fab0b0ff';  // Critical
         if (score < 0.8) return '#fff3cd';  // Severe
-        return '#d4edda';                   // Moderate
+        return '#a9f0b9ff';                   // Moderate
     };
 
     // Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "not fixed" | ""
@@ -165,6 +165,7 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                             <ul className="pf-list">
                                 <li><strong>Score:</strong> {pf.value} out of 1</li>
                                 <li><strong>Description:</strong> {pf.description}</li>
+                                <li><strong>Benchmark size: </strong>{pf.benchmarkSize ?? (pf.measures?.[0]?.threshold?.length ?? 0)}</li>
                                 <li>
                                     <div className="measure-toggle" onClick={toggleExpand}>
                                         <span className="measure-toggle-label">
@@ -187,8 +188,8 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                                                         >
                                                             <strong>{measure.name.replace(' Measure', '')}:</strong> {measure.description}
                                                             <ul>
-                                                                <li>Score: {measure.score * 100}% better than the benchmark set.</li>
-                                                                <li>Benchmark Size: {measure.threshold.length}</li>
+                                                                <li><strong>Score: {measure.score * 100}% better than the benchmark set.</strong></li>
+                                                                <li>Weight: The CWE measure contributed a <strong>weight of {(measure.weight ?? 0).toFixed(4)}</strong> to the final CWE pillar score.</li>
                                                                 <li>
                                                                     <span
                                                                         className="density-link"

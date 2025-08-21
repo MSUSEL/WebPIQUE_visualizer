@@ -25,11 +25,13 @@ export interface ProductFactor { //this is specific to WebPIQUE
     description: string;
     type: string;
     aspect: string;
+    benchmarkSize?: number;
     measures: {
         name: string;
         description: string;
-        score: number,
-        threshold: number[],
+        score: number;
+        threshold: number[];
+        weight?: number;
     }[];
     cves: CVEItem[];
 }
@@ -61,7 +63,6 @@ export function parsePIQUEJSON(json: any): {
     const tqiNode = tqiRaw ? Object.values(tqiRaw)[0] : null;
     const qualityAspectsRaw = json.factors.quality_aspects || {};
     const productFactorsRaw = json.factors.product_factors || {};
-    const measuresRaw = json.factors.measures || {};
 
     //extract and store TQI score
     let tqiScore = 0;
@@ -99,24 +100,33 @@ export function parsePIQUEJSON(json: any): {
         productFactorsByAspect[aspectName] = pfList;
     }
 
-    //extract CWE product factors
+    //extract CWE product factors, specific to WebPIQUE
     const cweProductFactors: ProductFactor[] = [];
 
     for (const [key, pfDataRaw] of Object.entries(json.factors?.product_factors || {})) {
         const pfData = pfDataRaw as any;
+        const weightsMap = (pfData?.weights ?? {}) as Record<string, number>
 
         if (key.startsWith("Product_Factor CWE-")) {
             const children = pfData.children;
-            const measures: { name: string; description: string; score: number; threshold: number[]; }[] = [];
-            const thresholds: number[] = [];
+            const measures: { name: string; description: string; score: number; threshold: number[]; weight: number; }[] = [];
 
             if (children && typeof children === 'object') {
                 for (const [measureKey, measureObj] of Object.entries(children)) {
                     if (typeof measureObj === 'object' && measureObj !== null) {
+
+                        const m = measureObj as any;
+
+                        // weight lookup by key, then by name (covers both common JSON shapes)
+                        const weight =
+                            Number(weightsMap[measureKey] ?? weightsMap[m.name] ?? 0);
+
+
                         measures.push({
                             name: (measureObj as any).name ?? measureKey,
                             description: (measureObj as any).description ?? '',
                             score: (measureObj as any).value ?? 0,
+                            weight,
                             threshold: Array.isArray((measureObj as any).thresholds)
                                 ? (measureObj as any).thresholds.map(Number)
                                 : [],
@@ -125,7 +135,7 @@ export function parsePIQUEJSON(json: any): {
                 }
             }
 
-            //extract CVE
+            //extract CVE, specific to WebPIQUE
             const cveMap = new Map<string, CVEItem>();
 
             for (const measureObj of Object.values(pfData.children ?? {})) {
@@ -169,6 +179,22 @@ export function parsePIQUEJSON(json: any): {
                 }
             }
 
+            let benchmarkSize = 0;
+            for (const m of measures) {
+                if (Array.isArray(m.threshold) && m.threshold.length) {
+                    benchmarkSize = m.threshold.length;
+                    break;
+                }
+            }
+
+            // log mismatches if thresholds aren’t consistent
+            const mismatch = measures.some(
+                (m) =>
+                    (m.threshold?.length ?? 0) !== 0 &&
+                    (m.threshold?.length ?? 0) !== benchmarkSize
+            );
+            if (mismatch) console.warn("Inconsistent threshold lengths under PF", key);
+
             cweProductFactors.push({
                 name: key,
                 value: pfData.value ?? 0,
@@ -177,13 +203,14 @@ export function parsePIQUEJSON(json: any): {
                 type: 'CWE',
                 aspect: '',
                 cves: Array.from(cveMap.values()),
+                benchmarkSize,
             });
         }
 
 
     }
 
-    // Extract CWE product factors and CVE counts
+    // Extract CWE product factors and CVE counts, specific to WebPIQUE
     const cweCount = Object.keys(json.factors?.product_factors || {}).filter(key =>
         key.startsWith("Product_Factor CWE-")
     ).length;
