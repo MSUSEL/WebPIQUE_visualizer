@@ -1,0 +1,265 @@
+/* style sheet for security tabs component */
+/* root wrappers */
+.st-root {
+    padding: 8px 16px;
+    font-size: 15px;
+}
+
+/* headings + dividers */
+.st-h3 {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+}
+
+.st-legend h4 {
+    display: inline-block;
+    margin: 0 12px 4px 0;
+}
+
+.st-legend h6 {
+    margin: 4px 0 0 0;
+    font-weight: 400;
+}
+
+.st-divider {
+    margin: 8px 0;
+    border: none;
+    border-top: 1px solid #ddd;
+}
+
+.st-divider--narrow {
+    width: 250px;
+}
+
+/* Product Factor (CWE) */
+.pf-card {
+    margin-bottom: 16px;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.pf-title {
+    margin: 0 0 8px 0;
+}
+
+.pf-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.measure-toggle {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+}
+
+.measure-toggle-label {
+    margin-right: 8px;
+}
+
+.measure-list {
+    padding-left: 16px;
+    margin-top: 8px;
+}
+
+.measure-item {
+    border-radius: 6px;
+    padding: 8px;
+    margin: 6px 0;
+}
+
+.density-link {
+    cursor: pointer;
+    color: #3d90b7;
+    text-decoration: underline;
+}
+
+.pf-sep {
+    margin: 12px 0;
+    border: none;
+    border-top: 1px solid #ddd;
+}
+
+/* CVE */
+.cve-card {
+    border-bottom: 1px solid #ddd;
+    margin-top: 8px;
+    font-size: 16px;
+    padding-bottom: 8px;
+}
+
+.cve-title {
+    margin: 0;
+}
+
+.cve-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.cve-chart-wrap {
+    margin-top: 8px;
+}
+
+.cve-chart-caption {
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+
+/* Popout modal for density plot */
+.densityPlot {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #fff;
+    padding: 16px;
+    border: 1px solid #ccc;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    max-width: 95%;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.densityPlot-close {
+    float: right;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+/* Chips row */
+.st-chips {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 6px 0 8px 0;
+}
+
+/* Base chip */
+.st-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: #f5f5f5;
+    color: #222;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    transition: background 0.15s ease, transform 0.05s ease, border-color 0.15s ease;
+}
+
+.st-chip:hover {
+    background: #eee;
+}
+
+.st-chip:active {
+    transform: translateY(1px);
+}
+
+.st-chip-count {
+    margin-left: 4px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* Colored dot inside chip */
+.st-chip-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+/* Buckets colors */
+.st-chip--critical .st-chip-dot {
+    background: #e96565;
+}
+
+.st-chip--severe .st-chip-dot {
+    background: #f0c24b;
+}
+
+.st-chip--moderate .st-chip-dot {
+    background: #7fc97f;
+}
+
+/* Active state: outline with same hue */
+.st-chip.is-active.st-chip--critical {
+    border-color: #e96565;
+}
+
+.st-chip.is-active.st-chip--severe {
+    border-color: #f0c24b;
+}
+
+.st-chip.is-active.st-chip--moderate {
+    border-color: #7fc97f;
+}
+
+.st-chip.is-active.st-chip--all {
+    border-color: #999;
+}
+
+/* 'All' chip */
+.st-chip--all {
+    background: #f8f8f8;
+}
+
+.st-chip--all .st-chip-dot {
+    display: none;
+}
+
+/* Filters row */
+.st-filters {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin: 6px 0 10px 0;
+}
+
+.st-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.st-filter-label {
+    font-size: 12px;
+    color: #555;
+}
+
+.st-filter-input,
+.st-filter-select {
+    height: 32px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    min-width: 200px;
+    font-size: 14px;
+}
+
+.st-filter-reset {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #f5f5f5;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.st-filter-reset:hover {
+    background: #eee;
+}
