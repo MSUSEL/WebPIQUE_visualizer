@@ -29,20 +29,48 @@ const HamburgerMenu = () => {
     const [isOpen, setOpen] = useState(false);
     const [showCompareSubmenu, setShowCompareSubmenu] = useState(false);
     const [activeMenuItem, setActiveMenuItem] = useState<string | null>(null);
+    const [leftJson, setLeftJson] = useState<any | null>(null);
+    const [rightJson, setRightJson] = useState<any | null>(null);
 
     const leftFileRef = useRef<HTMLInputElement>(null);
     const rightFileRef = useRef<HTMLInputElement>(null);
 
+    // compare left and right file upload handeling
+    const readJsonFile = (file: File, onOk: (json: any) => void) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(String(e.target?.result || ''));
+                onOk(json);
+            } catch {
+                alert('Only valid JSON files are allowed.');
+            }
+        };
+        reader.onerror = () => alert('Error reading file');
+        reader.readAsText(file);
+    };
+
+    //left file handling
     const handleLeftFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) console.log('Left file selected:', file.name);
+        if (file) readJsonFile(file, setLeftJson);
     };
 
+    //right file handling
     const handleRightFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) console.log('Right file selected:', file.name);
+        if (file) readJsonFile(file, setRightJson);
     };
 
+    //compare  handling
+    const handleCompare = () => {
+        if (!leftJson || !rightJson) return;
+        setOpen(false);                 // close the menu
+        setShowCompareSubmenu(false);
+        navigate('/compare', { state: { file1: leftJson, file2: rightJson } });
+    };
+
+    // single file upload handeling
     const navigate = useNavigate();
 
     const handleNewUpload = useCallback(() => {
@@ -74,6 +102,7 @@ const HamburgerMenu = () => {
         <>
             <div className="menu-container">
                 <Hamburger toggled={isOpen} toggle={setOpen} size={24} color="#fff" />
+                {/*main menu */}
                 {isOpen && (
                     <div className="menu">
                         <h2 className="menu-title">WebPIQUE Visualizer Menu</h2>
@@ -93,6 +122,7 @@ const HamburgerMenu = () => {
                     </div>
                 )}
 
+                {/*compare menu */}
                 {isOpen && showCompareSubmenu && (
                     <div className="submenu">
                         <h3 className="submenu-title">Select Files to Compare</h3>
@@ -107,7 +137,13 @@ const HamburgerMenu = () => {
                             onChange={handleRightFileUpload}
                             inputRef={rightFileRef}
                         />
-                        <button className="compare-button">Compare</button>
+                        <button
+                            className="compare-button"
+                            onClick={handleCompare}
+                            disabled={!leftJson || !rightJson}
+                        >
+                            Compare
+                        </button>
                     </div>
                 )}
             </div>

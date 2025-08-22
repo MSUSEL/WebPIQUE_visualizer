@@ -58,9 +58,9 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
 
     // set CWE card background color by severity score
     const setBackgroundColor = (score: number) => {
-        if (score < 0.6) return '#E78181';  // Critical
-        if (score < 0.8) return '#f0e98cff';  // Severe
-        return '#88CC88';                   // Moderate
+        if (score < 0.6) return '#d17f7fff';  // Critical
+        if (score < 0.8) return '#f0ea97ff';  // Severe
+        return '#c4b5e0ff';                   // Moderate
     };
 
     // Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "not fixed" | ""
@@ -250,7 +250,7 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
 
                     <button
                         className="st-filter-reset"
-                        onClick={() => { setPkgQuery(''); setFixedFilter('all'); }}
+                        onClick={() => { setPkgFilter('ALL'); setFixedFilter('all'); }}
                         title="Clear filters"
                     >
                         Reset

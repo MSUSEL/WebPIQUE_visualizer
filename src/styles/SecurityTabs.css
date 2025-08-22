@@ -194,7 +194,7 @@
 }
 
 .st-chip--moderate .st-chip-dot {
-    background: #7fc97f;
+    background: #c4b5e0ff;
 }
 
 /* Active state: outline with same hue */
@@ -207,7 +207,7 @@
 }
 
 .st-chip.is-active.st-chip--moderate {
-    border-color: #7fc97f;
+    border-color: #c4b5e0ff;
 }
 
 .st-chip.is-active.st-chip--all {

@@ -81,7 +81,7 @@
 /* Submenu container (pops to right of menu) */
 .submenu {
     position: absolute;
-    top: 190px;
+    top: 165px;
     left: 220px;
     width: 250px;
     background: white;
@@ -115,7 +115,7 @@
 .compare-button {
     background-color: #5B6F75;
     color: white;
-    border: none;
+    border: 1px solid black;
     padding: 8px 8px;
     border-radius: 15px;
     cursor: pointer;
