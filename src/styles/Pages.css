@@ -1,40 +1,40 @@
 /* stylesheet for page layouts */
 .app-container {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .main-content {
-    margin-top: 64px;
-    padding-top: 0;
-    flex: 1;
-    padding-left: 0;
-    padding-right: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
+  margin-top: 55px;
+  padding-top: 0;
+  flex: 1;
+  padding-left: 0;
+  padding-right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 /* style for page 2 */
 .secondary-header {
-    position: sticky;
-    z-index: 10;
-    background-color: #f0f4f8;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    width: 100%;
-    justify-content: stretch;
-    border-bottom: 2px solid #ccc;
+  position: sticky;
+  z-index: 10;
+  background-color: #f0f4f8;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  width: 100%;
+  justify-content: stretch;
+  border-bottom: 2px solid #ccc;
 }
 
 .aspects-section {
-    background-color: #d6e9e7;
-    display: flex;
-    padding: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px;
-    padding-top: 120px;
+  background-color: #d6e9e7;
+  display: flex;
+  padding: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 120px;
 }

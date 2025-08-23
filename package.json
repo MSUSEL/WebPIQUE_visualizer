@@ -25,6 +25,7 @@
     "react-gauge-component": "^1.2.21",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.7.0",
+    "react-scroll-sync": "^1.0.2",
     "split-pane-react": "^0.1.3"
   },
   "devDependencies": {

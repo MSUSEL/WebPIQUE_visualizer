@@ -9,15 +9,19 @@ export interface TabItem {
 
 interface MuiTabsProps {
     tabs: TabItem[];
+    value?: number;                         // controlled index
+    onChange?: (index: number) => void;     // change callback
 }
 
 
-const MuiTabs: React.FC<MuiTabsProps> = ({ tabs }) => {
+const MuiTabs: React.FC<MuiTabsProps> = ({ tabs, value, onChange }) => {
     const [activeTab, setActiveTab] = React.useState(0);
+    const current = value ?? activeTab;
 
-    const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-        setActiveTab(newValue);
-    };
+  const handleChange = (_e: React.SyntheticEvent, newValue: number) => {
+    if (value === undefined) setActiveTab(newValue);
+    onChange?.(newValue);
+  };
 
     if (!tabs || tabs.length === 0) {
         return <div style={{ padding: "1rem" }}>No content to display.</div>;
@@ -26,7 +30,7 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs }) => {
     return (
         <Box sx={{ width: '90%' }}>
             <Tabs
-                value={activeTab}
+                value={current}
                 onChange={handleChange}
                 variant="scrollable"
                 scrollButtons="auto"
@@ -49,11 +53,11 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs }) => {
                     <div
                         key={index}
                         role="tabpanel"
-                        hidden={activeTab !== index}
+                        hidden={current !== index}
                         id={`tabpanel-${index}`}
                         aria-labelledby={`tab-${index}`}
                     >
-                        {activeTab === index && tab.content}
+                        {current === index && tab.content}
                     </div>
                 ))}
             </Box>

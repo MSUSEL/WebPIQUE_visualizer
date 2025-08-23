@@ -12,15 +12,42 @@ type PF = any;
 type Measure = any;
 type CVEItem = any;
 
-const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
+type SecTabName = 'CWE' | 'CVE' | 'Lines of Code';
+
+type Props = {
+    scores: ScoresType;
+  controlledTab?: SecTabName; // tab mirroring             
+  onTabChange?: (v: SecTabName) => void;  
+ controlledBucket?: 'all' | 'critical' | 'severe' | 'moderate';
+  onBucketChange?: (v: 'all' | 'critical' | 'severe' | 'moderate') => void;
+    controlledPkgFilter?: string; 
+    onPkgFilterChange?: (v: string) => void;
+    controlledFixedFilter?: 'all' | 'fixed' | 'notfixed';
+    onFixedFilterChange?: (v: 'all' | 'fixed' | 'notfixed') => void; 
+};
+
+const SecurityTabs: React.FC<Props> = ({
+  scores,
+  controlledTab,
+  onTabChange,
+  controlledBucket,
+  onBucketChange,
+  controlledPkgFilter,
+  onPkgFilterChange,
+  controlledFixedFilter,
+  onFixedFilterChange,
+}) => {
+
     // CWE expand box use state
     const [expandedCWEKey, setExpandedCWEKey] = useState<string | null>(null);
     const [popoutKey, setPopoutKey] = useState<{ pfName: string; measureIndex: number } | null>(null);
 
     // CVE use state 
-    const [pkgQuery, setPkgQuery] = useState<string>('');
-    const [fixedFilter, setFixedFilter] = useState<'all' | 'fixed' | 'notfixed'>('all'); // for fixed status filter
-    const [pkgFilter, setPkgFilter] = useState<string>('ALL'); // for package filtering
+    const [pkgLocal, setPkgLocal] = useState<string>('ALL');
+const pkgFilter = controlledPkgFilter ?? pkgLocal;
+
+const [fixedLocal, setFixedLocal] = useState<'all' | 'fixed' | 'notfixed'>('all');
+const fixedFilter = controlledFixedFilter ?? fixedLocal;
 
     // sort CWE scores from low to high
     const sortedPFs = [...((scores.cweProductFactors ?? []) as PF[])]
@@ -35,7 +62,8 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
         return 'moderate';
     };
 
-    const [bucket, setBucket] = useState<Bucket>('all');
+    const [bucketLocal, setBucketLocal] = useState<Bucket>('all');
+const bucket = controlledBucket ?? bucketLocal;
 
     // counts of each severity
     const counts = {
@@ -53,14 +81,16 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
 
     // chip click handler (toggle off if clicking the active one)
     const onChipClick = (next: Exclude<Bucket, 'all'>) => {
-        setBucket(prev => (prev === next ? 'all' : next));
-    };
+  const val: Bucket = bucket === next ? 'all' : next;
+  if (controlledBucket === undefined) setBucketLocal(val);
+  onBucketChange?.(val);
+};
 
     // set CWE card background color by severity score
     const setBackgroundColor = (score: number) => {
         if (score < 0.6) return '#d17f7fff';  // Critical
         if (score < 0.8) return '#f0ea97ff';  // Severe
-        return '#c4b5e0ff';                   // Moderate
+        return '#a0e5acff';  // Moderate
     };
 
     // Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "not fixed" | ""
@@ -70,7 +100,7 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
         return String(v || '').trim().toLowerCase() === 'fixed' ? 'fixed' : '';
     };
 
-    // Predicate to filter a CVE item
+    // filter CVE items
     const cveMatches = (cve: any) => {
         const pkgPass =
             pkgFilter === 'ALL' ||
@@ -139,14 +169,17 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                     </button>
 
                     <button
-                        className={`st-chip st-chip--all ${bucket === 'all' ? 'is-active' : ''}`}
-                        onClick={() => setBucket('all')}
-                        aria-pressed={bucket === 'all'}
-                        title="Clear filter"
-                    >
-                        All
-                        <span className="st-chip-count">{counts.all}</span>
-                    </button>
+  className={`st-chip st-chip--all ${bucket === 'all' ? 'is-active' : ''}`}
+  onClick={() => {
+    if (controlledBucket === undefined) setBucketLocal('all');
+    onBucketChange?.('all');
+  }}
+  aria-pressed={bucket === 'all'}
+  title="Clear filter"
+>
+  All
+  <span className="st-chip-count">{counts.all}</span>
+</button>
                 </div>
 
                 {filteredPFs.map((pf: PF) => {
@@ -224,37 +257,50 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
                     <label className="st-filter">
                         <span className="st-filter-label">Package</span>
                         <select
-                            className="st-filter-select"
-                            value={pkgFilter}
-                            onChange={(e) => setPkgFilter(e.target.value)}
-                        >
-                            <option value="ALL">All packages</option>
-                            {packageOptions.map((pkg) => (
-                                <option key={pkg} value={pkg}>{pkg}</option>
-                            ))}
-                        </select>
+  className="st-filter-select"
+  value={pkgFilter}
+  onChange={(e) => {
+    const v = e.target.value;
+    if (controlledPkgFilter === undefined) setPkgLocal(v);
+    onPkgFilterChange?.(v);
+  }}
+>
+  <option value="ALL">All packages</option>
+  {packageOptions.map((pkg) => (
+    <option key={pkg} value={pkg}>{pkg}</option>
+  ))}
+</select>
                     </label>
 
                     <label className="st-filter">
                         <span className="st-filter-label">Fixed status</span>
                         <select
-                            className="st-filter-select"
-                            value={fixedFilter}
-                            onChange={(e) => setFixedFilter(e.target.value as 'all' | 'fixed' | 'notfixed')}
-                        >
-                            <option value="all">All</option>
-                            <option value="fixed">Fixed</option>
-                            <option value="notfixed">Not fixed</option>
-                        </select>
+  className="st-filter-select"
+  value={fixedFilter}
+  onChange={(e) => {
+    const v = e.target.value as 'all' | 'fixed' | 'notfixed';
+    if (controlledFixedFilter === undefined) setFixedLocal(v);
+    onFixedFilterChange?.(v);
+  }}
+>
+  <option value="all">All</option> 
+  <option value="fixed">Fixed</option>
+  <option value="notfixed">Not fixed</option>
+</select>
                     </label>
 
                     <button
-                        className="st-filter-reset"
-                        onClick={() => { setPkgFilter('ALL'); setFixedFilter('all'); }}
-                        title="Clear filters"
-                    >
-                        Reset
-                    </button>
+  className="st-filter-reset"
+  onClick={() => {
+    if (controlledPkgFilter === undefined) setPkgLocal('ALL');
+    if (controlledFixedFilter === undefined) setFixedLocal('all');
+    onPkgFilterChange?.('ALL');
+    onFixedFilterChange?.('all');
+  }}
+  title="Clear filters"
+>
+  Reset
+</button>
                 </div>
 
                 {(scores.cweProductFactors as PF[] | undefined)?.map((pf: PF) => {
@@ -298,9 +344,26 @@ const SecurityTabs: React.FC<{ scores: ScoresType }> = ({ scores }) => {
         )
     })
 
+    // controlled/uncontrolled tab selection; allows mirroring on comparison page
+  const [localTab, setLocalTab] = useState<SecTabName>('CWE');
+  const tabName: SecTabName = controlledTab ?? localTab;
+
+  const nameToIndex = (name: SecTabName) =>
+    name === 'CWE' ? 0 : name === 'CVE' ? 1 : 2;
+  const indexToName = (i: number): SecTabName =>
+    i === 0 ? 'CWE' : i === 1 ? 'CVE' : 'Lines of Code';
+
     return (
         <>
-            <MuiTabs tabs={tabs} />
+            <MuiTabs
+        tabs={tabs}
+        value={nameToIndex(tabName)} // control by index
+        onChange={(i) => {
+          const next = indexToName(i);
+          if (controlledTab === undefined) setLocalTab(next);
+          onTabChange?.(next);
+        }}
+      />
             {popoutKey && (
                 <div className="densityPlot">
                     <button className="densityPlot-close" onClick={() => setPopoutKey(null)}>X</button>
