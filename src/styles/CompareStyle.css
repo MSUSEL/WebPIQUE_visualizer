@@ -2,7 +2,7 @@
 .compare-app-container {
   display: flex;
   flex-direction: column;
-  min-height: 87vh;
+  min-height: 90vh;
 }
 
 .compare-main-content {
@@ -26,15 +26,18 @@
   overflow: hidden;
 }
 
-.compare-filenames > div {
-  min-width: 0; /* allow text to shrink within grid cell */
+.compare-filenames>div {
+  min-width: 0;
+  /* allow text to shrink within grid cell */
 }
 
 .name-left,
 .name-right {
   display: flex;
-  justify-content: center; /* center horizontally */
-  align-items: center; /* optional: vertical centering */
+  justify-content: center;
+  /* center horizontally */
+  align-items: center;
+  /* optional: vertical centering */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -47,14 +50,20 @@
 /* ---- Vertical sash with solid bar and 3 dots ---- */
 .sashRenderDots {
   position: relative;
-  width: 8px; /* overall handle thickness */
-  height: 80%; /* 80% of container height */
-  margin: auto 0; /* vertically center it */
+  width: 8px;
+  /* overall handle thickness */
+  height: 80%;
+  /* 80% of container height */
+  margin: auto 0;
+  /* vertically center it */
   top: 50%;
-  transform: translateY(-50%); /* exact vertical centering */
+  transform: translateY(-50%);
+  /* exact vertical centering */
   cursor: col-resize;
-  background: #5194ca; /* blue bar */
-  border-radius: 9999px; /* pill shape */
+  background: #75aedd;
+  /* blue bar */
+  border-radius: 9999px;
+  /* pill shape */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -81,23 +90,26 @@
 
 /* middle dot */
 .sashRenderDots span {
-  top: 50%;
+  top: 47%;
 }
 
 /* bottom dot */
 .sashRenderDots::after {
-  top: 55%;
+  top: 49%;
 }
 
 /* hover / active state */
 .sashRenderDots:hover,
 .sashRenderDots.is-active {
-  background: #005a9e; /* darker pill on hover/drag */
+  background: #005a9e;
+  /* darker pill on hover/drag */
 }
 
 /* create space between the blue sash and the RIGHT pane content */
 .pane-gap-right {
-  padding-left: 12px; /* tweak to taste: 12–20px works well */
+  padding-left: 12px;
+  /* tweak to taste: 12–20px works well */
   box-sizing: border-box;
-  overflow-x: hidden; /* avoids accidental horizontal scrollbars */
+  overflow-x: hidden;
+  /* avoids accidental horizontal scrollbars */
 }

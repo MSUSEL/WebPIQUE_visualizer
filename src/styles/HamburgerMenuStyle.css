@@ -25,7 +25,7 @@
 
 .menu {
   position: absolute;
-  top: 40x;
+  top: 40px;
   left: 0;
   width: 270px;
   background: white;
@@ -121,4 +121,5 @@
   width: 70%;
   font-weight: bold;
   font-size: 17px;
+  margin-top: 12px;
 }

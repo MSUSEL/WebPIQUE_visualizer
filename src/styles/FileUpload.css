@@ -41,3 +41,30 @@
     background-color: #bebdbd;
     transition: background-color 0.2s ease-in-out;
 }
+
+.upload-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.upload-compact .upload-label {
+    opacity: 0.85;
+}
+
+.upload-compact .file-name {
+    max-width: 180px;
+    /* tune for your submenu width */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.upload-compact .change-button {
+    margin-left: 4px;
+}
+
+.upload-button {
+    border-radius: 8px;
+    border: 1px solid grey;
+}

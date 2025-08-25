@@ -170,14 +170,13 @@ const SecurityTabs: React.FC<Props> = ({
     content: (
       <Box className="st-root">
         <h3 className="st-h3">
-          # of CWE Pillars: {scores.vulnerabilitySummary?.cweCount ?? 0}
+          # of CWE Pillars: {counts.all ?? 0}
         </h3>
 
         <div className="st-chips">
           <button
-            className={`st-chip st-chip--critical ${
-              bucket === "critical" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--critical ${bucket === "critical" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
@@ -187,9 +186,8 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--severe ${
-              bucket === "severe" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--severe ${bucket === "severe" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
@@ -199,9 +197,8 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--moderate ${
-              bucket === "moderate" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--moderate ${bucket === "moderate" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
@@ -211,9 +208,8 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--all ${
-              bucket === "all" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+              }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -234,9 +230,8 @@ const SecurityTabs: React.FC<Props> = ({
           return (
             <Box
               key={pf.name}
-              className={`pf-card ${
-                diffHints?.differingPFs.has(pf.name) ? "diff-outline" : ""
-              }`}
+              className={`pf-card ${diffHints?.differingPFs.has(pf.name) ? "diff-outline" : ""
+                }`}
               style={{ backgroundColor: setBackgroundColor(pf.value) }}
             >
               <h4 className="pf-title">
@@ -274,13 +269,12 @@ const SecurityTabs: React.FC<Props> = ({
                           .map((measure: Measure, idx: number) => (
                             <li
                               key={idx}
-                              className={`measure-item ${
-                                diffHints?.differingMeasures.has(
-                                  `${pf.name}::${measure.name}`
-                                )
+                              className={`measure-item ${diffHints?.differingMeasures.has(
+                                `${pf.name}::${measure.name}`
+                              )
                                   ? "diff-outline"
                                   : ""
-                              }`}
+                                }`}
                               style={{
                                 backgroundColor: setBackgroundColor(
                                   measure.score
@@ -406,9 +400,8 @@ const SecurityTabs: React.FC<Props> = ({
               {filtered.map((cve: CVEItem) => (
                 <Box
                   key={cve.name}
-                  className={`cve-card ${
-                    diffHints?.differingCVEs.has(cve.name) ? "diff-outline" : ""
-                  }`}
+                  className={`cve-card ${diffHints?.differingCVEs.has(cve.name) ? "diff-outline" : ""
+                    }`}
                 >
                   <h4 className="cve-title">{cve.name}</h4>
                   <ul className="cve-list">

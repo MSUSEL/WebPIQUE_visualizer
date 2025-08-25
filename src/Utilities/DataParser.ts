@@ -53,7 +53,6 @@ export interface ProductFactorsByAspect {
 
 export interface VulnerabilitySummary {
   //this is specific to WebPIQUE
-  cweCount: number;
   cveCount: number;
 }
 
@@ -179,8 +178,8 @@ export function parsePIQUEJSON(json: any): {
                   f.fixed === true || f.fixed === "true"
                     ? "Fixed"
                     : f.fixed === false || f.fixed === "false"
-                    ? "Not fixed"
-                    : f.fixed || "Not fixed", //set fixed status to either "Fixed" or "Not fixed"
+                      ? "Not fixed"
+                      : f.fixed || "Not fixed", //set fixed status to either "Fixed" or "Not fixed"
                 vulnSource: f.vulnSource ?? "",
                 vulnSourceVersion: f.vulnSourceVersion ?? "",
                 fixedVersion: f.fixedVersion ?? "",
@@ -228,10 +227,6 @@ export function parsePIQUEJSON(json: any): {
     }
   }
 
-  // Extract CWE product factors and CVE counts, specific to WebPIQUE
-  const cweCount = Object.keys(json.factors?.product_factors || {}).filter(
-    (key) => key.startsWith("Product_Factor CWE-")
-  ).length;
 
   // Recursively traverse diagnostics to extract CVEs
   function collectCVEs(obj: any): Set<string> {
@@ -258,7 +253,6 @@ export function parsePIQUEJSON(json: any): {
   const cveCount = allCVEs.size;
 
   const vulnerabilitySummary = {
-    cweCount,
     cveCount,
   };
 
