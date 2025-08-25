@@ -4,7 +4,7 @@
   justify-content: space-around;
   flex-wrap: wrap;
   width: 100%;
-  padding: 0 0 1rem 0;
+  padding: 0 0 0 0;
   box-sizing: border-box;
 }
 
@@ -29,7 +29,7 @@
 .tqi-gauge-item {
   background-color: #46666f;
   border-radius: 8px;
-  margin-top: 20px;
+  margin-top: 15px;
   padding: 0.5rem;
   display: flex;
   flex-direction: column;

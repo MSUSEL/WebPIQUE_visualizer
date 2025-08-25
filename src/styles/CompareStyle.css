@@ -1,13 +1,12 @@
 /* stylesheet for page layouts */
-.compoare-app-container {
+.compare-app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 87vh;
 }
 
 .compare-main-content {
-  margin-top: 65px;
-  padding-top: 0;
+  margin-top: 50px;
   flex: 1;
   padding-left: 0;
   padding-right: 0;
@@ -22,6 +21,83 @@
   padding: 15px 12px;
   background-color: #fff;
   border-bottom: 1px solid #e5e7eb;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
+  overflow: hidden;
+}
+
+.compare-filenames > div {
+  min-width: 0; /* allow text to shrink within grid cell */
+}
+
+.name-left,
+.name-right {
+  display: flex;
+  justify-content: center; /* center horizontally */
+  align-items: center; /* optional: vertical centering */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-app-container .gauge-header-row {
+  margin-top: -55px;
+}
+
+/* ---- Vertical sash with solid bar and 3 dots ---- */
+.sashRenderDots {
+  position: relative;
+  width: 8px; /* overall handle thickness */
+  height: 80%; /* 80% of container height */
+  margin: auto 0; /* vertically center it */
+  top: 50%;
+  transform: translateY(-50%); /* exact vertical centering */
+  cursor: col-resize;
+  background: #5194ca; /* blue bar */
+  border-radius: 9999px; /* pill shape */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* dots inside the pill */
+.sashRenderDots::before,
+.sashRenderDots::after,
+.sashRenderDots span {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: white;
+}
+
+/* top dot */
+.sashRenderDots::before {
+  top: 45%;
+}
+
+/* middle dot */
+.sashRenderDots span {
+  top: 50%;
+}
+
+/* bottom dot */
+.sashRenderDots::after {
+  top: 55%;
+}
+
+/* hover / active state */
+.sashRenderDots:hover,
+.sashRenderDots.is-active {
+  background: #005a9e; /* darker pill on hover/drag */
+}
+
+/* create space between the blue sash and the RIGHT pane content */
+.pane-gap-right {
+  padding-left: 12px; /* tweak to taste: 12–20px works well */
+  box-sizing: border-box;
+  overflow-x: hidden; /* avoids accidental horizontal scrollbars */
 }

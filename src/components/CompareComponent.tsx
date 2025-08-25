@@ -29,6 +29,7 @@ const Compare: React.FC = () => {
   const [selectedSecurityTab, setSelectedSecurityTab] = useState<
     "CWE" | "CVE" | "Lines of Code"
   >("CWE");
+  const [expandedPF, setExpandedPF] = useState<string | null>(null);
 
   // resizable pane sizes
   const [sizes, setSizes] = useState([50, 50]);
@@ -44,17 +45,18 @@ const Compare: React.FC = () => {
     "all"
   );
 
-  const sashRender = (index: number, active: boolean) => (
+  const sashRender = (_index: number, active: boolean) => (
     <div
-      className="sashRender"
-      style={{
-        width: "6px",
-        height: "50%",
-        background: active ? "#999" : "#ccc",
-        cursor: "col-resize",
-      }}
-    />
+      className={`sashRenderDots ${active ? "is-active" : ""}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panes"
+    >
+      <span></span>
+    </div>
   );
+
+  const SASH_W = 8;
 
   // display file names above visulaizer
   // use state to mirror clicks in both panes
@@ -67,13 +69,15 @@ const Compare: React.FC = () => {
         <div
           className="compare-filenames"
           style={{
-            gridTemplateColumns: `${sizes[0]}% ${sizes[1]}%`,
+            // left | sash | right
+            gridTemplateColumns: `${sizes[0]}fr ${SASH_W}px ${sizes[1]}fr`,
           }}
         >
-          <div>
+          <div className="name-left">
             <strong>File Name: </strong> {file1Name}
           </div>
-          <div>
+          <div aria-hidden="true" /> {/* spacer for the sash */}
+          <div className="name-right">
             <strong>File Name: </strong> {file2Name}
           </div>
         </div>
@@ -94,6 +98,8 @@ const Compare: React.FC = () => {
                     onAspectChange={setSelectedAspect}
                     controlledSecurityTab={selectedSecurityTab}
                     onSecurityTabChange={setSelectedSecurityTab}
+                    controlledMeasure={expandedPF}
+                    onMeasureChange={setExpandedPF}
                     controlledCWEBucket={cweBucket}
                     onCWEBucketChange={setCweBucket}
                     controlledPackageFilter={pkgFilter}
@@ -107,10 +113,8 @@ const Compare: React.FC = () => {
             <Pane minSize={260}>
               <ScrollSyncPane>
                 <div
-                  style={{
-                    height: "100%",
-                    overflow: "auto",
-                  }}
+                  className="pane-gap-right"
+                  style={{ height: "100%", overflow: "auto" }}
                 >
                   <SingleFileComponent
                     jsonData={file2}
@@ -118,6 +122,8 @@ const Compare: React.FC = () => {
                     onAspectChange={setSelectedAspect}
                     controlledSecurityTab={selectedSecurityTab}
                     onSecurityTabChange={setSelectedSecurityTab}
+                    controlledMeasure={expandedPF}
+                    onMeasureChange={setExpandedPF}
                     controlledCWEBucket={cweBucket}
                     onCWEBucketChange={setCweBucket}
                     controlledPackageFilter={pkgFilter}
