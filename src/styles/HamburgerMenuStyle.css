@@ -32,6 +32,7 @@
   padding: 15px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   color: black;
+  border-radius: 7px;
 }
 
 .menu-title {
@@ -52,7 +53,11 @@
   font-size: 16px;
   cursor: pointer;
   color: #333;
-  padding: 6px 0;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 6px;
 }
 
 .menu-item:hover {
@@ -60,33 +65,41 @@
 }
 
 .menu-item.active {
-  background-color: #e0e0e0;
-  /* or your hover color */
-  font-weight: bold;
+  background-color: #e8f0fe;
+  font-weight: 600;
 }
 
-.submenu-container {
-  position: absolute;
-  top: 100px;
-  /* Adjust based on header + menu item heights */
-  left: 330px;
-  /* Align next to main menu */
-  background-color: white;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
-  padding: 16px;
-  z-index: 1000;
+.chevron {
+  display: inline-block;
+  transform: rotate(0deg);
+  transform-origin: 50% 55%;
+  transition: transform 160ms ease;
+  margin-left: 8px;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.menu-item.active .chevron {
+  transform: rotate(0deg);
+}
+
+.chevron.visible {
+  opacity: 1;
 }
 
 /* Submenu container (pops to right of menu) */
 .submenu {
+  margin-left: -5px;
   position: absolute;
-  top: 146px;
-  left: 260px;
-  width: 250px;
+  width: 280px;
   background: white;
   padding: 15px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   color: black;
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* Submenu title and layout */
@@ -98,7 +111,7 @@
 
 /* Left and right side file input */
 .file-input {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
   font-size: 15px;
@@ -106,20 +119,29 @@
 
 /* Align label and file input cleanly */
 .file-input label {
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   font-weight: 500;
 }
 
 /* Compare button styling */
 .compare-button {
-  background-color: #5b6f75;
-  color: white;
+  background-color: lightgrey;
+  color: black;
   border: 1px solid black;
-  padding: 8px 8px;
+  padding: 8px 10px;
   border-radius: 15px;
   cursor: pointer;
-  width: 70%;
-  font-weight: bold;
-  font-size: 17px;
-  margin-top: 12px;
+  width: 60%;
+  font-size: 15px;
+  margin-top: 6px;
+  align-self: center;
+}
+
+.compare-button.raised {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.compare-button:disabled {
+  background-color: lightgrey;
+  color: black;
 }

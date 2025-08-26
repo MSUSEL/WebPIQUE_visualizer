@@ -1,3 +1,5 @@
+// component to render security qualtiy aspect CWE, CVE, and lines of code infomration
+// unique to WebPIQUE
 import React, { useMemo, useState } from "react";
 import { Box } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -11,7 +13,6 @@ import { DiffHints } from "../Utilities/fileDiff";
 type ScoresType = any;
 type PF = any;
 type Measure = any;
-type CVEItem = any;
 
 type SecTabName = "CWE" | "CVE" | "Lines of Code";
 
@@ -30,6 +31,68 @@ type Props = {
   diffHints?: DiffHints;
 };
 
+// ------- helpers used across tabs -------
+const bucketFor = (score: number): "critical" | "severe" | "moderate" => {
+  if (score < 0.6) return "critical";
+  if (score < 0.8) return "severe";
+  return "moderate";
+};
+
+// add severity label and visual icon
+type SeverityInfo = {
+  color: string;
+  label: string;
+  icon: string;
+};
+
+const getSeverityInfo = (score: number): SeverityInfo => {
+  if (score < 0.6) {
+    return { color: "#d93025", label: "Critical", icon: "🔴" };
+  } else if (score < 0.8) {
+    return { color: "#e37400", label: "Severe", icon: "🟠" };
+  } else {
+    return { color: "#188038", label: "Moderate", icon: "🟢" };
+  }
+};
+
+// Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "notfixed" | ""
+const normalizeFixed = (v: any): "fixed" | "notfixed" | "" => {
+  if (v === true) return "fixed";
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "true" || s === "fixed") return "fixed";
+  if (s === "false" || s === "not fixed") return "notfixed";
+  return "";
+};
+
+// Extract CWE pillar id from PF name, e.g., "Product_Factor CWE-693" -> "CWE-693"
+const extractPillarId = (pfName: string): string | null => {
+  const m = /CWE-(\d+)/.exec(pfName || "");
+  return m ? `CWE-${m[1]}` : null;
+};
+
+// Normalize various CWE measure field formats (248, "CWE-248", etc.) -> "CWE-248"
+const normalizeCweId = (v: any): string | null => {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = /(\d+)/.exec(s);
+  return m ? `CWE-${m[1]}` : null;
+};
+
+type GroupedCVE = {
+  id: string;
+  title?: string;
+  description?: string;
+  severity?: string | number;
+  fixed?: any;
+  vulnSource?: string;
+  vulnSourceVersion?: string;
+  cwePillars: Set<string>;
+  cweMeasures: Set<string>;
+  byTool: any[];         // merged tool scores across duplicates
+  raw: any[];            // original items for diff/other details
+};
+
 const SecurityTabs: React.FC<Props> = ({
   scores,
   controlledTab,
@@ -44,112 +107,50 @@ const SecurityTabs: React.FC<Props> = ({
   onFixedFilterChange,
   diffHints,
 }) => {
-  // CWE expand box use state
+  // ---------- CWE TAB STATE ----------
   const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
   const expandedCWEKey = controlledMeasures ?? expandedLocal;
   const setExpandedCWEKey = (key: string | null) => {
     if (controlledMeasures === undefined) setExpandedLocal(key);
     onMeausreChange?.(key);
   };
-  const [popoutKey, setPopoutKey] = useState<{
-    pfName: string;
-    measureIndex: number;
-  } | null>(null);
 
-  // CVE use state
-  const [pkgLocal, setPkgLocal] = useState<string>("ALL");
-  const pkgFilter = controlledPkgFilter ?? pkgLocal;
+  const [popoutKey, setPopoutKey] = useState<{ pfName: string; measureIndex: number } | null>(null);
 
-  const [fixedLocal, setFixedLocal] = useState<"all" | "fixed" | "notfixed">(
-    "all"
-  );
-  const fixedFilter = controlledFixedFilter ?? fixedLocal;
-
-  // sort CWE scores from low to high
   const sortedPFs = [...((scores.cweProductFactors ?? []) as PF[])].sort(
     (a: PF, b: PF) => (a.value ?? 0) - (b.value ?? 0)
   );
 
-  // chip cards to filter CWE pillars by severity when clicked
   type Bucket = "all" | "critical" | "severe" | "moderate";
-
-  const bucketFor = (score: number): Exclude<Bucket, "all"> => {
-    if (score < 0.6) return "critical";
-    if (score < 0.8) return "severe";
-    return "moderate";
-  };
-
   const [bucketLocal, setBucketLocal] = useState<Bucket>("all");
   const bucket = controlledBucket ?? bucketLocal;
 
-  // counts of each severity
   const counts = {
-    critical: sortedPFs.filter((pf: PF) => pf?.value != null && pf.value < 0.6)
-      .length,
-    severe: sortedPFs.filter(
-      (pf: PF) => pf?.value != null && pf.value >= 0.6 && pf.value < 0.8
-    ).length,
-    moderate: sortedPFs.filter((pf: PF) => pf?.value != null && pf.value >= 0.8)
-      .length,
+    critical: sortedPFs.filter((pf: PF) => pf?.value != null && pf.value < 0.6).length,
+    severe: sortedPFs.filter((pf: PF) => pf?.value != null && pf.value >= 0.6 && pf.value < 0.8).length,
+    moderate: sortedPFs.filter((pf: PF) => pf?.value != null && pf.value >= 0.8).length,
     all: sortedPFs.length,
   };
 
-  // CWE filtering
   const filteredPFs =
     bucket === "all"
       ? sortedPFs
       : sortedPFs.filter((pf: PF) => bucketFor(pf.value) === bucket);
 
-  // chip click handler
   const onChipClick = (next: Exclude<Bucket, "all">) => {
     const val: Bucket = bucket === next ? "all" : next;
     if (controlledBucket === undefined) setBucketLocal(val);
     onBucketChange?.(val);
   };
 
-  // set CWE card background color by severity score
-  const setBackgroundColor = (score: number) => {
-    if (score < 0.6) return "#d17f7fff"; // Critical
-    if (score < 0.8) return "#f0ea97ff"; // Severe
-    return "#a0e5acff"; // Moderate
-  };
+  // ---------- CVE TAB STATE ----------
+  const [pkgLocal, setPkgLocal] = useState<string>("ALL");
+  const pkgFilter = controlledPkgFilter ?? pkgLocal;
 
-  // Normalizes CVE fixed status: "Fixed", "fixed", true, "true" → "fixed" | "not fixed" | ""
-  const normalizeFixed = (v: any): "fixed" | "notfixed" | "" => {
-    if (
-      v === true ||
-      String(v).toLowerCase() === "true" ||
-      String(v).toLowerCase() === "fixed"
-    )
-      return "fixed";
-    if (
-      v === false ||
-      String(v).toLowerCase() === "false" ||
-      String(v).toLowerCase() === "not fixed"
-    )
-      return "notfixed";
-    return String(v || "")
-      .trim()
-      .toLowerCase() === "fixed"
-      ? "fixed"
-      : "";
-  };
+  const [fixedLocal, setFixedLocal] = useState<"all" | "fixed" | "notfixed">("all");
+  const fixedFilter = controlledFixedFilter ?? fixedLocal;
 
-  // filter CVE items
-  const cveMatches = (cve: any) => {
-    const pkgPass =
-      pkgFilter === "ALL" || (cve?.vulnSource ?? "").trim() === pkgFilter;
-
-    const fixedNorm = normalizeFixed(cve?.fixed);
-    const fixedPass =
-      fixedFilter === "all" ||
-      (fixedFilter === "fixed" && fixedNorm === "fixed") ||
-      (fixedFilter === "notfixed" && fixedNorm !== "fixed");
-
-    return pkgPass && fixedPass;
-  };
-
-  // sorted package options from the parsed scores
+  // Create the "Package" filter options (unique vulnSource names)
   const packageOptions = useMemo(() => {
     const set = new Set<string>();
     (scores.cweProductFactors ?? []).forEach((pf: any) => {
@@ -161,7 +162,98 @@ const SecurityTabs: React.FC<Props> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [scores]);
 
-  // create tabs
+  // CVE filter (package + fixed)
+  const cveMatches = (payload: { vulnSource?: string; fixed?: any }) => {
+    const pkgPass =
+      pkgFilter === "ALL" || (payload?.vulnSource ?? "").trim() === pkgFilter;
+
+    const fixedNorm = normalizeFixed(payload?.fixed);
+    const fixedPass =
+      fixedFilter === "all" ||
+      (fixedFilter === "fixed" && fixedNorm === "fixed") ||
+      (fixedFilter === "notfixed" && fixedNorm !== "fixed");
+
+    return pkgPass && fixedPass;
+  };
+
+  // Group CVEs by CVE-ID and aggregate CWE pillars & measures
+  const groupedCves = useMemo<GroupedCVE[]>(() => {
+    const groupedById = new Map<string, GroupedCVE>();
+
+    const productFactors: any[] = scores?.cweProductFactors ?? [];
+    for (const pf of productFactors) {
+      const pillarId = extractPillarId(pf?.name);
+      const cves: any[] = pf?.cves ?? [];
+
+      for (const cve of cves) {
+        const id: string =
+          cve?.cveId ?? cve?.id ?? cve?.name ?? cve?.CVE ?? cve?.CVE_ID;
+        if (!id) continue;
+
+        let g = groupedById.get(id);
+        if (!g) {
+          g = {
+            id,
+            title: cve?.title ?? cve?.summary ?? id,
+            description: cve?.description ?? "",
+            severity: cve?.severity ?? cve?.cvss ?? cve?.score,
+            fixed: cve?.fixed,
+            vulnSource: (cve?.vulnSource ?? "").trim(),
+            vulnSourceVersion: (cve?.vulnSourceVersion ?? "").trim(),
+            cwePillars: new Set<string>(),
+            cweMeasures: new Set<string>(),
+            byTool: [],
+            raw: [],
+          };
+          groupedById.set(id, g);
+        }
+
+        const measureId =
+          normalizeCweId(
+            cve?.CWEmeasureName ??
+            cve?.cweMeasure ??
+            cve?.measure ??
+            cve?.cwe ??
+            cve?.cwe_id ??
+            cve?.cweId ??
+            cve?.weakness
+          ) ?? null;
+
+        if (pillarId) g.cwePillars.add(pillarId);
+        if (measureId) g.cweMeasures.add(measureId);
+
+        // merge byTool (avoid duplicates by tool name + score stringified)
+        const existingKeys = new Set(g.byTool.map((t: any) => `${t.tool}|${t.score ?? ""}`));
+        (cve?.byTool ?? []).forEach((t: any) => {
+          const key = `${t.tool}|${t.score ?? ""}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            g.byTool.push(t);
+          }
+        });
+
+        // prefer first non-empty fields if missing
+        if (!g.vulnSource && (cve?.vulnSource ?? "").trim()) {
+          g.vulnSource = (cve.vulnSource as string).trim();
+        }
+        if (!g.vulnSourceVersion && (cve?.vulnSourceVersion ?? "").trim()) {
+          g.vulnSourceVersion = (cve.vulnSourceVersion as string).trim();
+        }
+        if (g.fixed == null && cve?.fixed != null) {
+          g.fixed = cve.fixed;
+        }
+
+        g.raw.push(cve);
+      }
+    }
+
+    // Apply filters to grouped result
+    return Array.from(groupedById.values()).filter((g) =>
+      cveMatches({ vulnSource: g.vulnSource, fixed: g.fixed })
+    );
+  }, [scores, pkgFilter, fixedFilter]);
+
+  // ---------- TABS ----------
   const tabs: TabItem[] = [];
 
   // --- CWE tab ---
@@ -169,14 +261,11 @@ const SecurityTabs: React.FC<Props> = ({
     label: "CWE",
     content: (
       <Box className="st-root">
-        <h3 className="st-h3">
-          # of CWE Pillars: {counts.all ?? 0}
-        </h3>
+        <h3 className="st-h3"># of CWE Pillars: {counts.all ?? 0}</h3>
 
         <div className="st-chips">
           <button
-            className={`st-chip st-chip--critical ${bucket === "critical" ? "is-active" : ""
-              }`}
+            className={`st-chip st-chip--critical ${bucket === "critical" ? "is-active" : ""}`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
@@ -186,8 +275,7 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--severe ${bucket === "severe" ? "is-active" : ""
-              }`}
+            className={`st-chip st-chip--severe ${bucket === "severe" ? "is-active" : ""}`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
@@ -197,8 +285,7 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--moderate ${bucket === "moderate" ? "is-active" : ""
-              }`}
+            className={`st-chip st-chip--moderate ${bucket === "moderate" ? "is-active" : ""}`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
@@ -208,8 +295,7 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
-              }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""}`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -224,19 +310,19 @@ const SecurityTabs: React.FC<Props> = ({
 
         {filteredPFs.map((pf: PF) => {
           const isExpanded = expandedCWEKey === pf.name;
-          const toggleExpand = () =>
-            setExpandedCWEKey(isExpanded ? null : pf.name);
+          const toggleExpand = () => setExpandedCWEKey(isExpanded ? null : pf.name);
 
           return (
             <Box
               key={pf.name}
-              className={`pf-card ${diffHints?.differingPFs.has(pf.name) ? "diff-outline" : ""
-                }`}
-              style={{ backgroundColor: setBackgroundColor(pf.value) }}
+              className={`pf-card ${diffHints?.differingPFs.has(pf.name) ? "diff-outline" : ""}`}
+              style={{ border: `2px solid ${getSeverityInfo(pf.value).color}`, backgroundColor: "#fff" }}
             >
-              <h4 className="pf-title">
-                {pf.name.replace("Product_Factor ", "")}
-              </h4>
+              <div>
+                <span className="icon">{getSeverityInfo(pf.value).icon}</span>
+                <span className="label">{getSeverityInfo(pf.value).label}</span>
+              </div>
+              <h4 className="pf-title">{pf.name.replace("Product_Factor ", "")}</h4>
               <ul className="pf-list">
                 <li>
                   <strong>Score:</strong> {pf.value} out of 1
@@ -261,7 +347,7 @@ const SecurityTabs: React.FC<Props> = ({
                     <div className="measure-list">
                       <ul>
                         {pf.measures
-                          .slice() // don't mutate original
+                          .slice()
                           .sort(
                             (a: Measure, b: Measure) =>
                               Number(a.score ?? 0) - Number(b.score ?? 0)
@@ -269,34 +355,24 @@ const SecurityTabs: React.FC<Props> = ({
                           .map((measure: Measure, idx: number) => (
                             <li
                               key={idx}
-                              className={`measure-item ${diffHints?.differingMeasures.has(
-                                `${pf.name}::${measure.name}`
-                              )
-                                  ? "diff-outline"
-                                  : ""
-                                }`}
-                              style={{
-                                backgroundColor: setBackgroundColor(
-                                  measure.score
-                                ),
-                              }}
+                              className={`measure-item ${diffHints?.differingMeasures.has(`${pf.name}::${measure.name}`) ? "diff-outline" : ""}`}
+                              style={{ border: `2px solid ${getSeverityInfo(measure.score).color}`, backgroundColor: "#fff" }}
                             >
-                              <strong>
-                                {measure.name.replace(" Measure", "")}:
-                              </strong>{" "}
+                              <div className="severity-badge">
+                                <span className="icon">{getSeverityInfo(measure.score).icon}</span>
+                                <span className="label">{getSeverityInfo(measure.score).label}</span>
+                              </div>
+                              <strong>{measure.name.replace(" Measure", "")}:</strong>{" "}
                               {measure.description}
                               <ul>
                                 <li>
                                   <strong>
-                                    Score: {measure.score * 100}% better than
-                                    the benchmark set.
+                                    Score: {measure.score * 100}% better than the benchmark set.
                                   </strong>
                                 </li>
                                 <li>
                                   Weight: The CWE measure contributed a{" "}
-                                  <strong>
-                                    weight of {(measure.weight ?? 0).toFixed(4)}
-                                  </strong>{" "}
+                                  <strong>{(measure.weight ?? 0).toFixed(4)}</strong>{" "}
                                   to the final CWE pillar score.
                                 </li>
                                 <li>
@@ -327,14 +403,12 @@ const SecurityTabs: React.FC<Props> = ({
     ),
   });
 
-  // --- CVE tab ---
+  // --- CVE tab (grouped by CVE-ID) ---
   tabs.push({
     label: "CVE",
     content: (
       <Box className="st-root">
-        <h3 className="st-h3">
-          # of CVEs: {scores.vulnerabilitySummary?.cveCount ?? 0}
-        </h3>
+        <h3 className="st-h3"># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? groupedCves.length}</h3>
         <hr className="st-divider st-divider--narrow" />
 
         {/* Filters */}
@@ -390,60 +464,57 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
         </div>
 
-        {(scores.cweProductFactors as PF[] | undefined)?.map((pf: PF) => {
-          const cves = (pf.cves as CVEItem[] | undefined) ?? [];
-          const filtered = cves.filter(cveMatches);
-          if (filtered.length === 0) return null; // hide PF block if no CVEs match filters
+        {/* Grouped CVE cards */}
+        <Box>
+          {groupedCves.map((g) => {
+            // diff highlighting: match by grouped id or any raw item name
+            const differs =
+              diffHints?.differingCVEs.has(g.id) ||
+              g.raw.some((r: any) => diffHints?.differingCVEs.has(r?.name));
 
-          return (
-            <Box key={pf.name}>
-              {filtered.map((cve: CVEItem) => (
-                <Box
-                  key={cve.name}
-                  className={`cve-card ${diffHints?.differingCVEs.has(cve.name) ? "diff-outline" : ""
-                    }`}
-                >
-                  <h4 className="cve-title">{cve.name}</h4>
-                  <ul className="cve-list">
+            // compact byTool union for the mini chart
+            const byTool = g.byTool ?? [];
+
+            return (
+              <Box key={g.id} className={`cve-card ${differs ? "diff-outline" : ""}`}>
+                <h4 className="cve-title">{g.id}</h4>
+                <ul className="cve-list">
+                  <li>
+                    <strong>Package name:</strong> {g.vulnSource || "—"}
+                  </li>
+                  <li>
+                    <strong>Package version:</strong> {g.vulnSourceVersion || "—"}
+                  </li>
+                  {g.title && (
                     <li>
-                      <strong>Package name:</strong> {cve.vulnSource || "—"}
+                      <strong>Title:</strong> {g.title}
                     </li>
-                    <li>
-                      <strong>Package version:</strong>{" "}
-                      {cve.vulnSourceVersion || "—"}
-                    </li>
-                    <li>
-                      <strong>Description:</strong>{" "}
-                      {cve.description || "Coming soon"}
-                    </li>
-                    <li>
-                      <strong>Fixed status:</strong> {cve.fixed || "Not fixed"}
-                    </li>
-                    <li>
-                      <strong>Fixed version:</strong> {cve.fixedVersion || "—"}
-                    </li>
-                    <li>
-                      <strong>Associated CWE pillar:</strong>{" "}
-                      {pf.name.replace("Product_Factor ", "")}
-                    </li>
-                    <li>
-                      <strong>Associated CWE measure:</strong>{" "}
-                      {cve.CWEmeasureName?.replace("Measure", "")}
-                    </li>
-                    <li>
-                      <strong>Tools used:</strong>{" "}
-                      {cve.byTool.map((t: any) => t.tool).join(", ")}
-                    </li>
-                  </ul>
-                  <div className="cve-chart-wrap">
-                    <div className="cve-chart-caption">CVE Score</div>
-                    <CVEScoreMiniChart byTool={cve.byTool} />
-                  </div>
-                </Box>
-              ))}
-            </Box>
-          );
-        })}
+                  )}
+                  <li>
+                    <strong>Description:</strong> {g.description || "Coming soon"}
+                  </li>
+                  <li>
+                    <strong>Fixed status:</strong>{" "}
+                    {String(g.fixed ?? "").trim() || "Not fixed"}
+                  </li>
+                  <li>
+                    <strong>CWE pillar(s):</strong>{" "}
+                    {g.cwePillars.size ? Array.from(g.cwePillars).sort().join(", ") : "—"}
+                  </li>
+                  <li>
+                    <strong>CWE measure(s):</strong>{" "}
+                    {g.cweMeasures.size ? Array.from(g.cweMeasures).sort().join(", ") : "—"}
+                  </li>
+                </ul>
+
+                <div className="cve-chart-wrap">
+                  <div className="cve-chart-caption">CVE Score</div>
+                  <CVEScoreMiniChart byTool={byTool} />
+                </div>
+              </Box>
+            );
+          })}
+        </Box>
       </Box>
     ),
   });
@@ -476,19 +547,14 @@ const SecurityTabs: React.FC<Props> = ({
       />
       {popoutKey && (
         <div className="densityPlot">
-          <button
-            className="densityPlot-close"
-            onClick={() => setPopoutKey(null)}
-          >
+          <button className="densityPlot-close" onClick={() => setPopoutKey(null)}>
             X
           </button>
           {(() => {
             const pf = (scores?.cweProductFactors as PF[] | undefined)?.find(
               (p: PF) => p.name === popoutKey.pfName
             );
-            const m = pf?.measures?.[popoutKey.measureIndex] as
-              | Measure
-              | undefined;
+            const m = pf?.measures?.[popoutKey.measureIndex] as Measure | undefined;
             return m ? (
               <ProbabilityDensity
                 thresholds={m.threshold ?? []}
@@ -504,3 +570,4 @@ const SecurityTabs: React.FC<Props> = ({
 };
 
 export default SecurityTabs;
+

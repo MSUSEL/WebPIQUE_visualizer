@@ -1,5 +1,5 @@
 // CompareComponent.tsx — side-by-side compare with synced panes
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
@@ -24,9 +24,20 @@ const Compare: React.FC = () => {
   const file2Name = file2.filename ?? "File 2";
 
   // mirrored UI state across both panes
-  const [selectedAspect, setSelectedAspect] = useState<string | null>("Security");
+  const [selectedAspect, setSelectedAspect] = useState<string | null>("null");
   const [selectedSecurityTab, setSelectedSecurityTab] =
     useState<"CWE" | "CVE" | "Lines of Code">("CWE");
+
+  //reset view when new file is loaded
+  useEffect(() => {
+    setSelectedAspect(null);
+    setSelectedSecurityTab("CWE");
+    setExpandedPF(null);
+    setCweBucket("all");
+    setPkgFilter("ALL");
+    setFixedFilter("all");
+  }, [file1?.filename, file2?.filename]);
+
   const [expandedPF, setExpandedPF] = useState<string | null>(null);
   const [cweBucket, setCweBucket] =
     useState<"all" | "critical" | "severe" | "moderate">("all");
