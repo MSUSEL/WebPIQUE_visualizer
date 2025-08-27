@@ -15,7 +15,6 @@ const HamburgerMenu: React.FC = () => {
   const [showCompareSubmenu, setShowCompareSubmenu] = useState(false);
   const [leftJson, setLeftJson] = useState<UploadPayload | null>(null);
   const [rightJson, setRightJson] = useState<UploadPayload | null>(null);
-  const bothLoaded = !!leftJson && !!rightJson;
 
   const [submenuTop, setSubmenuTop] = useState<number>(MENU_TOP);
   const navigate = useNavigate();
@@ -72,24 +71,29 @@ const HamburgerMenu: React.FC = () => {
           <div
             className="menu-item"
             onClick={() => {
-              setOpen(false);          // close the hamburger
+              setOpen(false); // close the hamburger
               setShowCompareSubmenu(false);
-              navigate("/");           // go to LandingPage ("/")
+              navigate("/"); // go to LandingPage ("/")
             }}
           >
             <span>Home</span>
           </div>
 
           {/* single-file upload */}
-          <FileUpload
-            variant="menuItem"
-            onJsonLoaded={({ filename, data }: UploadPayload) => {
-              handleToggle(false);
-              navigate("/visualizer", { state: { jsonData: data, filename } });
-            }}
-          />
+          <div
+            onClick={() => {
+              setShowCompareSubmenu(false);
+            }}>
+            <FileUpload
+              variant="menuItem"
+              onJsonLoaded={({ filename, data }: UploadPayload) => {
+                handleToggle(false);
+                navigate("/visualizer", { state: { jsonData: data, filename } }); // go to SingleFilePage
+              }}
+            />
+          </div>
 
-          {/* compare submenu toggle */}
+          {/* compare submenu toggle, go to ComparePage */}
           <div
             ref={compareRowRef}
             className={`menu-item ${showCompareSubmenu ? "active" : ""}`}
@@ -101,7 +105,7 @@ const HamburgerMenu: React.FC = () => {
         </div>
       )}
 
-      {/* compare submenu: locked next to the menu, aligned with "Compare" */}
+      {/* compare submenu */}
       {isOpen && showCompareSubmenu && (
         <div
           className="submenu locked"
@@ -126,11 +130,13 @@ const HamburgerMenu: React.FC = () => {
               onJsonLoaded={(payload: UploadPayload) => setRightJson(payload)}
             />
           </div>
-          {bothLoaded && (
-            <button className="compare-button raised" onClick={handleCompare}>
-              Compare
-            </button>
-          )}
+          <button
+            className="compare-button"
+            onClick={handleCompare}
+            disabled={!leftJson || !rightJson}
+          >
+            Compare
+          </button>
         </div>
       )}
     </div>

@@ -33,11 +33,12 @@
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   color: black;
   border-radius: 7px;
+  border: 2px solid lightgrey;
 }
 
 .menu-title {
   font-weight: bold;
-  font-size: 1rem;
+  font-size: 18px;
   margin-bottom: 0.5rem;
   color: black;
 }
@@ -89,7 +90,7 @@
 
 /* Submenu container (pops to right of menu) */
 .submenu {
-  margin-left: -5px;
+  margin-left: -2px;
   position: absolute;
   width: 280px;
   background: white;
@@ -100,13 +101,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  border: 2px solid lightgrey;
 }
 
 /* Submenu title and layout */
 .submenu-title {
   font-weight: bold;
-  font-size: 1rem;
+  font-size: 18px;
   color: black;
+  margin-bottom: -3px;
 }
 
 /* Left and right side file input */
@@ -125,9 +128,8 @@
 
 /* Compare button styling */
 .compare-button {
-  background-color: lightgrey;
   color: black;
-  border: 1px solid black;
+  border: 2px solid black;
   padding: 8px 10px;
   border-radius: 15px;
   cursor: pointer;
@@ -142,6 +144,8 @@
 }
 
 .compare-button:disabled {
-  background-color: lightgrey;
-  color: black;
+  border: 1px solid lightgrey;
+  background-color: white;
+  color: lightgrey;
+  cursor: not-allowed;
 }

@@ -47,11 +47,11 @@ type SeverityInfo = {
 
 const getSeverityInfo = (score: number): SeverityInfo => {
   if (score < 0.6) {
-    return { color: "#d93025", label: "Critical", icon: "🔴" };
+    return { color: "#d93025", label: "CWE score below < 0.6", icon: "🔴" };
   } else if (score < 0.8) {
-    return { color: "#e37400", label: "Severe", icon: "🟠" };
+    return { color: "#e37400", label: "CWE score between 0.6-0.8", icon: "🟠" };
   } else {
-    return { color: "#188038", label: "Moderate", icon: "🟢" };
+    return { color: "#188038", label: "CWE score > 0.8", icon: "🟢" };
   }
 };
 
@@ -87,10 +87,11 @@ type GroupedCVE = {
   fixed?: any;
   vulnSource?: string;
   vulnSourceVersion?: string;
+  fixedVersion?: string;
   cwePillars: Set<string>;
   cweMeasures: Set<string>;
-  byTool: any[];         // merged tool scores across duplicates
-  raw: any[];            // original items for diff/other details
+  byTool: any[];
+  raw: any[];
 };
 
 const SecurityTabs: React.FC<Props> = ({
@@ -200,6 +201,7 @@ const SecurityTabs: React.FC<Props> = ({
             fixed: cve?.fixed,
             vulnSource: (cve?.vulnSource ?? "").trim(),
             vulnSourceVersion: (cve?.vulnSourceVersion ?? "").trim(),
+            fixedVersion: cve?.fixedVersion,
             cwePillars: new Set<string>(),
             cweMeasures: new Set<string>(),
             byTool: [],
@@ -270,7 +272,7 @@ const SecurityTabs: React.FC<Props> = ({
             aria-pressed={bucket === "critical"}
           >
             <span className="st-chip-dot" />
-            Critical (CWE pillar score &lt; 0.6)
+            CWE score &lt; 0.6
             <span className="st-chip-count">{counts.critical}</span>
           </button>
 
@@ -280,7 +282,7 @@ const SecurityTabs: React.FC<Props> = ({
             aria-pressed={bucket === "severe"}
           >
             <span className="st-chip-dot" />
-            Severe (CWE pillar score 0.6-0.8)
+            CWE score between 0.6-0.8
             <span className="st-chip-count">{counts.severe}</span>
           </button>
 
@@ -290,7 +292,7 @@ const SecurityTabs: React.FC<Props> = ({
             aria-pressed={bucket === "moderate"}
           >
             <span className="st-chip-dot" />
-            Moderate (CWE pillar score &gt; 0.8)
+            CWE score &gt; 0.8
             <span className="st-chip-count">{counts.moderate}</span>
           </button>
 
@@ -405,16 +407,16 @@ const SecurityTabs: React.FC<Props> = ({
 
   // --- CVE tab (grouped by CVE-ID) ---
   tabs.push({
-    label: "CVE",
+    label: "Package Vulnerabilites",
     content: (
       <Box className="st-root">
-        <h3 className="st-h3"># of CVEs: {scores.vulnerabilitySummary?.cveCount ?? groupedCves.length}</h3>
+        <h3 className="st-h3"># of Package Vulnerabilities: {scores.vulnerabilitySummary?.cveCount ?? groupedCves.length}</h3>
         <hr className="st-divider st-divider--narrow" />
 
         {/* Filters */}
         <div className="st-filters">
           <label className="st-filter">
-            <span className="st-filter-label">Package</span>
+            <span className="st-filter-label">Vulnerable Package</span>
             <select
               className="st-filter-select"
               value={pkgFilter}
@@ -483,27 +485,33 @@ const SecurityTabs: React.FC<Props> = ({
                     <strong>Package name:</strong> {g.vulnSource || "—"}
                   </li>
                   <li>
-                    <strong>Package version:</strong> {g.vulnSourceVersion || "—"}
+                    <strong>Vulnerable Package version:</strong> {g.vulnSourceVersion || "—"}
+                  </li>
+                  <li>
+                    <strong>Fixed status:</strong>{" "}
+                    {String(g.fixed ?? "").trim() || "Not fixed"}
                   </li>
                   {g.title && (
                     <li>
-                      <strong>Title:</strong> {g.title}
+                      <strong>Fixed Package Version(s):</strong> {g.fixedVersion}
                     </li>
                   )}
                   <li>
                     <strong>Description:</strong> {g.description || "Coming soon"}
                   </li>
                   <li>
-                    <strong>Fixed status:</strong>{" "}
-                    {String(g.fixed ?? "").trim() || "Not fixed"}
-                  </li>
-                  <li>
-                    <strong>CWE pillar(s):</strong>{" "}
+                    <strong>Associated CWE pillar(s):</strong>{" "}
                     {g.cwePillars.size ? Array.from(g.cwePillars).sort().join(", ") : "—"}
                   </li>
                   <li>
-                    <strong>CWE measure(s):</strong>{" "}
+                    <strong>Associated CWE measure(s):</strong>{" "}
                     {g.cweMeasures.size ? Array.from(g.cweMeasures).sort().join(", ") : "—"}
+                  </li>
+                  <li>
+                    <strong>Findings identified from: </strong> {" "}
+                    {byTool.length
+                      ? Array.from(new Set(byTool.map((t: any) => t.tool))).join(", ")
+                      : "—"}
                   </li>
                 </ul>
 
@@ -521,8 +529,15 @@ const SecurityTabs: React.FC<Props> = ({
 
   // --- Vulnerable Lines of Code ---
   tabs.push({
-    label: "Lines of Code",
-    content: <h4>Coming soon</h4>,
+    label: "Lines of Code Vulnerabilities",
+    content: (
+      <Box className="st-root">
+        <h3 className="st-h3"># of Lines of Code Vulnerabilities: </h3>
+        <hr className="st-divider st-divider--narrow" />
+
+        <h3>Coming soon</h3>
+      </Box>
+    ),
   });
 
   // controlled/uncontrolled tab selection; allows mirroring on comparison page

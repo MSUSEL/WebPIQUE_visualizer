@@ -56,6 +56,9 @@ export interface VulnerabilitySummary {
   cveCount: number;
 }
 
+// helper to pull both CVE and GHSA in findings
+const isVulnId = (key: string): boolean => /^(?:CVE|GHSA)-/i.test(key);
+
 export function parsePIQUEJSON(json: any): {
   scores: ParsedScore;
   productFactorsByAspect: ProductFactorsByAspect;
@@ -93,8 +96,6 @@ export function parsePIQUEJSON(json: any): {
       const pfName = pfKey as string;
       const pfData = productFactorsRaw[pfName];
       if (pfData) {
-        const cleanName = pfName.replace(/^Product_Factor:/, "");
-        let type: string | undefined = undefined;
 
         pfList.push({
           name: pfName as string,
@@ -163,7 +164,7 @@ export function parsePIQUEJSON(json: any): {
           for (const [findingKey, findingObj] of Object.entries(
             diag?.children ?? {}
           )) {
-            if (!findingKey.startsWith("CVE-")) continue;
+            if (!isVulnId(findingKey)) continue;
 
             const f = findingObj as any;
             const name = f.name ?? findingKey;
@@ -175,7 +176,7 @@ export function parsePIQUEJSON(json: any): {
                 name,
                 description: f.description ?? "",
                 fixed:
-                  f.fixed === true || f.fixed === "true"
+                  f.fixed === true || f.fixed === "true" || f.fixed === "fixed"
                     ? "Fixed"
                     : f.fixed === false || f.fixed === "false"
                       ? "Not fixed"
@@ -229,7 +230,7 @@ export function parsePIQUEJSON(json: any): {
 
 
   // Recursively traverse diagnostics to extract CVEs
-  function collectCVEs(obj: any): Set<string> {
+  function collectVulnIds(obj: any): Set<string> {
     const found = new Set<string>();
     const stack = [obj];
 
@@ -238,7 +239,8 @@ export function parsePIQUEJSON(json: any): {
       if (!current || typeof current !== "object") continue;
 
       for (const [key, value] of Object.entries(current)) {
-        if (key.startsWith("CVE-")) {
+        // OLD: if (key.startsWith("CVE-")) { found.add(key); }  // :contentReference[oaicite:5]{index=5}
+        if (isVulnId(key)) {
           found.add(key);
         } else if (typeof value === "object") {
           stack.push(value);
@@ -249,8 +251,8 @@ export function parsePIQUEJSON(json: any): {
     return found;
   }
 
-  const allCVEs = collectCVEs(json.factors?.product_factors || {});
-  const cveCount = allCVEs.size;
+  const allVulnIds = collectVulnIds(json.factors?.product_factors || {});
+  const cveCount = allVulnIds.size;
 
   const vulnerabilitySummary = {
     cveCount,
