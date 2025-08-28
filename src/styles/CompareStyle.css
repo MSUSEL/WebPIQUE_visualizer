@@ -28,16 +28,13 @@
 
 .compare-filenames > div {
   min-width: 0;
-  /* allow text to shrink within grid cell */
 }
 
 .name-left,
 .name-right {
   display: flex;
   justify-content: center;
-  /* center horizontally */
   align-items: center;
-  /* optional: vertical centering */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -51,19 +48,13 @@
 .sashRenderDots {
   position: relative;
   width: 8px;
-  /* overall handle thickness */
   height: 80%;
-  /* 80% of container height */
   margin: auto 0;
-  /* vertically center it */
   top: 50%;
   transform: translateY(-50%);
-  /* exact vertical centering */
   cursor: col-resize;
   background: #75aedd;
-  /* blue bar */
   border-radius: 9999px;
-  /* pill shape */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -115,17 +106,12 @@
 }
 
 /* styling to show differing pfs, findings, etc. */
-.diff-outline {
-  outline: 3px solid #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25) inset;
-  border-radius: 8px;
-}
-
 .page-legend {
   display: grid;
   gap: 6px;
-  margin: 8px 12px 12px;
-  font-size: 18px;
+  margin: 0px 12px 0px 12px;
+  padding-bottom: 5px;
+  font-size: 16px;
   text-align: center;
   background-color: rgb(230, 227, 227);
 }
@@ -134,7 +120,6 @@
   display: inline-flex;
   align-items: center;
   text-align: center;
-  gap: 6px;
   border-radius: 8px;
   width: auto;
   flex: 0 0 auto;
@@ -180,6 +165,7 @@
   padding-right: 5px;
   padding-left: 5px;
   margin-left: 15px;
+  background-color: lightgrey;
 }
 
 .legend-sep {
@@ -205,6 +191,5 @@
 }
 
 .legend-chip.is-active {
-  outline: 2px solid #444;
-  outline-offset: 2px;
+  border: 2px solid #444;
 }

@@ -1,167 +1,165 @@
 // utility to determine differences between WebPIQUE json outputs -- unique to WebPIQUE
 export type DiffHints = {
-  // card-level: exist on both sides but differ in some way
+  // membership / presence
   differingPFs: Set<string>;
   differingMeasures: Set<string>;
   differingCVEs: Set<string>;
-
-  // compares if something is present in one pane and not another
   missingPFs: Set<string>;
   missingMeasures: Set<string>;
   missingCVEs: Set<string>;
 
-  // field-level diffs (only populated when the item exists on BOTH sides)
+  // compare field-level information
   pfFieldDiffs: Map<string, { value?: boolean; description?: boolean }>;
   measureFieldDiffs: Map<string, { score?: boolean; weight?: boolean }>;
   cveFieldDiffs: Map<
     string,
     { pkg?: boolean; vulnVer?: boolean; fixed?: boolean; fixedVer?: boolean }
   >;
+
+  // compare pf and measure scores bewteen panes
+  pfPeerValues: Map<string, number | null>;
+  measurePeerValues: Map<string, number | null>;
 };
 
-const EPS = 1e-6;
+const EPS = 1e-6; // reduce flaoting-point rounding noise during comparison
+const nearlyEq = (a?: number | null, b?: number | null) =>
+  typeof a === "number" && typeof b === "number"
+    ? Math.abs(a - b) < EPS
+    : a == null && b == null;
 
-const sameNum = (a?: number | null, b?: number | null) => {
-  if (typeof a === "number" && typeof b === "number") {
-    return Math.abs(a - b) < EPS;
-  }
-  return a == null && b == null;
-};
-
-const thash = (arr?: number[]) =>
-  Array.isArray(arr) ? arr.map((n) => Number(n)).join(",") : "";
+const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
 
 const normFixed = (v: any): "fixed" | "notfixed" | "" => {
   if (v === true) return "fixed";
   const s = String(v ?? "")
     .trim()
     .toLowerCase();
-  if (s === "fixed" || s === "true") return "fixed";
-  if (s === "not fixed" || s === "false") return "notfixed";
+  if (s === "true" || s === "fixed") return "fixed";
+  if (s === "false" || s === "not fixed") return "notfixed";
   return "";
 };
 
-const getId = (c: any) =>
-  c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
-
-const measureKey = (pfName: string, mName: string) => `${pfName}::${mName}`;
-
 export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
   const hints: DiffHints = {
-    differingPFs: new Set<string>(),
-    differingMeasures: new Set<string>(),
-    differingCVEs: new Set<string>(),
-    missingPFs: new Set<string>(),
-    missingMeasures: new Set<string>(),
-    missingCVEs: new Set<string>(),
+    differingPFs: new Set(),
+    differingMeasures: new Set(),
+    differingCVEs: new Set(),
+    missingPFs: new Set(),
+    missingMeasures: new Set(),
+    missingCVEs: new Set(),
     pfFieldDiffs: new Map(),
     measureFieldDiffs: new Map(),
     cveFieldDiffs: new Map(),
+    pfPeerValues: new Map(),
+    measurePeerValues: new Map(),
   };
 
-  const leftPFs: any[] = leftScores?.cweProductFactors ?? [];
-  const rightPFs: any[] = rightScores?.cweProductFactors ?? [];
+  // pf and measure comparison
+  const lPFs: any[] = leftScores?.cweProductFactors ?? [];
+  const rPFs: any[] = rightScores?.cweProductFactors ?? [];
 
-  // pfs by name (right side)
-  const rightPFByName = new Map<string, any>();
-  rightPFs.forEach((p) => rightPFByName.set(p?.name, p));
+  const rByName = new Map<string, any>();
+  for (const p of rPFs) if (p?.name) rByName.set(p.name, p);
 
-  // compare pfs & Measures
-  for (const lpf of leftPFs) {
-    const pfName = String(lpf?.name ?? "");
-    const rpf = rightPFByName.get(pfName);
+  for (const lpf of lPFs) {
+    const pfName = lpf?.name;
+    if (!pfName) continue;
 
+    const rpf = rByName.get(pfName);
     if (!rpf) {
-      // missing entirely on right side
       hints.missingPFs.add(pfName);
-      (lpf?.measures ?? []).forEach((m: any) =>
-        hints.missingMeasures.add(measureKey(pfName, String(m?.name ?? "")))
-      );
+      for (const lm of lpf?.measures ?? [])
+        hints.missingMeasures.add(mkey(pfName, lm?.name ?? ""));
       continue;
     }
 
-    // pf-level field diffs
-    const valDiff = !sameNum(lpf?.value ?? null, rpf?.value ?? null);
-    const descDiff = (lpf?.description ?? "") !== (rpf?.description ?? "");
-    if (valDiff || descDiff) {
+    // pf peer value for ▲/▼ chip in SecurityTabs
+    hints.pfPeerValues.set(
+      pfName,
+      typeof rpf.value === "number" ? rpf.value : null
+    );
+
+    // pf field diffs
+    const valueDiff = !nearlyEq(lpf.value, rpf.value);
+    const descDiff = (lpf.description ?? "") !== (rpf.description ?? "");
+    if (valueDiff || descDiff) {
       hints.differingPFs.add(pfName);
       hints.pfFieldDiffs.set(pfName, {
-        ...(valDiff ? { value: true } : {}),
+        ...(valueDiff ? { value: true } : {}),
         ...(descDiff ? { description: true } : {}),
       });
     }
 
-    // measures by name on right side
-    const rMeasures = new Map<string, any>();
-    (rpf?.measures ?? []).forEach((m: any) =>
-      rMeasures.set(String(m?.name ?? ""), m)
-    );
+    // measures, matched by name
+    const rMeasuresByName = new Map<string, any>();
+    for (const rm of rpf?.measures ?? [])
+      if (rm?.name) rMeasuresByName.set(rm.name, rm);
 
     for (const lm of lpf?.measures ?? []) {
-      const mName = String(lm?.name ?? "");
-      const key = measureKey(pfName, mName);
-      const rm = rMeasures.get(mName);
+      const mName = lm?.name;
+      if (!mName) continue;
+
+      const key = mkey(pfName, mName);
+      const rm = rMeasuresByName.get(mName);
 
       if (!rm) {
-        // measure missing on right; do not set field diffs
         hints.missingMeasures.add(key);
+        hints.measurePeerValues.set(key, null);
         continue;
       }
 
-      const rScore = (rm as any)?.score ?? null;
-      const rWeight = (rm as any)?.weight ?? null;
-      const rThresh = (rm as any)?.threshold;
+      // measure peer score for ▲/▼ chip in SecurityTabs
+      hints.measurePeerValues.set(
+        key,
+        typeof rm.score === "number" ? rm.score : null
+      );
 
-      const scoreDiff = !sameNum(lm?.score ?? null, rScore);
-      const weightDiff = !sameNum(lm?.weight ?? null, rWeight);
-      const thrDiff = thash(lm?.threshold) !== thash(rThresh);
+      // measure field diffs used for highlighting
+      const scoreDiff = !nearlyEq(lm.score, rm.score);
+      const weightDiff = !nearlyEq(lm.weight ?? null, rm.weight ?? null);
 
-      if (scoreDiff || weightDiff || thrDiff) {
+      if (scoreDiff || weightDiff) {
         hints.differingMeasures.add(key);
-        if (scoreDiff || weightDiff) {
-          hints.measureFieldDiffs.set(key, {
-            ...(scoreDiff ? { score: true } : {}),
-            ...(weightDiff ? { weight: true } : {}),
-          });
-        }
+        hints.measureFieldDiffs.set(key, {
+          ...(scoreDiff ? { score: true } : {}),
+          ...(weightDiff ? { weight: true } : {}),
+        });
       }
     }
   }
 
-  // ----- CVEs/GHSAs
-  const flattenCVEs = (scores: any) => {
-    const out: Record<
+  // package vulnerability differences
+  const collectCVEs = (scores: any) => {
+    const map = new Map<
       string,
       { pkg: string; vulnVer: string; fixed: string; fixedVer: string }
-    > = {};
+    >();
     for (const pf of scores?.cweProductFactors ?? []) {
       for (const c of pf?.cves ?? []) {
-        const id = getId(c);
+        const id = c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
         if (!id) continue;
-        out[id] = {
+        map.set(id, {
           pkg: (c?.vulnSource ?? "").trim(),
           vulnVer: (c?.vulnSourceVersion ?? "").trim(),
           fixed: normFixed(c?.fixed),
           fixedVer: (c?.fixedVersion ?? "").trim(),
-        };
+        });
       }
     }
-    return out;
+    return map;
   };
 
-  const L = flattenCVEs(leftScores);
-  const R = flattenCVEs(rightScores);
+  const L = collectCVEs(leftScores);
+  const R = collectCVEs(rightScores);
 
-  const allIds = new Set<string>([...Object.keys(L), ...Object.keys(R)]);
+  const allIds = new Set<string>([...L.keys(), ...R.keys()]);
   for (const id of allIds) {
-    const A = L[id];
-    const B = R[id];
+    const A = L.get(id);
+    const B = R.get(id);
 
     if (!A || !B) {
-      // present on this (left) side but missing on right
       if (A) hints.missingCVEs.add(id);
-      // omit field-level diffs when missing-only
-      continue;
+      continue; // no field diffs if absent on one side
     }
 
     const pkgDiff = A.pkg !== B.pkg;

@@ -188,34 +188,9 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Buckets colors */
-.st-chip--critical .st-chip-dot {
-  background: #e96565;
-}
-
-.st-chip--severe .st-chip-dot {
-  background: #f0ca6a;
-}
-
-.st-chip--moderate .st-chip-dot {
-  background: #a0e5acff;
-}
-
 /* Active state: outline with same hue */
-.st-chip.is-active.st-chip--critical {
-  border-color: #e96565;
-}
-
-.st-chip.is-active.st-chip--severe {
-  border-color: #f0ca6a;
-}
-
-.st-chip.is-active.st-chip--moderate {
-  border-color: #a0e5acff;
-}
-
-.st-chip.is-active.st-chip--all {
-  border-color: #999;
+.st-chip.is-active {
+  border-color: black;
 }
 
 /* 'All' chip */
@@ -282,7 +257,7 @@
   position: absolute;
   left: -35px;
   top: 6px;
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1;
 }
 
@@ -298,7 +273,7 @@
   position: absolute;
   left: -50px;
   top: 6px;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 
@@ -320,4 +295,17 @@
   background: #e49797; /* soft red */
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* delta chip after PF score */
+.pf-delta {
+  margin-left: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pf-delta--up {
+  color: #188038;
+}
+.pf-delta--down {
+  color: #d93025;
 }

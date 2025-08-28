@@ -420,6 +420,39 @@ const SecurityTabs: React.FC<Props> = ({
                   >
                     {pf.value} out of 1
                   </span>
+                  {/* add arrow marker to indicate if score is greater or lower than other pane */}
+                  {(() => {
+                    const peer = diffHints?.pfPeerValues?.get(pf.name);
+                    const here =
+                      typeof pf?.value === "number" ? pf.value : null;
+                    if (typeof peer === "number" && typeof here === "number") {
+                      const delta = Number((here - peer).toFixed(4));
+                      if (Math.abs(delta) > 1e-6) {
+                        const up = delta > 0;
+                        return (
+                          <span
+                            className={`pf-delta ${
+                              up ? "pf-delta--up" : "pf-delta--down"
+                            }`}
+                            title={
+                              up
+                                ? "Higher than other file"
+                                : "Lower than other file"
+                            }
+                            aria-label={
+                              up
+                                ? "Higher than other file"
+                                : "Lower than other file"
+                            }
+                          >
+                            {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
+                            {/* marker and +/- value change */}
+                          </span>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                 </li>
                 <li>
                   <strong>Description:</strong>{" "}
@@ -515,15 +548,123 @@ const SecurityTabs: React.FC<Props> = ({
                                       Score:{" "}
                                       <span
                                         className={
-                                          !isMissingMeasure && mDiff?.score
+                                          diffHints?.measureFieldDiffs?.get(
+                                            `${pf.name}::${measure.name}`
+                                          )?.score
                                             ? "diff-field"
                                             : ""
                                         }
                                       >
-                                        {measure.score * 100}% better than the
-                                        benchmark set.
+                                        {measure.score} out of 1.
                                       </span>
                                     </strong>
+
+                                    {/* Δ vs other pane for this measure */}
+                                    {(() => {
+                                      const key = `${pf.name}::${measure.name}`;
+                                      const peer =
+                                        diffHints?.measurePeerValues?.get(key);
+                                      const here =
+                                        typeof measure?.score === "number"
+                                          ? measure.score
+                                          : null;
+                                      if (
+                                        typeof peer === "number" &&
+                                        typeof here === "number"
+                                      ) {
+                                        const delta = Number(
+                                          (here - peer).toFixed(4)
+                                        );
+                                        if (Math.abs(delta) > 1e-6) {
+                                          const up = delta > 0;
+                                          return (
+                                            <span
+                                              className={`pf-delta ${
+                                                up
+                                                  ? "pf-delta--up"
+                                                  : "pf-delta--down"
+                                              }`}
+                                              title={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                              aria-label={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                            >
+                                              {up ? "▲" : "▼"} (
+                                              {delta > 0 ? `+${delta}` : delta})
+                                            </span>
+                                          );
+                                        }
+                                      }
+                                      return null;
+                                    })()}
+                                  </li>
+
+                                  <li>
+                                    <strong>Interpreted Score: </strong>
+                                    <span
+                                      className={
+                                        diffHints?.measureFieldDiffs?.get(
+                                          `${pf.name}::${measure.name}`
+                                        )?.score
+                                          ? "diff-field"
+                                          : ""
+                                      }
+                                    >
+                                      {measure.score * 100}% better then the
+                                      benchmark set.
+                                    </span>
+
+                                    {/* Δ vs other pane for this measure */}
+                                    {(() => {
+                                      const key = `${pf.name}::${measure.name}`;
+                                      const peer =
+                                        diffHints?.measurePeerValues?.get(key);
+                                      const here =
+                                        typeof measure?.score === "number"
+                                          ? measure.score
+                                          : null;
+                                      if (
+                                        typeof peer === "number" &&
+                                        typeof here === "number"
+                                      ) {
+                                        const delta = Number(
+                                          (here * 100 - peer * 100).toFixed(4)
+                                        );
+                                        if (Math.abs(delta) > 1e-6) {
+                                          const up = delta > 0;
+                                          return (
+                                            <span
+                                              className={`pf-delta ${
+                                                up
+                                                  ? "pf-delta--up"
+                                                  : "pf-delta--down"
+                                              }`}
+                                              title={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                              aria-label={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                            >
+                                              {up ? "▲" : "▼"} (
+                                              {delta > 0 ? `+${delta}` : delta}
+                                              %)
+                                            </span>
+                                          );
+                                        }
+                                      }
+                                      return null;
+                                    })()}
                                   </li>
 
                                   <li>

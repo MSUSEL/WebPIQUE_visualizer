@@ -1,4 +1,4 @@
-// CompareComponent.tsx — side-by-side compare with synced panes
+// CompareComponent.tsx — side-by-side compare with synced panes - mostly unique to webpique
 import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
@@ -181,101 +181,103 @@ const Compare: React.FC = () => {
         </div>
 
         {/* legend filter */}
-        <div className="page-legend">
-          <div className="legend-caption">
-            🚩 denotes item is present in both files but fields differ (changed
-            fields highlighted).
-            <br />
-            ‼️ denotes item is present in only one file (no sub-field
-            highlights).
+        {selectedAspect === "Security" && (
+          <div className="page-legend">
+            <div className="legend-row">
+              <span
+                className={`legend-chip legend-chip--diff ${
+                  selectedSecurityTab === "CWE" && diffFilter === "differing"
+                    ? "is-active"
+                    : ""
+                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => activate("CWE", "differing")}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") &&
+                  activate("CWE", "differing")
+                }
+              >
+                🚩 Differing CWE items{" "}
+                <span className="legend-count">{cweDiffCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--unique ${
+                  selectedSecurityTab === "CWE" && diffFilter === "unique"
+                    ? "is-active"
+                    : ""
+                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => activate("CWE", "unique")}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") &&
+                  activate("CWE", "unique")
+                }
+              >
+                ‼️ Unique CWE items{" "}
+                <span className="legend-count">{cweUniqueCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--diff ${
+                  selectedSecurityTab === "CVE" && diffFilter === "differing"
+                    ? "is-active"
+                    : ""
+                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => activate("CVE", "differing")}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") &&
+                  activate("CVE", "differing")
+                }
+              >
+                🚩 Differing package vulnerabilities{" "}
+                <span className="legend-count">{cveDiffCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--unique ${
+                  selectedSecurityTab === "CVE" && diffFilter === "unique"
+                    ? "is-active"
+                    : ""
+                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => activate("CVE", "unique")}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") &&
+                  activate("CVE", "unique")
+                }
+              >
+                ‼️ Unique package vulnerabilities{" "}
+                <span className="legend-count">{cveUniqueCount}</span>
+              </span>
+              <span
+                className="legend-reset"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setSelectedAspect("Security");
+                  setDiffFilter("all");
+                }}
+                onKeyDown={(e) =>
+                  (e.key === "Enter" || e.key === " ") &&
+                  (setSelectedAspect("Security"), setDiffFilter("all"))
+                }
+                title="Show all"
+              >
+                All items
+              </span>
+            </div>
+            <div className="legend-caption">
+              🚩 denotes item is present in both files but information differs
+              (changed fields highlighted).
+              <br />
+              ‼️ denotes item is present in only one file (no sub-field
+              highlights).
+            </div>
           </div>
-          <div className="legend-row">
-            <span
-              className={`legend-chip legend-chip--diff ${
-                selectedSecurityTab === "CWE" && diffFilter === "differing"
-                  ? "is-active"
-                  : ""
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => activate("CWE", "differing")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CWE", "differing")
-              }
-            >
-              🚩 Differing CWE items{" "}
-              <span className="legend-count">{cweDiffCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--unique ${
-                selectedSecurityTab === "CWE" && diffFilter === "unique"
-                  ? "is-active"
-                  : ""
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => activate("CWE", "unique")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CWE", "unique")
-              }
-            >
-              ‼️ Unique CWE items{" "}
-              <span className="legend-count">{cweUniqueCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--diff ${
-                selectedSecurityTab === "CVE" && diffFilter === "differing"
-                  ? "is-active"
-                  : ""
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => activate("CVE", "differing")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CVE", "differing")
-              }
-            >
-              🚩 Differing package vulnerabilities{" "}
-              <span className="legend-count">{cveDiffCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--unique ${
-                selectedSecurityTab === "CVE" && diffFilter === "unique"
-                  ? "is-active"
-                  : ""
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => activate("CVE", "unique")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CVE", "unique")
-              }
-            >
-              ‼️ Unique package vulnerabilities{" "}
-              <span className="legend-count">{cveUniqueCount}</span>
-            </span>
-            <span
-              className="legend-reset"
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                setSelectedAspect("Security");
-                setDiffFilter("all");
-              }}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                (setSelectedAspect("Security"), setDiffFilter("all"))
-              }
-              title="Show all"
-            >
-              All items
-            </span>
-          </div>
-        </div>
+        )}
 
         <ScrollSync>
           <SplitPane
