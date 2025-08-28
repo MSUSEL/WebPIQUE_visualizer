@@ -65,9 +65,11 @@
 }
 
 .measure-item {
+  position: relative;
   border-radius: 6px;
   padding: 10px;
   margin: 8px 0;
+  margin-left: 28px;
   box-shadow: 0 1.5px 4px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.06);
 }
 
@@ -186,13 +188,6 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Colored dot inside chip */
-.st-chip-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
 /* Buckets colors */
 .st-chip--critical .st-chip-dot {
   background: #e96565;
@@ -281,4 +276,48 @@
   outline-offset: 2px;
   border-radius: 6px;
   box-shadow: 0 0 0 2px rgba(255, 43, 43, 0.15);
+}
+
+.diff-arrow-left {
+  position: absolute;
+  left: -35px;
+  top: 6px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.diff-indicator-left {
+  position: absolute;
+  left: -35px;
+  top: 6px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.measure-item .diff-arrow-left {
+  position: absolute;
+  left: -50px;
+  top: 6px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* ensure cards give room for the arrow */
+.pf-card,
+.cve-card {
+  position: relative;
+  margin-left: 18px;
+}
+
+/* title and field-level highlight for changed values */
+.diff-title {
+  background: #e49797;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.diff-field {
+  background: #e49797; /* soft red */
+  padding: 0 2px;
+  border-radius: 2px;
 }

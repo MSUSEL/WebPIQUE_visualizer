@@ -41,6 +41,8 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs, value, onChange }) => {
           borderBottom: 1,
           borderColor: "divider",
           width: "100%",
+          textTransform: "none",
+          whiteSpace: "nowrap",
         }}
       >
         {tabs.map((tab, index) => (
@@ -50,6 +52,8 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs, value, onChange }) => {
             sx={{
               fontSize: "25px",
               fontWeight: "bold",
+              textTransform: "none",
+              whiteSpace: "nowrap",
             }}
           />
         ))}

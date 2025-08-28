@@ -21,6 +21,7 @@ type Props = {
   onPackageFilterChange?: (v: string) => void;
   controlledFixedFilter?: "all" | "fixed" | "notfixed";
   onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
+  diffFilter?: "all" | "differing" | "unique";
 };
 
 const SingleFileVisualizer: React.FC<Props> = (props) => {
@@ -50,6 +51,7 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
           <SecurityTabs
             scores={scores}
             diffHints={props.diffHints}
+            diffFilter={props.diffFilter}
             controlledTab={props.controlledSecurityTab}
             onTabChange={props.onSecurityTabChange}
             controlledMeasures={props.controlledMeasure}

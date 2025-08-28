@@ -1,129 +1,184 @@
 // utility to determine differences between WebPIQUE json outputs -- unique to WebPIQUE
+export type DiffHints = {
+  // card-level: exist on both sides but differ in some way
+  differingPFs: Set<string>;
+  differingMeasures: Set<string>;
+  differingCVEs: Set<string>;
 
-export type ToolScore = { tool: string; score: number };
+  // compares if something is present in one pane and not another
+  missingPFs: Set<string>;
+  missingMeasures: Set<string>;
+  missingCVEs: Set<string>;
 
-export type ScoresType = {
-  cweProductFactors: Array<{
-    name: string;
-    value: number;
-    description: string;
-    measures: Array<{
-      name: string;
-      score: number;
-      weight?: number | null;
-      threshold: number[];
-    }>;
-    cves?: Array<{
-      name: string;
-      byTool: Array<{ tool: string; score: number }>;
-    }>;
-  }>;
+  // field-level diffs (only populated when the item exists on BOTH sides)
+  pfFieldDiffs: Map<string, { value?: boolean; description?: boolean }>;
+  measureFieldDiffs: Map<string, { score?: boolean; weight?: boolean }>;
+  cveFieldDiffs: Map<
+    string,
+    { pkg?: boolean; vulnVer?: boolean; fixed?: boolean; fixedVer?: boolean }
+  >;
 };
 
-export type DiffHints = {
-  differingPFs: Set<string>; // pillar key (pf.name)
-  differingMeasures: Set<string>; // `${pf.name}::${measure.name}`
-  differingCVEs: Set<string>; // "CVE-YYYY-NNNN" ID
-  differingToolScores: Set<string>; // `${CVE}|${tool}`
+const EPS = 1e-6;
+
+const sameNum = (a?: number | null, b?: number | null) => {
+  if (typeof a === "number" && typeof b === "number") {
+    return Math.abs(a - b) < EPS;
+  }
+  return a == null && b == null;
 };
 
 const thash = (arr?: number[]) =>
-  Array.isArray(arr) ? arr.map(Number).join(",") : "";
+  Array.isArray(arr) ? arr.map((n) => Number(n)).join(",") : "";
 
-export function computeDiffHintsFromScores(
-  a: ScoresType,
-  b: ScoresType
-): DiffHints {
-  const differingPFs = new Set<string>();
-  const differingMeasures = new Set<string>();
-  const differingCVEs = new Set<string>();
-  const differingToolScores = new Set<string>();
+const normFixed = (v: any): "fixed" | "notfixed" | "" => {
+  if (v === true) return "fixed";
+  const s = String(v ?? "")
+    .trim()
+    .toLowerCase();
+  if (s === "fixed" || s === "true") return "fixed";
+  if (s === "not fixed" || s === "false") return "notfixed";
+  return "";
+};
 
-  // ---------- PF / CWE ----------
-  const mapPF = (s: ScoresType) =>
-    new Map(s.cweProductFactors.map((pf) => [pf.name, pf]));
-  const A = mapPF(a);
-  const B = mapPF(b);
+const getId = (c: any) =>
+  c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
 
-  const allPFNames = new Set<string>([...A.keys(), ...B.keys()]);
-  for (const pfName of allPFNames) {
-    const pa = A.get(pfName);
-    const pb = B.get(pfName);
-    if (!pa || !pb) {
-      differingPFs.add(pfName);
+const measureKey = (pfName: string, mName: string) => `${pfName}::${mName}`;
+
+export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
+  const hints: DiffHints = {
+    differingPFs: new Set<string>(),
+    differingMeasures: new Set<string>(),
+    differingCVEs: new Set<string>(),
+    missingPFs: new Set<string>(),
+    missingMeasures: new Set<string>(),
+    missingCVEs: new Set<string>(),
+    pfFieldDiffs: new Map(),
+    measureFieldDiffs: new Map(),
+    cveFieldDiffs: new Map(),
+  };
+
+  const leftPFs: any[] = leftScores?.cweProductFactors ?? [];
+  const rightPFs: any[] = rightScores?.cweProductFactors ?? [];
+
+  // pfs by name (right side)
+  const rightPFByName = new Map<string, any>();
+  rightPFs.forEach((p) => rightPFByName.set(p?.name, p));
+
+  // compare pfs & Measures
+  for (const lpf of leftPFs) {
+    const pfName = String(lpf?.name ?? "");
+    const rpf = rightPFByName.get(pfName);
+
+    if (!rpf) {
+      // missing entirely on right side
+      hints.missingPFs.add(pfName);
+      (lpf?.measures ?? []).forEach((m: any) =>
+        hints.missingMeasures.add(measureKey(pfName, String(m?.name ?? "")))
+      );
       continue;
     }
 
-    if (pa.value !== pb.value || pa.description !== pb.description) {
-      differingPFs.add(pfName);
+    // pf-level field diffs
+    const valDiff = !sameNum(lpf?.value ?? null, rpf?.value ?? null);
+    const descDiff = (lpf?.description ?? "") !== (rpf?.description ?? "");
+    if (valDiff || descDiff) {
+      hints.differingPFs.add(pfName);
+      hints.pfFieldDiffs.set(pfName, {
+        ...(valDiff ? { value: true } : {}),
+        ...(descDiff ? { description: true } : {}),
+      });
     }
 
-    const mapM = (pf: typeof pa) =>
-      new Map(pf.measures.map((m) => [m.name, m]));
-    const Am = mapM(pa),
-      Bm = mapM(pb);
-    const allM = new Set<string>([...Am.keys(), ...Bm.keys()]);
-    for (const mk of allM) {
-      const ma = Am.get(mk);
-      const mb = Bm.get(mk);
-      if (!ma || !mb) {
-        differingPFs.add(pfName);
-        differingMeasures.add(`${pfName}::${mk}`);
+    // measures by name on right side
+    const rMeasures = new Map<string, any>();
+    (rpf?.measures ?? []).forEach((m: any) =>
+      rMeasures.set(String(m?.name ?? ""), m)
+    );
+
+    for (const lm of lpf?.measures ?? []) {
+      const mName = String(lm?.name ?? "");
+      const key = measureKey(pfName, mName);
+      const rm = rMeasures.get(mName);
+
+      if (!rm) {
+        // measure missing on right; do not set field diffs
+        hints.missingMeasures.add(key);
         continue;
       }
-      if (
-        ma.score !== mb.score ||
-        (ma.weight ?? null) !== (mb.weight ?? null) ||
-        thash(ma.threshold) !== thash(mb.threshold)
-      ) {
-        differingPFs.add(pfName);
-        differingMeasures.add(`${pfName}::${mk}`);
+
+      const rScore = (rm as any)?.score ?? null;
+      const rWeight = (rm as any)?.weight ?? null;
+      const rThresh = (rm as any)?.threshold;
+
+      const scoreDiff = !sameNum(lm?.score ?? null, rScore);
+      const weightDiff = !sameNum(lm?.weight ?? null, rWeight);
+      const thrDiff = thash(lm?.threshold) !== thash(rThresh);
+
+      if (scoreDiff || weightDiff || thrDiff) {
+        hints.differingMeasures.add(key);
+        if (scoreDiff || weightDiff) {
+          hints.measureFieldDiffs.set(key, {
+            ...(scoreDiff ? { score: true } : {}),
+            ...(weightDiff ? { weight: true } : {}),
+          });
+        }
       }
     }
   }
 
-  // ---------- CVEs ----------
-  const collectCVEs = (s: ScoresType) => {
-    const map = new Map<string, Map<string, number>>(); // cve -> tool -> score
-    for (const pf of s.cweProductFactors) {
-      for (const cve of pf.cves ?? []) {
-        const name = cve.name;
-        if (!map.has(name)) map.set(name, new Map());
-        const toolMap = map.get(name)!;
-        for (const t of cve.byTool ?? []) toolMap.set(t.tool, Number(t.score));
+  // ----- CVEs/GHSAs
+  const flattenCVEs = (scores: any) => {
+    const out: Record<
+      string,
+      { pkg: string; vulnVer: string; fixed: string; fixedVer: string }
+    > = {};
+    for (const pf of scores?.cweProductFactors ?? []) {
+      for (const c of pf?.cves ?? []) {
+        const id = getId(c);
+        if (!id) continue;
+        out[id] = {
+          pkg: (c?.vulnSource ?? "").trim(),
+          vulnVer: (c?.vulnSourceVersion ?? "").trim(),
+          fixed: normFixed(c?.fixed),
+          fixedVer: (c?.fixedVersion ?? "").trim(),
+        };
       }
     }
-    return map;
+    return out;
   };
 
-  const AC = collectCVEs(a);
-  const BC = collectCVEs(b);
-  const allCVEs = new Set<string>([...AC.keys(), ...BC.keys()]);
-  for (const cveName of allCVEs) {
-    const ma = AC.get(cveName);
-    const mb = BC.get(cveName);
-    if (!ma || !mb) {
-      differingCVEs.add(cveName);
+  const L = flattenCVEs(leftScores);
+  const R = flattenCVEs(rightScores);
+
+  const allIds = new Set<string>([...Object.keys(L), ...Object.keys(R)]);
+  for (const id of allIds) {
+    const A = L[id];
+    const B = R[id];
+
+    if (!A || !B) {
+      // present on this (left) side but missing on right
+      if (A) hints.missingCVEs.add(id);
+      // omit field-level diffs when missing-only
       continue;
     }
 
-    const tools = new Set<string>([...ma.keys(), ...mb.keys()]);
-    let any = false;
-    for (const tool of tools) {
-      const sa = ma.get(tool);
-      const sb = mb.get(tool);
-      if (sa === undefined || sb === undefined || sa !== sb) {
-        any = true;
-        differingToolScores.add(`${cveName}|${tool}`);
-      }
+    const pkgDiff = A.pkg !== B.pkg;
+    const vverDiff = A.vulnVer !== B.vulnVer;
+    const fixDiff = A.fixed !== B.fixed;
+    const fverDiff = A.fixedVer !== B.fixedVer;
+
+    if (pkgDiff || vverDiff || fixDiff || fverDiff) {
+      hints.differingCVEs.add(id);
+      hints.cveFieldDiffs.set(id, {
+        ...(pkgDiff ? { pkg: true } : {}),
+        ...(vverDiff ? { vulnVer: true } : {}),
+        ...(fixDiff ? { fixed: true } : {}),
+        ...(fverDiff ? { fixedVer: true } : {}),
+      });
     }
-    if (any) differingCVEs.add(cveName);
   }
 
-  return {
-    differingPFs,
-    differingMeasures,
-    differingCVEs,
-    differingToolScores,
-  };
+  return hints;
 }
