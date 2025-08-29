@@ -246,13 +246,6 @@
   background: #eee;
 }
 
-.diff-outline {
-  outline: 3px solid #ff2b2b;
-  outline-offset: 2px;
-  border-radius: 6px;
-  box-shadow: 0 0 0 2px rgba(255, 43, 43, 0.15);
-}
-
 .diff-arrow-left {
   position: absolute;
   left: -35px;
@@ -292,7 +285,8 @@
 }
 
 .diff-field {
-  background: #e49797; /* soft red */
+  background: #e49797;
+  /* soft red */
   padding: 0 2px;
   border-radius: 2px;
 }
@@ -303,9 +297,11 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
 .pf-delta--up {
   color: #188038;
 }
+
 .pf-delta--down {
   color: #d93025;
 }

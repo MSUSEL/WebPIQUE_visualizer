@@ -47,11 +47,11 @@ type SeverityInfo = {
 
 const getSeverityInfo = (score: number): SeverityInfo => {
   if (score < 0.6) {
-    return { color: "#d93025", label: "CWE score below < 0.6", icon: "🔴" };
+    return { color: "rgb(230,159,000)", label: "CWE score below < 0.6", icon: "🟠" };
   } else if (score < 0.8) {
-    return { color: "#e37400", label: "CWE score between 0.6-0.8", icon: "🟠" };
+    return { color: "rgb(240,228,066)", label: "CWE score between 0.6-0.8", icon: "🟡" };
   } else {
-    return { color: "#188038", label: "CWE score > 0.8", icon: "🟢" };
+    return { color: "rgb(000,158,115)", label: "CWE score > 0.8", icon: "🟢" };
   }
 };
 
@@ -257,12 +257,12 @@ const SecurityTabs: React.FC<Props> = ({
         const measureId =
           normalizeCweId(
             cve?.CWEmeasureName ??
-              cve?.cweMeasure ??
-              cve?.measure ??
-              cve?.cwe ??
-              cve?.cwe_id ??
-              cve?.cweId ??
-              cve?.weakness
+            cve?.cweMeasure ??
+            cve?.measure ??
+            cve?.cwe ??
+            cve?.cwe_id ??
+            cve?.cweId ??
+            cve?.weakness
           ) ?? null;
 
         if (pillarId) g.cwePillars.add(pillarId);
@@ -322,33 +322,30 @@ const SecurityTabs: React.FC<Props> = ({
 
         <div className="st-chips">
           <button
-            className={`st-chip st-chip--critical ${
-              bucket === "critical" ? "is-active" : ""
-            }`}
+            className={`st-chip ${bucket === "critical" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
             <span />
-            🔴 CWE score &lt; 0.6
+            🟠 CWE score &lt; 0.6
             <span className="st-chip-count">{counts.critical}</span>
           </button>
 
           <button
-            className={`st-chip st-chip--severe ${
-              bucket === "severe" ? "is-active" : ""
-            }`}
+            className={`st-chip ${bucket === "severe" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
             <span />
-            🟠 CWE score between 0.6-0.8
+            🟡 CWE score between 0.6-0.8
             <span className="st-chip-count">{counts.severe}</span>
           </button>
 
           <button
-            className={`st-chip st-chip--moderate ${
-              bucket === "moderate" ? "is-active" : ""
-            }`}
+            className={`st-chip ${bucket === "moderate" ? "is-active" : ""
+              }`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
@@ -358,9 +355,8 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--all ${
-              bucket === "all" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+              }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -405,7 +401,7 @@ const SecurityTabs: React.FC<Props> = ({
                 <span className="label">{getSeverityInfo(pf.value).label}</span>
               </div>
 
-              <h4 className="pf-title">{pf.name}</h4>
+              <h4 className="pf-title">{pf.name.replace("Product_Factor", "")}</h4>
 
               <ul className="pf-list">
                 <li>
@@ -413,7 +409,7 @@ const SecurityTabs: React.FC<Props> = ({
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
-                      diffHints?.pfFieldDiffs.get(pf.name)?.value
+                        diffHints?.pfFieldDiffs.get(pf.name)?.value
                         ? "diff-field"
                         : ""
                     }
@@ -431,9 +427,8 @@ const SecurityTabs: React.FC<Props> = ({
                         const up = delta > 0;
                         return (
                           <span
-                            className={`pf-delta ${
-                              up ? "pf-delta--up" : "pf-delta--down"
-                            }`}
+                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
+                              }`}
                             title={
                               up
                                 ? "Higher than other file"
@@ -509,9 +504,8 @@ const SecurityTabs: React.FC<Props> = ({
                                 key={idx}
                                 className="measure-item"
                                 style={{
-                                  border: `2px solid ${
-                                    getSeverityInfo(measure.score).color
-                                  }`,
+                                  border: `2px solid ${getSeverityInfo(measure.score).color
+                                    }`,
                                   backgroundColor: "#fff",
                                 }}
                               >
@@ -579,11 +573,10 @@ const SecurityTabs: React.FC<Props> = ({
                                           const up = delta > 0;
                                           return (
                                             <span
-                                              className={`pf-delta ${
-                                                up
-                                                  ? "pf-delta--up"
-                                                  : "pf-delta--down"
-                                              }`}
+                                              className={`pf-delta ${up
+                                                ? "pf-delta--up"
+                                                : "pf-delta--down"
+                                                }`}
                                               title={
                                                 up
                                                   ? "Higher than other file"
@@ -640,11 +633,10 @@ const SecurityTabs: React.FC<Props> = ({
                                           const up = delta > 0;
                                           return (
                                             <span
-                                              className={`pf-delta ${
-                                                up
-                                                  ? "pf-delta--up"
-                                                  : "pf-delta--down"
-                                              }`}
+                                              className={`pf-delta ${up
+                                                ? "pf-delta--up"
+                                                : "pf-delta--down"
+                                                }`}
                                               title={
                                                 up
                                                   ? "Higher than other file"
@@ -863,8 +855,8 @@ const SecurityTabs: React.FC<Props> = ({
                     <strong>Findings identified from: </strong>{" "}
                     {byTool.length
                       ? Array.from(
-                          new Set(byTool.map((t: any) => t.tool))
-                        ).join(", ")
+                        new Set(byTool.map((t: any) => t.tool))
+                      ).join(", ")
                       : "—"}
                   </li>
                 </ul>
