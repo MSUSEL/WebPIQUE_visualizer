@@ -21,6 +21,8 @@ type Props = {
   onPackageFilterChange?: (v: string) => void;
   controlledFixedFilter?: "all" | "fixed" | "notfixed";
   onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
+  controlledExpandedPlots?: Record<string, boolean>;
+  onTogglePlot?: (key: string) => void;
   diffFilter?: "all" | "differing" | "unique";
 };
 
@@ -62,6 +64,8 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
             onPkgFilterChange={props.onPackageFilterChange}
             controlledFixedFilter={props.controlledFixedFilter}
             onFixedFilterChange={props.onFixedFilterChange}
+            controlledExpandedPlots={props.controlledExpandedPlots}
+            onTogglePlot={props.onTogglePlot}
           />
         ) : (
           <p style={{ textAlign: "center", marginTop: "2rem" }}>

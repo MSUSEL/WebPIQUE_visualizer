@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
+import { Switch, FormControlLabel } from "@mui/material";
 import SingleFileComponent from "./SingleFileComponent";
 import "split-pane-react/esm/themes/default.css";
 import "../styles/CompareStyle.css";
@@ -11,6 +12,7 @@ import { parsePIQUEJSON } from "../Utilities/DataParser";
 import { buildDiffHints, DiffHints } from "../Utilities/fileDiff";
 
 type UploadPayload = { filename: string; data: any };
+type OneChild = React.ReactElement;
 
 const SASH_W = 8;
 
@@ -50,7 +52,7 @@ const Compare: React.FC = () => {
   const union = <T,>(a: Iterable<T>, b: Iterable<T>) =>
     new Set<T>([...a, ...b]);
 
-  // CWE (PF + Measure)
+  // CWE
   const cweDiffCount = useMemo(() => {
     const pf = union(leftHints.differingPFs, rightHints.differingPFs).size;
     const ms = union(
@@ -69,33 +71,13 @@ const Compare: React.FC = () => {
     return pf + ms;
   }, [leftHints, rightHints]);
 
-  // Package Vulnerabilities (CVE/GHSA)
+  // package vulnerabilities
   const cveDiffCount = useMemo(() => {
     return union(leftHints.differingCVEs, rightHints.differingCVEs).size;
   }, [leftHints, rightHints]);
 
   const cveUniqueCount = useMemo(() => {
     return union(leftHints.missingCVEs, rightHints.missingCVEs).size;
-  }, [leftHints, rightHints]);
-
-  // counts of differing or unique items to append to page legend
-  const diffTotal = useMemo(() => {
-    const u = <T,>(a: Iterable<T>, b: Iterable<T>) => new Set<T>([...a, ...b]);
-    const pf = u(leftHints.differingPFs, rightHints.differingPFs).size;
-    const ms = u(
-      leftHints.differingMeasures,
-      rightHints.differingMeasures
-    ).size;
-    const cve = u(leftHints.differingCVEs, rightHints.differingCVEs).size;
-    return pf + ms + cve;
-  }, [leftHints, rightHints]);
-
-  const uniqueTotal = useMemo(() => {
-    const u = <T,>(a: Iterable<T>, b: Iterable<T>) => new Set<T>([...a, ...b]);
-    const pf = u(leftHints.missingPFs, rightHints.missingPFs).size;
-    const ms = u(leftHints.missingMeasures, rightHints.missingMeasures).size;
-    const cve = u(leftHints.missingCVEs, rightHints.missingCVEs).size;
-    return pf + ms + cve;
   }, [leftHints, rightHints]);
 
   // mirrored UI state across both panes
@@ -155,9 +137,24 @@ const Compare: React.FC = () => {
     setDiffFilter(filter);
   };
 
-  const chipKeyDown = (fn: () => void) => (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") fn();
-  };
+  // density plot sync
+  const [openPlots, setOpenPlots] = useState<Record<string, boolean>>({});
+  const syncTogglePlot = (key: string) =>
+    setOpenPlots((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  // scroll sync on/off toggle
+  const [syncScroll, setSyncScroll] = useState(true);
+
+  interface MaybeSyncPaneProps {
+    enabled: boolean;
+    children: OneChild;
+  }
+
+  const MaybeSyncPane = ({
+    enabled,
+    children,
+  }: MaybeSyncPaneProps): JSX.Element =>
+    enabled ? <ScrollSyncPane>{children}</ScrollSyncPane> : children;
 
   return (
     <div className="compare-app-container">
@@ -177,6 +174,18 @@ const Compare: React.FC = () => {
           <div aria-hidden="true" />
           <div className="name-right">
             <strong>File Name:</strong>&nbsp;{file2Name}
+            <FormControlLabel
+              sx={{ ml: 1 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={syncScroll}
+                  onChange={(e) => setSyncScroll(e.target.checked)}
+                  inputProps={{ "aria-label": "Toggle synchronized scrolling" }}
+                />
+              }
+              label={syncScroll ? "Scroll sync: ON" : "Scroll sync: OFF"}
+            />
           </div>
         </div>
 
@@ -287,7 +296,7 @@ const Compare: React.FC = () => {
             sashRender={sashRender}
           >
             <Pane minSize={260}>
-              <ScrollSyncPane>
+              <MaybeSyncPane enabled={syncScroll}>
                 <div style={{ height: "100%", overflow: "auto" }}>
                   <SingleFileComponent
                     jsonData={file1}
@@ -305,13 +314,15 @@ const Compare: React.FC = () => {
                     onPackageFilterChange={setPkgFilter}
                     controlledFixedFilter={fixedFilter}
                     onFixedFilterChange={setFixedFilter}
+                    controlledExpandedPlots={openPlots}
+                    onTogglePlot={syncTogglePlot}
                   />
                 </div>
-              </ScrollSyncPane>
+              </MaybeSyncPane>
             </Pane>
 
             <Pane minSize={260}>
-              <ScrollSyncPane>
+              <MaybeSyncPane enabled={syncScroll}>
                 <div
                   className="pane-gap-right"
                   style={{ height: "100%", overflow: "auto" }}
@@ -332,9 +343,11 @@ const Compare: React.FC = () => {
                     onPackageFilterChange={setPkgFilter}
                     controlledFixedFilter={fixedFilter}
                     onFixedFilterChange={setFixedFilter}
+                    controlledExpandedPlots={openPlots}
+                    onTogglePlot={syncTogglePlot}
                   />
                 </div>
-              </ScrollSyncPane>
+              </MaybeSyncPane>
             </Pane>
           </SplitPane>
         </ScrollSync>

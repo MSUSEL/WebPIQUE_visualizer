@@ -2,6 +2,7 @@
 // unique to WebPIQUE
 import React, { useMemo, useState } from "react";
 import { Box } from "@mui/material";
+import { Collapse } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import MuiTabs, { TabItem } from "../components/Tabs";
@@ -28,6 +29,8 @@ type Props = {
   onPkgFilterChange?: (v: string) => void;
   controlledFixedFilter?: "all" | "fixed" | "notfixed";
   onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
+  controlledExpandedPlots?: Record<string, boolean>;
+  onTogglePlot?: (key: string) => void;
   diffHints?: DiffHints;
   diffFilter?: "all" | "differing" | "unique";
 };
@@ -47,9 +50,17 @@ type SeverityInfo = {
 
 const getSeverityInfo = (score: number): SeverityInfo => {
   if (score < 0.6) {
-    return { color: "rgb(230,159,000)", label: "CWE score below < 0.6", icon: "🟠" };
+    return {
+      color: "rgb(230,159,000)",
+      label: "CWE score below < 0.6",
+      icon: "🟠",
+    };
   } else if (score < 0.8) {
-    return { color: "rgb(240,228,066)", label: "CWE score between 0.6-0.8", icon: "🟡" };
+    return {
+      color: "rgb(240,228,066)",
+      label: "CWE score between 0.6-0.8",
+      icon: "🟡",
+    };
   } else {
     return { color: "rgb(000,158,115)", label: "CWE score > 0.8", icon: "🟢" };
   }
@@ -108,6 +119,8 @@ const SecurityTabs: React.FC<Props> = ({
   onPkgFilterChange,
   controlledFixedFilter,
   onFixedFilterChange,
+  controlledExpandedPlots,
+  onTogglePlot,
   diffHints,
   diffFilter,
 }) => {
@@ -119,10 +132,19 @@ const SecurityTabs: React.FC<Props> = ({
     onMeausreChange?.(key);
   };
 
-  const [popoutKey, setPopoutKey] = useState<{
-    pfName: string;
-    measureIndex: number;
-  } | null>(null);
+  // track which plots are expanded: key = `${pf.name}::${measure.name}`
+  const [expandedPlotsLocal, setExpandedPlotsLocal] = React.useState<
+    Record<string, boolean>
+  >({});
+
+  const expandedPlots = controlledExpandedPlots ?? expandedPlotsLocal;
+  const togglePlot = (key: string) => {
+    if (onTogglePlot) {
+      onTogglePlot(key);
+    } else {
+      setExpandedPlotsLocal((prev) => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
 
   const diffFilterVal = diffFilter ?? "all";
 
@@ -257,12 +279,12 @@ const SecurityTabs: React.FC<Props> = ({
         const measureId =
           normalizeCweId(
             cve?.CWEmeasureName ??
-            cve?.cweMeasure ??
-            cve?.measure ??
-            cve?.cwe ??
-            cve?.cwe_id ??
-            cve?.cweId ??
-            cve?.weakness
+              cve?.cweMeasure ??
+              cve?.measure ??
+              cve?.cwe ??
+              cve?.cwe_id ??
+              cve?.cweId ??
+              cve?.weakness
           ) ?? null;
 
         if (pillarId) g.cwePillars.add(pillarId);
@@ -322,8 +344,7 @@ const SecurityTabs: React.FC<Props> = ({
 
         <div className="st-chips">
           <button
-            className={`st-chip ${bucket === "critical" ? "is-active" : ""
-              }`}
+            className={`st-chip ${bucket === "critical" ? "is-active" : ""}`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
@@ -333,8 +354,7 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip ${bucket === "severe" ? "is-active" : ""
-              }`}
+            className={`st-chip ${bucket === "severe" ? "is-active" : ""}`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
@@ -344,8 +364,7 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip ${bucket === "moderate" ? "is-active" : ""
-              }`}
+            className={`st-chip ${bucket === "moderate" ? "is-active" : ""}`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
@@ -355,8 +374,9 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
-              }`}
+            className={`st-chip st-chip--all ${
+              bucket === "all" ? "is-active" : ""
+            }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -401,7 +421,9 @@ const SecurityTabs: React.FC<Props> = ({
                 <span className="label">{getSeverityInfo(pf.value).label}</span>
               </div>
 
-              <h4 className="pf-title">{pf.name.replace("Product_Factor", "")}</h4>
+              <h4 className="pf-title">
+                {pf.name.replace("Product_Factor", "")}
+              </h4>
 
               <ul className="pf-list">
                 <li>
@@ -409,7 +431,7 @@ const SecurityTabs: React.FC<Props> = ({
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
-                        diffHints?.pfFieldDiffs.get(pf.name)?.value
+                      diffHints?.pfFieldDiffs.get(pf.name)?.value
                         ? "diff-field"
                         : ""
                     }
@@ -427,8 +449,9 @@ const SecurityTabs: React.FC<Props> = ({
                         const up = delta > 0;
                         return (
                           <span
-                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
-                              }`}
+                            className={`pf-delta ${
+                              up ? "pf-delta--up" : "pf-delta--down"
+                            }`}
                             title={
                               up
                                 ? "Higher than other file"
@@ -479,11 +502,14 @@ const SecurityTabs: React.FC<Props> = ({
                               Number(a.score ?? 0) - Number(b.score ?? 0)
                           )
                           .map((measure: Measure, idx: number) => {
-                            // KEY + mDiff go here:
                             const key = `${pf.name}::${measure.name}`;
                             const mDiff = diffHints?.measureFieldDiffs.get(key);
                             const isMissingMeasure =
                               diffHints?.missingMeasures?.has(key);
+                            const id = `${pf.name}::${measure.name}`;
+                            const thresholds = (measure.thresholds ??
+                              measure.threshold ??
+                              []) as number[];
 
                             // legend filter for measures
                             if (
@@ -504,8 +530,9 @@ const SecurityTabs: React.FC<Props> = ({
                                 key={idx}
                                 className="measure-item"
                                 style={{
-                                  border: `2px solid ${getSeverityInfo(measure.score).color
-                                    }`,
+                                  border: `2px solid ${
+                                    getSeverityInfo(measure.score).color
+                                  }`,
                                   backgroundColor: "#fff",
                                 }}
                               >
@@ -573,10 +600,11 @@ const SecurityTabs: React.FC<Props> = ({
                                           const up = delta > 0;
                                           return (
                                             <span
-                                              className={`pf-delta ${up
-                                                ? "pf-delta--up"
-                                                : "pf-delta--down"
-                                                }`}
+                                              className={`pf-delta ${
+                                                up
+                                                  ? "pf-delta--up"
+                                                  : "pf-delta--down"
+                                              }`}
                                               title={
                                                 up
                                                   ? "Higher than other file"
@@ -633,10 +661,11 @@ const SecurityTabs: React.FC<Props> = ({
                                           const up = delta > 0;
                                           return (
                                             <span
-                                              className={`pf-delta ${up
-                                                ? "pf-delta--up"
-                                                : "pf-delta--down"
-                                                }`}
+                                              className={`pf-delta ${
+                                                up
+                                                  ? "pf-delta--up"
+                                                  : "pf-delta--down"
+                                              }`}
                                               title={
                                                 up
                                                   ? "Higher than other file"
@@ -676,17 +705,44 @@ const SecurityTabs: React.FC<Props> = ({
                                   </li>
 
                                   <li>
-                                    <span
-                                      className="density-link"
-                                      onClick={() =>
-                                        setPopoutKey({
-                                          pfName: pf.name,
-                                          measureIndex: idx,
-                                        })
-                                      }
+                                    <div style={{ marginTop: 6 }}>
+                                      <span
+                                        className="density-link"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => togglePlot(id)}
+                                        onKeyDown={(e) =>
+                                          e.key === "Enter"
+                                            ? togglePlot(id)
+                                            : null
+                                        }
+                                        aria-expanded={!!expandedPlots[id]}
+                                        aria-controls={`density-${id}`}
+                                        style={{
+                                          textDecoration: "underline",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        {expandedPlots[id]
+                                          ? "Hide Density Plot"
+                                          : "Show Density Plot"}
+                                      </span>
+                                    </div>
+                                    <Collapse
+                                      in={!!expandedPlots[id]}
+                                      timeout={250}
                                     >
-                                      Density Plot
-                                    </span>
+                                      <div
+                                        className="densityPlot"
+                                        id={`density-${id}`}
+                                      >
+                                        <ProbabilityDensity
+                                          thresholds={thresholds}
+                                          score={measure.score ?? 0}
+                                          cweName={measure.name}
+                                        />
+                                      </div>
+                                    </Collapse>
                                   </li>
                                 </ul>
                               </li>
@@ -855,8 +911,8 @@ const SecurityTabs: React.FC<Props> = ({
                     <strong>Findings identified from: </strong>{" "}
                     {byTool.length
                       ? Array.from(
-                        new Set(byTool.map((t: any) => t.tool))
-                      ).join(", ")
+                          new Set(byTool.map((t: any) => t.tool))
+                        ).join(", ")
                       : "—"}
                   </li>
                 </ul>
@@ -906,31 +962,6 @@ const SecurityTabs: React.FC<Props> = ({
           onTabChange?.(next);
         }}
       />
-      {popoutKey && (
-        <div className="densityPlot">
-          <button
-            className="densityPlot-close"
-            onClick={() => setPopoutKey(null)}
-          >
-            X
-          </button>
-          {(() => {
-            const pf = (scores?.cweProductFactors as PF[] | undefined)?.find(
-              (p: PF) => p.name === popoutKey.pfName
-            );
-            const m = pf?.measures?.[popoutKey.measureIndex] as
-              | Measure
-              | undefined;
-            return m ? (
-              <ProbabilityDensity
-                thresholds={m.threshold ?? []}
-                score={m.score ?? 0}
-                cweName={m.name}
-              />
-            ) : null;
-          })()}
-        </div>
-      )}
     </>
   );
 };
