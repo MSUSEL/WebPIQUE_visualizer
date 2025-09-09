@@ -36,6 +36,9 @@
   margin-bottom: 16px;
   border-radius: 8px;
   padding: 12px;
+  background-color: "#fff";
+  position: "relative";
+  margin-left: "24px";
 }
 
 .pf-title {
@@ -124,6 +127,7 @@
 .density-link {
   color: #2f6fab;
 }
+
 .density-link:hover {
   opacity: 0.8;
 }

@@ -9,7 +9,7 @@ export type DiffHints = {
   missingCVEs: Set<string>;
 
   // compare field-level information
-  pfFieldDiffs: Map<string, { value?: boolean; description?: boolean }>;
+  pfFieldDiffs: Map<string, { value?: boolean; benchmarkSize?: boolean; }>;
   measureFieldDiffs: Map<string, { score?: boolean; weight?: boolean }>;
   cveFieldDiffs: Map<
     string,
@@ -81,12 +81,12 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
 
     // pf field diffs
     const valueDiff = !nearlyEq(lpf.value, rpf.value);
-    const descDiff = (lpf.description ?? "") !== (rpf.description ?? "");
+    const descDiff = (lpf.benchmarkSize ?? "") !== (rpf.benchmarkSize ?? "");
     if (valueDiff || descDiff) {
       hints.differingPFs.add(pfName);
       hints.pfFieldDiffs.set(pfName, {
         ...(valueDiff ? { value: true } : {}),
-        ...(descDiff ? { description: true } : {}),
+        ...(descDiff ? { benchmarkSize: true } : {}),
       });
     }
 

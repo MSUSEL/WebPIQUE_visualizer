@@ -194,11 +194,10 @@ const Compare: React.FC = () => {
           <div className="page-legend">
             <div className="legend-row">
               <span
-                className={`legend-chip legend-chip--diff ${
-                  selectedSecurityTab === "CWE" && diffFilter === "differing"
+                className={`legend-chip legend-chip--diff ${selectedSecurityTab === "CWE" && diffFilter === "differing"
                     ? "is-active"
                     : ""
-                }`}
+                  }`}
                 role="button"
                 tabIndex={0}
                 onClick={() => activate("CWE", "differing")}
@@ -211,11 +210,10 @@ const Compare: React.FC = () => {
                 <span className="legend-count">{cweDiffCount}</span>
               </span>
               <span
-                className={`legend-chip legend-chip--unique ${
-                  selectedSecurityTab === "CWE" && diffFilter === "unique"
+                className={`legend-chip legend-chip--unique ${selectedSecurityTab === "CWE" && diffFilter === "unique"
                     ? "is-active"
                     : ""
-                }`}
+                  }`}
                 role="button"
                 tabIndex={0}
                 onClick={() => activate("CWE", "unique")}
@@ -228,11 +226,10 @@ const Compare: React.FC = () => {
                 <span className="legend-count">{cweUniqueCount}</span>
               </span>
               <span
-                className={`legend-chip legend-chip--diff ${
-                  selectedSecurityTab === "CVE" && diffFilter === "differing"
+                className={`legend-chip legend-chip--diff ${selectedSecurityTab === "CVE" && diffFilter === "differing"
                     ? "is-active"
                     : ""
-                }`}
+                  }`}
                 role="button"
                 tabIndex={0}
                 onClick={() => activate("CVE", "differing")}
@@ -245,11 +242,10 @@ const Compare: React.FC = () => {
                 <span className="legend-count">{cveDiffCount}</span>
               </span>
               <span
-                className={`legend-chip legend-chip--unique ${
-                  selectedSecurityTab === "CVE" && diffFilter === "unique"
+                className={`legend-chip legend-chip--unique ${selectedSecurityTab === "CVE" && diffFilter === "unique"
                     ? "is-active"
                     : ""
-                }`}
+                  }`}
                 role="button"
                 tabIndex={0}
                 onClick={() => activate("CVE", "unique")}

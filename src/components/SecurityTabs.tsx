@@ -44,6 +44,7 @@ const bucketFor = (score: number): "critical" | "severe" | "moderate" => {
 
 type SeverityInfo = {
   color: string;
+  border: string;
   label: string;
   icon: string;
 };
@@ -51,18 +52,20 @@ type SeverityInfo = {
 const getSeverityInfo = (score: number): SeverityInfo => {
   if (score < 0.6) {
     return {
-      color: "rgb(230,159,000)",
+      color: "#c5052fff",
+      border: "solid",
       label: "CWE score below < 0.6",
-      icon: "🟠",
+      icon: "🔴",
     };
   } else if (score < 0.8) {
     return {
       color: "rgb(240,228,066)",
+      border: "dashed",
       label: "CWE score between 0.6-0.8",
       icon: "🟡",
     };
   } else {
-    return { color: "rgb(000,158,115)", label: "CWE score > 0.8", icon: "🟢" };
+    return { color: "rgb(000,158,115)", border: "dotted", label: "CWE score > 0.8", icon: "🟢" };
   }
 };
 
@@ -279,12 +282,12 @@ const SecurityTabs: React.FC<Props> = ({
         const measureId =
           normalizeCweId(
             cve?.CWEmeasureName ??
-              cve?.cweMeasure ??
-              cve?.measure ??
-              cve?.cwe ??
-              cve?.cwe_id ??
-              cve?.cweId ??
-              cve?.weakness
+            cve?.cweMeasure ??
+            cve?.measure ??
+            cve?.cwe ??
+            cve?.cwe_id ??
+            cve?.cweId ??
+            cve?.weakness
           ) ?? null;
 
         if (pillarId) g.cwePillars.add(pillarId);
@@ -349,7 +352,7 @@ const SecurityTabs: React.FC<Props> = ({
             aria-pressed={bucket === "critical"}
           >
             <span />
-            🟠 CWE score &lt; 0.6
+            🔴 CWE score &lt; 0.6
             <span className="st-chip-count">{counts.critical}</span>
           </button>
 
@@ -374,9 +377,8 @@ const SecurityTabs: React.FC<Props> = ({
           </button>
 
           <button
-            className={`st-chip st-chip--all ${
-              bucket === "all" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+              }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -400,10 +402,7 @@ const SecurityTabs: React.FC<Props> = ({
               key={pf.name}
               className="pf-card"
               style={{
-                border: `2px solid ${getSeverityInfo(pf.value).color}`,
-                backgroundColor: "#fff",
-                position: "relative",
-                marginLeft: "24px", // space for left arrow
+                border: `2px ${getSeverityInfo(pf.value).border} ${getSeverityInfo(pf.value).color}`,
               }}
             >
               {diffHints?.missingPFs?.has(pf.name) ? (
@@ -431,12 +430,12 @@ const SecurityTabs: React.FC<Props> = ({
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
-                      diffHints?.pfFieldDiffs.get(pf.name)?.value
+                        diffHints?.pfFieldDiffs.get(pf.name)?.value
                         ? "diff-field"
                         : ""
                     }
                   >
-                    {pf.value} out of 1
+                    {pf.value.toFixed(4)} out of 1
                   </span>
                   {/* add arrow marker to indicate if score is greater or lower than other pane */}
                   {(() => {
@@ -449,9 +448,8 @@ const SecurityTabs: React.FC<Props> = ({
                         const up = delta > 0;
                         return (
                           <span
-                            className={`pf-delta ${
-                              up ? "pf-delta--up" : "pf-delta--down"
-                            }`}
+                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
+                              }`}
                             title={
                               up
                                 ? "Higher than other file"
@@ -474,13 +472,47 @@ const SecurityTabs: React.FC<Props> = ({
                 </li>
                 <li>
                   <strong>Description:</strong>{" "}
-                  <span className={pfDiff?.description ? "diff-field" : ""}>
+                  <span>
                     {pf.description}
                   </span>
                 </li>
                 <li>
                   <strong>Benchmark size: </strong>
-                  {pf.benchmarkSize ?? pf.measures?.[0]?.threshold?.length ?? 0}
+                  <span className={pfDiff?.benchmarkSize ? "diff-field" : ""}>
+                    {pf.benchmarkSize ?? pf.measures?.[0]?.threshold?.length ?? 0}
+                  </span>
+                  {/* add arrow marker to indicate if benchmark size is greater or lower than other pane */}
+                  {(() => {
+                    const peer = diffHints?.pfPeerValues?.get(pf.benchmarkSize);
+                    const here =
+                      typeof pf?.benchmarkSize === "number" ? pf.benchmarkSize : null;
+                    if (typeof peer === "number" && typeof here === "number") {
+                      const delta = Number((here - peer));
+                      if (Math.abs(delta) > 1e-6) {
+                        const up = delta > 0;
+                        return (
+                          <span
+                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
+                              }`}
+                            title={
+                              up
+                                ? "Higher than other file"
+                                : "Lower than other file"
+                            }
+                            aria-label={
+                              up
+                                ? "Higher than other file"
+                                : "Lower than other file"
+                            }
+                          >
+                            {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
+                            {/* marker and +/- value change */}
+                          </span>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                 </li>
 
                 <li>
@@ -530,9 +562,8 @@ const SecurityTabs: React.FC<Props> = ({
                                 key={idx}
                                 className="measure-item"
                                 style={{
-                                  border: `2px solid ${
-                                    getSeverityInfo(measure.score).color
-                                  }`,
+                                  border: `2px ${getSeverityInfo(measure.score).border} ${getSeverityInfo(measure.score).color
+                                    }`,
                                   backgroundColor: "#fff",
                                 }}
                               >
@@ -576,7 +607,7 @@ const SecurityTabs: React.FC<Props> = ({
                                             : ""
                                         }
                                       >
-                                        {measure.score} out of 1.
+                                        {measure.score.toFixed(4)} out of 1.
                                       </span>
                                     </strong>
 
@@ -600,11 +631,10 @@ const SecurityTabs: React.FC<Props> = ({
                                           const up = delta > 0;
                                           return (
                                             <span
-                                              className={`pf-delta ${
-                                                up
-                                                  ? "pf-delta--up"
-                                                  : "pf-delta--down"
-                                              }`}
+                                              className={`pf-delta ${up
+                                                ? "pf-delta--up"
+                                                : "pf-delta--down"
+                                                }`}
                                               title={
                                                 up
                                                   ? "Higher than other file"
@@ -628,64 +658,10 @@ const SecurityTabs: React.FC<Props> = ({
 
                                   <li>
                                     <strong>Interpreted Score: </strong>
-                                    <span
-                                      className={
-                                        diffHints?.measureFieldDiffs?.get(
-                                          `${pf.name}::${measure.name}`
-                                        )?.score
-                                          ? "diff-field"
-                                          : ""
-                                      }
-                                    >
-                                      {measure.score * 100}% better then the
+                                    <span>
+                                      {measure.score.toFixed(4) * 100}% better then the
                                       benchmark set.
                                     </span>
-
-                                    {/* Δ vs other pane for this measure */}
-                                    {(() => {
-                                      const key = `${pf.name}::${measure.name}`;
-                                      const peer =
-                                        diffHints?.measurePeerValues?.get(key);
-                                      const here =
-                                        typeof measure?.score === "number"
-                                          ? measure.score
-                                          : null;
-                                      if (
-                                        typeof peer === "number" &&
-                                        typeof here === "number"
-                                      ) {
-                                        const delta = Number(
-                                          (here * 100 - peer * 100).toFixed(4)
-                                        );
-                                        if (Math.abs(delta) > 1e-6) {
-                                          const up = delta > 0;
-                                          return (
-                                            <span
-                                              className={`pf-delta ${
-                                                up
-                                                  ? "pf-delta--up"
-                                                  : "pf-delta--down"
-                                              }`}
-                                              title={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                              aria-label={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                            >
-                                              {up ? "▲" : "▼"} (
-                                              {delta > 0 ? `+${delta}` : delta}
-                                              %)
-                                            </span>
-                                          );
-                                        }
-                                      }
-                                      return null;
-                                    })()}
                                   </li>
 
                                   <li>
@@ -702,6 +678,38 @@ const SecurityTabs: React.FC<Props> = ({
                                       </span>
                                     </strong>{" "}
                                     to the final CWE pillar score.
+
+                                    {(() => {
+                                      const peer = diffHints?.measurePeerValues?.get(measure.weight);
+                                      const here =
+                                        typeof measure?.weight === "number" ? measure?.weight : null;
+                                      if (typeof peer === "number" && typeof here === "number") {
+                                        const delta = Number((here - peer));
+                                        if (Math.abs(delta) > 1e-6) {
+                                          const up = delta > 0;
+                                          return (
+                                            <span
+                                              className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
+                                                }`}
+                                              title={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                              aria-label={
+                                                up
+                                                  ? "Higher than other file"
+                                                  : "Lower than other file"
+                                              }
+                                            >
+                                              {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
+                                              {/* marker and +/- value change */}
+                                            </span>
+                                          );
+                                        }
+                                      }
+                                      return null;
+                                    })()}
                                   </li>
 
                                   <li>
@@ -911,8 +919,8 @@ const SecurityTabs: React.FC<Props> = ({
                     <strong>Findings identified from: </strong>{" "}
                     {byTool.length
                       ? Array.from(
-                          new Set(byTool.map((t: any) => t.tool))
-                        ).join(", ")
+                        new Set(byTool.map((t: any) => t.tool))
+                      ).join(", ")
                       : "—"}
                   </li>
                 </ul>
