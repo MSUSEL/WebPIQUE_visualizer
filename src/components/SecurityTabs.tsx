@@ -7,6 +7,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import MuiTabs, { TabItem } from "../components/Tabs";
 import ProbabilityDensity from "../components/ProbabilityDensity";
+import ProbabilityCDF from "./ProbabilityCDF";
 import CVEScoreMiniChart from "../components/CVEChart";
 import "../styles/SecurityTabs.css";
 import { DiffHints } from "../Utilities/fileDiff";
@@ -93,6 +94,31 @@ const normalizeCweId = (v: any): string | null => {
   if (!s) return null;
   const m = /(\d+)/.exec(s);
   return m ? `CWE-${m[1]}` : null;
+};
+
+// key builder used by fileDiff
+const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
+
+// Generic arrow chip (▲/▼) with +/-delta
+const Delta: React.FC<{ here?: number | null; peer?: number | null; places?: number }> = ({
+  here,
+  peer,
+  places = 4,
+}) => {
+  if (typeof here !== "number" || typeof peer !== "number") return null;
+  const delta = Number((here - peer).toFixed(places));
+  if (Math.abs(delta) <= 1e-6) return null;
+
+  const up = delta > 0;
+  return (
+    <span
+      className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"}`}
+      title={up ? "Higher than other file" : "Lower than other file"}
+      aria-label={up ? "Higher than other file" : "Lower than other file"}
+    >
+      {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta})
+    </span>
+  );
 };
 
 type GroupedCVE = {
@@ -437,38 +463,8 @@ const SecurityTabs: React.FC<Props> = ({
                   >
                     {pf.value.toFixed(4)} out of 1
                   </span>
-                  {/* add arrow marker to indicate if score is greater or lower than other pane */}
-                  {(() => {
-                    const peer = diffHints?.pfPeerValues?.get(pf.name);
-                    const here =
-                      typeof pf?.value === "number" ? pf.value : null;
-                    if (typeof peer === "number" && typeof here === "number") {
-                      const delta = Number((here - peer).toFixed(4));
-                      if (Math.abs(delta) > 1e-6) {
-                        const up = delta > 0;
-                        return (
-                          <span
-                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
-                              }`}
-                            title={
-                              up
-                                ? "Higher than other file"
-                                : "Lower than other file"
-                            }
-                            aria-label={
-                              up
-                                ? "Higher than other file"
-                                : "Lower than other file"
-                            }
-                          >
-                            {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
-                            {/* marker and +/- value change */}
-                          </span>
-                        );
-                      }
-                    }
-                    return null;
-                  })()}
+                  <Delta here={pf.value} peer={diffHints?.pfPeerValues?.get(pf.name) ?? null} />
+
                 </li>
                 <li>
                   <strong>Description:</strong>{" "}
@@ -478,40 +474,26 @@ const SecurityTabs: React.FC<Props> = ({
                 </li>
                 <li>
                   <strong>Benchmark size: </strong>
-                  <span className={pfDiff?.benchmarkSize ? "diff-field" : ""}>
-                    {pf.benchmarkSize ?? pf.measures?.[0]?.threshold?.length ?? 0}
-                  </span>
-                  {/* add arrow marker to indicate if benchmark size is greater or lower than other pane */}
                   {(() => {
-                    const peer = diffHints?.pfPeerValues?.get(pf.benchmarkSize);
-                    const here =
-                      typeof pf?.benchmarkSize === "number" ? pf.benchmarkSize : null;
-                    if (typeof peer === "number" && typeof here === "number") {
-                      const delta = Number((here - peer));
-                      if (Math.abs(delta) > 1e-6) {
-                        const up = delta > 0;
-                        return (
-                          <span
-                            className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
-                              }`}
-                            title={
-                              up
-                                ? "Higher than other file"
-                                : "Lower than other file"
-                            }
-                            aria-label={
-                              up
-                                ? "Higher than other file"
-                                : "Lower than other file"
-                            }
-                          >
-                            {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
-                            {/* marker and +/- value change */}
-                          </span>
-                        );
-                      }
-                    }
-                    return null;
+                    // same fallback you render to the user
+                    const hereBench =
+                      typeof pf?.benchmarkSize === "number"
+                        ? pf.benchmarkSize
+                        : ((pf?.measures?.[0]?.thresholds ??
+                          pf?.measures?.[0]?.threshold ??
+                          []) as number[]).length;
+
+                    const peerRaw = diffHints?.pfPeerBenchmarkSize?.get(pf.name);
+                    const peerBench = typeof peerRaw === "number" ? peerRaw : null;
+
+                    return (
+                      <>
+                        <span className={pfDiff?.benchmarkSize ? "diff-field" : ""}>
+                          {hereBench}
+                        </span>
+                        <Delta here={hereBench} peer={peerBench} places={0} />
+                      </>
+                    );
                   })()}
                 </li>
 
@@ -611,55 +593,16 @@ const SecurityTabs: React.FC<Props> = ({
                                       </span>
                                     </strong>
 
-                                    {/* Δ vs other pane for this measure */}
-                                    {(() => {
-                                      const key = `${pf.name}::${measure.name}`;
-                                      const peer =
-                                        diffHints?.measurePeerValues?.get(key);
-                                      const here =
-                                        typeof measure?.score === "number"
-                                          ? measure.score
-                                          : null;
-                                      if (
-                                        typeof peer === "number" &&
-                                        typeof here === "number"
-                                      ) {
-                                        const delta = Number(
-                                          (here - peer).toFixed(4)
-                                        );
-                                        if (Math.abs(delta) > 1e-6) {
-                                          const up = delta > 0;
-                                          return (
-                                            <span
-                                              className={`pf-delta ${up
-                                                ? "pf-delta--up"
-                                                : "pf-delta--down"
-                                                }`}
-                                              title={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                              aria-label={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                            >
-                                              {up ? "▲" : "▼"} (
-                                              {delta > 0 ? `+${delta}` : delta})
-                                            </span>
-                                          );
-                                        }
-                                      }
-                                      return null;
-                                    })()}
+                                    <Delta
+                                      here={typeof measure?.score === "number" ? measure.score : null}
+                                      peer={diffHints?.measurePeerValues?.get(mkey(pf.name, measure.name)) ?? null}
+                                    />
                                   </li>
 
                                   <li>
                                     <strong>Interpreted Score: </strong>
                                     <span>
-                                      {measure.score.toFixed(4) * 100}% better then the
+                                      {(measure.score * 100).toFixed(2)}% better than the
                                       benchmark set.
                                     </span>
                                   </li>
@@ -679,37 +622,10 @@ const SecurityTabs: React.FC<Props> = ({
                                     </strong>{" "}
                                     to the final CWE pillar score.
 
-                                    {(() => {
-                                      const peer = diffHints?.measurePeerValues?.get(measure.weight);
-                                      const here =
-                                        typeof measure?.weight === "number" ? measure?.weight : null;
-                                      if (typeof peer === "number" && typeof here === "number") {
-                                        const delta = Number((here - peer));
-                                        if (Math.abs(delta) > 1e-6) {
-                                          const up = delta > 0;
-                                          return (
-                                            <span
-                                              className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"
-                                                }`}
-                                              title={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                              aria-label={
-                                                up
-                                                  ? "Higher than other file"
-                                                  : "Lower than other file"
-                                              }
-                                            >
-                                              {up ? "▲" : "▼"} ({delta > 0 ? `+${delta}` : delta}){" "}
-                                              {/* marker and +/- value change */}
-                                            </span>
-                                          );
-                                        }
-                                      }
-                                      return null;
-                                    })()}
+                                    <Delta
+                                      here={typeof measure?.weight === "number" ? measure.weight : null}
+                                      peer={diffHints?.measurePeerWeights?.get(mkey(pf.name, measure.name)) ?? null}
+                                    />
                                   </li>
 
                                   <li>
@@ -719,36 +635,37 @@ const SecurityTabs: React.FC<Props> = ({
                                         role="button"
                                         tabIndex={0}
                                         onClick={() => togglePlot(id)}
-                                        onKeyDown={(e) =>
-                                          e.key === "Enter"
-                                            ? togglePlot(id)
-                                            : null
-                                        }
+                                        onKeyDown={(e) => (e.key === "Enter" ? togglePlot(id) : null)}
                                         aria-expanded={!!expandedPlots[id]}
                                         aria-controls={`density-${id}`}
-                                        style={{
-                                          textDecoration: "underline",
-                                          cursor: "pointer",
-                                        }}
+                                        style={{ textDecoration: "underline", cursor: "pointer", marginRight: 16 }}
                                       >
-                                        {expandedPlots[id]
-                                          ? "Hide Density Plot"
-                                          : "Show Density Plot"}
+                                        {expandedPlots[id] ? "Hide Plots" : "Show Plots"}
                                       </span>
+
                                     </div>
-                                    <Collapse
-                                      in={!!expandedPlots[id]}
-                                      timeout={250}
-                                    >
-                                      <div
-                                        className="densityPlot"
-                                        id={`density-${id}`}
-                                      >
+
+                                    <Collapse in={!!expandedPlots[id]} timeout={250}>
+                                      <div className="densityPlot" id={`density-${id}`}>
                                         <ProbabilityDensity
                                           thresholds={thresholds}
                                           score={measure.score ?? 0}
                                           cweName={measure.name}
                                         />
+                                      </div>
+
+                                      <div className="densityPlot" id={`cdf-${id}`}>
+                                        <ProbabilityCDF
+                                          thresholds={thresholds}
+                                          percentile={measure.score ?? 0}
+                                          cweName={measure.name}
+                                        />
+                                      </div>
+                                      <hr></hr>
+                                      <div><strong>Top plot:</strong> Density of benchmark set with a horizontal line marking
+                                        the area under the density curve that matches the measure score.
+                                        <strong> Bottom plot:</strong> Estimated cumulative distribution function (ECDF) plot showing how
+                                        much better the measure score is than the benchmark.
                                       </div>
                                     </Collapse>
                                   </li>

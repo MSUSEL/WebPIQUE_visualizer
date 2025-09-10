@@ -18,7 +18,9 @@ export type DiffHints = {
 
   // compare pf and measure scores bewteen panes
   pfPeerValues: Map<string, number | null>;
+  pfPeerBenchmarkSize: Map<string, number>;
   measurePeerValues: Map<string, number | null>;
+  measurePeerWeights: Map<string, number | null>;
 };
 
 const EPS = 1e-6; // reduce flaoting-point rounding noise during comparison
@@ -51,7 +53,9 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
     measureFieldDiffs: new Map(),
     cveFieldDiffs: new Map(),
     pfPeerValues: new Map(),
+    pfPeerBenchmarkSize: new Map(),
     measurePeerValues: new Map(),
+    measurePeerWeights: new Map(),
   };
 
   // pf and measure comparison
@@ -78,6 +82,27 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
       pfName,
       typeof rpf.value === "number" ? rpf.value : null
     );
+
+    type MaybeNum = number | null | undefined;
+
+    function asNum(x: MaybeNum): number | null {
+      return typeof x === "number" ? x : null;
+    }
+
+    // Accept both `thresholds` and `threshold`, and handle missing arrays safely
+    function getBenchmarkSize(pf: any): number {
+      if (typeof pf?.benchmarkSize === "number") return pf.benchmarkSize;
+
+      const firstMeasure = pf?.measures?.[0];
+      // tolerate either shape: thresholds | threshold
+      const th: unknown =
+        firstMeasure?.thresholds ?? firstMeasure?.threshold ?? [];
+
+      // ensure it's an array before reading length
+      return Array.isArray(th) ? th.length : 0;
+    }
+
+    hints.pfPeerBenchmarkSize.set(pfName, getBenchmarkSize(rpf));
 
     // pf field diffs
     const valueDiff = !nearlyEq(lpf.value, rpf.value);
@@ -112,6 +137,11 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
       hints.measurePeerValues.set(
         key,
         typeof rm.score === "number" ? rm.score : null
+      );
+
+      hints.measurePeerWeights.set(
+        key,
+        typeof rm.weight === "number" ? rm.weight : null
       );
 
       // measure field diffs used for highlighting

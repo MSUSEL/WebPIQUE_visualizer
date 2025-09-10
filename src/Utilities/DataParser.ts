@@ -2,6 +2,8 @@
 // The parser works for TQI and Quality Aspects on other PIQUE outputs
 // Parser is unique to display WebPIQUE product factors...updata Product Factor section for other PIQUE models
 
+import { KeySharp } from "@mui/icons-material";
+
 // Interfaces for parser
 export interface CVEByTool {
   //this is specific to WebPIQUE
@@ -116,7 +118,7 @@ export function parsePIQUEJSON(json: any): {
     const pfData = pfDataRaw as any;
     const weightsMap = (pfData?.weights ?? {}) as Record<string, number>;
 
-    if (key.startsWith("Product_Factor")) {
+    if (key.startsWith("Product_Factor") || key.startsWith("Pillar")) {
       const children = pfData.children;
       const measures: {
         name: string;
