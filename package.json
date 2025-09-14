@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@coreui/icons": "^3.0.1",
+    "@coreui/icons-react": "^2.3.0",
+    "@coreui/react": "^5.8.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.2.0",
@@ -16,6 +19,7 @@
     "bootstrap": "^5.3.7",
     "d3": "^7.9.0",
     "hamburger-react": "^2.5.2",
+    "jotai": "^2.14.0",
     "lodash": "^4.17.21",
     "react": "^18.2.0",
     "react-burger-menu": "^3.1.0",

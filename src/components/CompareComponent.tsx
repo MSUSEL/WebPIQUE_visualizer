@@ -195,8 +195,8 @@ const Compare: React.FC = () => {
             <div className="legend-row">
               <span
                 className={`legend-chip legend-chip--diff ${selectedSecurityTab === "CWE" && diffFilter === "differing"
-                    ? "is-active"
-                    : ""
+                  ? "is-active"
+                  : ""
                   }`}
                 role="button"
                 tabIndex={0}
@@ -211,8 +211,8 @@ const Compare: React.FC = () => {
               </span>
               <span
                 className={`legend-chip legend-chip--unique ${selectedSecurityTab === "CWE" && diffFilter === "unique"
-                    ? "is-active"
-                    : ""
+                  ? "is-active"
+                  : ""
                   }`}
                 role="button"
                 tabIndex={0}
@@ -227,8 +227,8 @@ const Compare: React.FC = () => {
               </span>
               <span
                 className={`legend-chip legend-chip--diff ${selectedSecurityTab === "CVE" && diffFilter === "differing"
-                    ? "is-active"
-                    : ""
+                  ? "is-active"
+                  : ""
                   }`}
                 role="button"
                 tabIndex={0}
@@ -243,8 +243,8 @@ const Compare: React.FC = () => {
               </span>
               <span
                 className={`legend-chip legend-chip--unique ${selectedSecurityTab === "CVE" && diffFilter === "unique"
-                    ? "is-active"
-                    : ""
+                  ? "is-active"
+                  : ""
                   }`}
                 role="button"
                 tabIndex={0}
