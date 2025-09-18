@@ -8,8 +8,8 @@ import "../styles/HamburgerMenuStyle.css";
 
 type UploadPayload = { filename: string; data: any };
 
-const MENU_TOP = 40;     // variable for better position control
-const MENU_WIDTH = 270;  // variable for better position control
+const MENU_TOP = 40; // variable for better position control
+const MENU_WIDTH = 270; // variable for better position control
 
 const HamburgerMenu: React.FC = () => {
   const [isOpen, setOpen] = useState(false);
@@ -55,7 +55,11 @@ const HamburgerMenu: React.FC = () => {
   // keep submenu aligned with the active row
   useLayoutEffect(() => {
     if (!isOpen) return;
-    const target = showCompareSubmenu ? compareRowRef.current : showLogin ? loginRowRef.current : null;
+    const target = showCompareSubmenu
+      ? compareRowRef.current
+      : showLogin
+      ? loginRowRef.current
+      : null;
     if (target) setSubmenuTop(MENU_TOP + target.offsetTop);
   }, [isOpen, showCompareSubmenu, showLogin]);
 
@@ -70,10 +74,9 @@ const HamburgerMenu: React.FC = () => {
   }, [isOpen, showLogin]);
 
   const canSubmit =
-    !authLoading &&
-    username.trim().length > 0 &&
-    password.trim().length >= 6; // simple length check
+    !authLoading && username.trim().length > 0 && password.trim().length >= 6; // simple length check
 
+  /*  
   async function handleAuthSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     setAuthError(null);
@@ -97,6 +100,7 @@ const HamburgerMenu: React.FC = () => {
       setAuthLoading(false);
     }
   }
+    */
 
   return (
     <div className="menu-container">
@@ -124,12 +128,15 @@ const HamburgerMenu: React.FC = () => {
           <div
             onClick={() => {
               setShowCompareSubmenu(false);
-            }}>
+            }}
+          >
             <FileUpload
               variant="menuItem"
               onJsonLoaded={({ filename, data }: UploadPayload) => {
                 handleToggle(false);
-                navigate("/visualizer", { state: { jsonData: data, filename } }); // go to SingleFilePage
+                navigate("/visualizer", {
+                  state: { jsonData: data, filename },
+                }); // go to SingleFilePage
               }}
             />
           </div>
@@ -139,26 +146,42 @@ const HamburgerMenu: React.FC = () => {
             ref={compareRowRef}
             className={`menu-item ${showCompareSubmenu ? "active" : ""}`}
             onClick={() => {
-              setShowCompareSubmenu(v => !v);
+              setShowCompareSubmenu((v) => !v);
               setShowLogin(false);
             }}
           >
             <span>Compare</span>
-            <span className="chevron" aria-hidden>&gt;</span>
+            <span className="chevron" aria-hidden>
+              &gt;
+            </span>
           </div>
 
-          {/* Login */}
+          <div
+            className="menu-item"
+            onClick={() => {
+              setOpen(false); // close the hamburger
+              setShowCompareSubmenu(false);
+              navigate("/projects"); // go to Project page
+            }}
+          >
+            <span>Project</span>
+          </div>
+
+          {/* Login 
           <div
             ref={loginRowRef}
             className={`menu-item ${showLogin ? "active" : ""}`}
             onClick={() => {
-              setShowLogin(v => !v);
+              setShowLogin((v) => !v);
               setShowCompareSubmenu(false);
             }}
           >
             <span>Login</span>
-            <span className="chevron" aria-hidden>&gt;</span>
+            <span className="chevron" aria-hidden>
+              &gt;
+            </span>
           </div>
+          */}
         </div>
       )}
 
@@ -196,7 +219,8 @@ const HamburgerMenu: React.FC = () => {
           </button>
         </div>
       )}
-      {/* login submenu */}
+
+      {/* login submenu 
       {isOpen && showLogin && (
         <div
           className="submenu locked"
@@ -267,11 +291,9 @@ const HamburgerMenu: React.FC = () => {
           </div>
         </div>
       )}
-
+      */}
     </div>
   );
 };
 
 export default HamburgerMenu;
-
-

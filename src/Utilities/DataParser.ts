@@ -43,6 +43,7 @@ export interface DiagnosticFinding {
   diagnosticId: string;
   id: string;
   title?: string;
+  alias?: string;
   description?: string;
   fixed?: any;
   vulnSource?: string;
@@ -87,11 +88,15 @@ export function buildRelationalExtract(json: any): RelationalExtract {
     diagIdByName.set(nm, did);
     diagIdByName.set(did, did);
   }
-  const resolveMeasureId = (labelOrKey: string) => measureIdByName.get(labelOrKey) ?? null;
-  const resolveDiagId = (labelOrKey: string) => diagIdByName.get(labelOrKey) ?? null;
+  const resolveMeasureId = (labelOrKey: string) =>
+    measureIdByName.get(labelOrKey) ?? null;
+  const resolveDiagId = (labelOrKey: string) =>
+    diagIdByName.get(labelOrKey) ?? null;
 
   // ---------------- product_factors -> measures (weights + children) ----------------
-  for (const [pfId, pfObjRaw] of Object.entries(json.factors?.product_factors ?? {})) {
+  for (const [pfId, pfObjRaw] of Object.entries(
+    json.factors?.product_factors ?? {}
+  )) {
     const pfObj = pfObjRaw as any;
     productFactors.push({
       id: String(pfId),
@@ -104,17 +109,29 @@ export function buildRelationalExtract(json: any): RelationalExtract {
     const weights = ((pfObj as any)?.weights ?? {}) as Record<string, number>;
     for (const [label, w] of Object.entries(weights)) {
       const mid = resolveMeasureId(label) ?? resolveMeasureId(String(label));
-      if (mid) pfMeasures.push({ pfId: String(pfId), measureId: String(mid), weight: Number(w ?? 0) });
+      if (mid)
+        pfMeasures.push({
+          pfId: String(pfId),
+          measureId: String(mid),
+          weight: Number(w ?? 0),
+        });
     }
 
     // PF -> Measure edges from children (full)
-    const childMeasures = ((pfObj as any)?.children ?? {}) as Record<string, any>;
+    const childMeasures = ((pfObj as any)?.children ?? {}) as Record<
+      string,
+      any
+    >;
     for (const [mKey, mObj] of Object.entries(childMeasures)) {
       const mName = String((mObj as any)?.name ?? mKey);
       const mid = resolveMeasureId(mKey) ?? resolveMeasureId(mName) ?? mKey;
       if (mid) {
         const w = (weights as any)[mKey] ?? (weights as any)[mName] ?? 0;
-        pfMeasures.push({ pfId: String(pfId), measureId: String(mid), weight: Number(w ?? 0) });
+        pfMeasures.push({
+          pfId: String(pfId),
+          measureId: String(mid),
+          weight: Number(w ?? 0),
+        });
       }
     }
   }
@@ -126,7 +143,9 @@ export function buildRelationalExtract(json: any): RelationalExtract {
       name: String((m as any)?.name ?? mid),
       value: Number((m as any)?.value ?? 0),
       description: (m as any)?.description ?? "",
-      thresholds: Array.isArray((m as any)?.thresholds) ? (m as any).thresholds.map(Number) : [],
+      thresholds: Array.isArray((m as any)?.thresholds)
+        ? (m as any).thresholds.map(Number)
+        : [],
       positive: (m as any)?.positive,
     });
 
@@ -135,7 +154,10 @@ export function buildRelationalExtract(json: any): RelationalExtract {
     for (const [label] of Object.entries(mWeights)) {
       const did = resolveDiagId(String(label));
       if (did) {
-        measureDiagnostics.push({ measureId: String(mid), diagnosticId: String(did) });
+        measureDiagnostics.push({
+          measureId: String(mid),
+          diagnosticId: String(did),
+        });
       }
     }
   }
@@ -152,19 +174,31 @@ export function buildRelationalExtract(json: any): RelationalExtract {
   }
 
   // ---------------- edges/findings from full JSON children ----------------
-  for (const [_pfId, pfObjRaw] of Object.entries(json.factors?.product_factors ?? {})) {
+  for (const [_pfId, pfObjRaw] of Object.entries(
+    json.factors?.product_factors ?? {}
+  )) {
     const pfObj = pfObjRaw as any;
-    const measureChildren = ((pfObj as any)?.children ?? {}) as Record<string, any>;
+    const measureChildren = ((pfObj as any)?.children ?? {}) as Record<
+      string,
+      any
+    >;
     for (const [measureKey, measureObj] of Object.entries(measureChildren)) {
       const measureName = String((measureObj as any)?.name ?? measureKey);
-      const measureId = resolveMeasureId(measureKey) ?? resolveMeasureId(measureName) ?? measureKey;
+      const measureId =
+        resolveMeasureId(measureKey) ??
+        resolveMeasureId(measureName) ??
+        measureKey;
 
       const diagChildren = (measureObj as any)?.children ?? {};
       for (const [diagKey, diagObj] of Object.entries(diagChildren)) {
         const diagName = String((diagObj as any)?.name ?? diagKey);
-        const diagId = resolveDiagId(diagKey) ?? resolveDiagId(diagName) ?? diagKey;
+        const diagId =
+          resolveDiagId(diagKey) ?? resolveDiagId(diagName) ?? diagKey;
 
-        measureDiagnostics.push({ measureId: String(measureId), diagnosticId: String(diagId) });
+        measureDiagnostics.push({
+          measureId: String(measureId),
+          diagnosticId: String(diagId),
+        });
 
         const findingChildren = (diagObj as any)?.children ?? {};
         for (const [findingKey, fObj] of Object.entries(findingChildren)) {
@@ -172,20 +206,38 @@ export function buildRelationalExtract(json: any): RelationalExtract {
           findings.push({
             diagnosticId: String(diagId),
             id: String((fObj as any)?.name ?? findingKey),
-            title: String((fObj as any)?.title ?? (fObj as any)?.summary ?? (fObj as any)?.name ?? findingKey),
+            title: String(
+              (fObj as any)?.title ??
+                (fObj as any)?.summary ??
+                (fObj as any)?.name ??
+                findingKey
+            ),
+            alias: String((fObj as any)?.alias ?? ""),
             description: (fObj as any)?.description ?? "",
             fixed: (fObj as any)?.fixed,
             vulnSource: (fObj as any)?.vulnSource ?? "",
             vulnSourceVersion: (fObj as any)?.vulnSourceVersion ?? "",
             fixedVersion: (fObj as any)?.fixedVersion ?? "",
-            byTool: [{ tool: String((diagObj as any)?.toolName ?? diagKey), score: Number((fObj as any)?.value ?? 0) }],
+            byTool: [
+              {
+                tool: String((diagObj as any)?.toolName ?? diagKey),
+                score: Number((fObj as any)?.value ?? 0),
+              },
+            ],
           });
         }
       }
     }
   }
 
-  return { productFactors, measures, diagnostics, pfMeasures, measureDiagnostics, findings };
+  return {
+    productFactors,
+    measures,
+    diagnostics,
+    pfMeasures,
+    measureDiagnostics,
+    findings,
+  };
 }
 
 // ---------------- High-level score model used by the UI ----------------
@@ -196,6 +248,7 @@ export interface CVEByTool {
 
 export interface CVEItem {
   name: string;
+  alias?: string;
   description?: string;
   fixed?: string;
   vulnSource?: string;
@@ -266,14 +319,28 @@ export function parsePIQUEJSON(json: any): {
   // Product factors per aspect (full: children; compact: weights)
   const productFactorsByAspect: ProductFactorsByAspect = {};
   for (const [aspectName, rawData] of Object.entries(qualityAspectsRaw)) {
-    const aspect = (rawData ?? {}) as { value?: number; children?: any; weights?: Record<string, number> };
-    const childArray: string[] = Array.isArray(aspect.children) ? (aspect.children as string[]) : [];
+    const aspect = (rawData ?? {}) as {
+      value?: number;
+      children?: any;
+      weights?: Record<string, number>;
+    };
+    const childArray: string[] = Array.isArray(aspect.children)
+      ? (aspect.children as string[])
+      : [];
     const childObjKeys: string[] =
-      !Array.isArray(aspect.children) && aspect.children && typeof aspect.children === "object"
+      !Array.isArray(aspect.children) &&
+      aspect.children &&
+      typeof aspect.children === "object"
         ? Object.keys(aspect.children as Record<string, any>)
         : [];
-    const weightKeys = Object.keys((aspect.weights ?? {}) as Record<string, number>);
-    const pfKeys: string[] = childArray.length ? childArray : (childObjKeys.length ? childObjKeys : weightKeys);
+    const weightKeys = Object.keys(
+      (aspect.weights ?? {}) as Record<string, number>
+    );
+    const pfKeys: string[] = childArray.length
+      ? childArray
+      : childObjKeys.length
+      ? childObjKeys
+      : weightKeys;
 
     const pfList: ProductFactor[] = [];
     for (const pfKey of pfKeys) {
@@ -294,7 +361,8 @@ export function parsePIQUEJSON(json: any): {
   const cweProductFactors: ProductFactor[] = [];
   for (const [key, pfDataRaw] of Object.entries(productFactorsRaw)) {
     const pfData = pfDataRaw as any;
-    if (!(key.startsWith("Product_Factor") || key.startsWith("Pillar"))) continue;
+    if (!(key.startsWith("Product_Factor") || key.startsWith("Pillar")))
+      continue;
     const weightsMap = (pfData?.weights ?? {}) as Record<string, number>;
 
     const measures: {
@@ -309,13 +377,17 @@ export function parsePIQUEJSON(json: any): {
     if (children && typeof children === "object") {
       for (const [measureKey, measureObj] of Object.entries(children)) {
         const m = measureObj as any;
-        const weight = Number(weightsMap[measureKey] ?? weightsMap[m?.name] ?? 0);
+        const weight = Number(
+          weightsMap[measureKey] ?? weightsMap[m?.name] ?? 0
+        );
         measures.push({
           name: String(m?.name ?? measureKey),
           description: String(m?.description ?? ""),
           score: Number(m?.value ?? 0),
           weight,
-          threshold: Array.isArray(m?.thresholds) ? m.thresholds.map(Number) : [],
+          threshold: Array.isArray(m?.thresholds)
+            ? m.thresholds.map(Number)
+            : [],
         });
       }
     } else {
@@ -327,7 +399,9 @@ export function parsePIQUEJSON(json: any): {
           description: String((m as any)?.description ?? ""),
           score: Number((m as any)?.value ?? 0),
           weight: Number(w ?? 0),
-          threshold: Array.isArray((m as any)?.thresholds) ? (m as any).thresholds.map(Number) : [],
+          threshold: Array.isArray((m as any)?.thresholds)
+            ? (m as any).thresholds.map(Number)
+            : [],
         });
       }
     }
@@ -337,9 +411,13 @@ export function parsePIQUEJSON(json: any): {
     if (children && typeof children === "object") {
       for (const measureObj of Object.values(children ?? {})) {
         if (!measureObj || typeof measureObj !== "object") continue;
-        for (const [diagKey, diagObj] of Object.entries((measureObj as any).children ?? {})) {
+        for (const [diagKey, diagObj] of Object.entries(
+          (measureObj as any).children ?? {}
+        )) {
           const tool = (diagObj as any)?.toolName ?? diagKey;
-          for (const [findingKey, findingObj] of Object.entries((diagObj as any).children ?? {})) {
+          for (const [findingKey, findingObj] of Object.entries(
+            (diagObj as any).children ?? {}
+          )) {
             if (!isVulnId(findingKey)) continue;
             const f = findingObj as any;
             const name = f.name ?? findingKey;
@@ -347,13 +425,14 @@ export function parsePIQUEJSON(json: any): {
             if (!item) {
               item = {
                 name,
+                alias: f.alias ?? "",
                 description: f.description ?? "",
                 fixed:
                   f.fixed === true || f.fixed === "true" || f.fixed === "fixed"
                     ? "Fixed"
                     : f.fixed === false || f.fixed === "false"
-                      ? "Not fixed"
-                      : f.fixed || "Not fixed",
+                    ? "Not fixed"
+                    : f.fixed || "Not fixed",
                 vulnSource: f.vulnSource ?? "",
                 vulnSourceVersion: f.vulnSourceVersion ?? "",
                 fixedVersion: f.fixedVersion ?? "",
