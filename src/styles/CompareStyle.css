@@ -93,16 +93,13 @@
 .sashRenderDots:hover,
 .sashRenderDots.is-active {
   background: #005a9e;
-  /* darker pill on hover/drag */
 }
 
 /* create space between the blue sash and the RIGHT pane content */
 .pane-gap-right {
   padding-left: 12px;
-  /* tweak to taste: 12–20px works well */
   box-sizing: border-box;
   overflow-x: hidden;
-  /* avoids accidental horizontal scrollbars */
 }
 
 /* styling to show differing pfs, findings, etc. */

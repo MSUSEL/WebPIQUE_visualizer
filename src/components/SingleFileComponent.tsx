@@ -51,9 +51,7 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
 
   // --- map legacy "Security tab" names to new ProductFactorTabs names ---
   type SecTabName = "PF" | "VULN_OR_DIAG" | "Lines of Code";
-  const mapIn = (
-    t?: "CWE" | "CVE" | "Lines of Code"
-  ): SecTabName | undefined =>
+  const mapIn = (t?: "CWE" | "CVE" | "Lines of Code"): SecTabName | undefined =>
     t === "CWE" ? "PF" : t === "CVE" ? "VULN_OR_DIAG" : t;
 
   const mapOut = (t: SecTabName): "CWE" | "CVE" | "Lines of Code" =>
@@ -70,12 +68,12 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
 
         {selectedAspect ? (
           <ProductFactorTabs
-            aspectName={selectedAspect}              // <-- tell the tab which aspect to render
+            aspectName={selectedAspect}
             scores={scores}
             diffHints={props.diffHints}
             diffFilter={props.diffFilter}
-            controlledTab={mapIn(props.controlledSecurityTab)}   // <-- map to new names
-            onTabChange={handleTabChange}                         // <-- map back on change
+            controlledTab={mapIn(props.controlledSecurityTab)}
+            onTabChange={handleTabChange}
             controlledMeasures={props.controlledMeasure}
             onMeausreChange={props.onMeasureChange}
             controlledBucket={props.controlledCWEBucket}
@@ -90,7 +88,9 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
           />
         ) : (
           <p style={{ textAlign: "center", marginTop: "2rem" }}>
-            <strong>Click on a Quality Aspect above to view more information.</strong>
+            <strong>
+              Click on a Quality Aspect above to view more information.
+            </strong>
           </p>
         )}
       </main>
