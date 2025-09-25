@@ -1,13 +1,15 @@
 // project page
 import React, { useEffect, useMemo, useState } from "react";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-import ProjectSidebar, { Project } from "../components/ProjectSidebar";
+import Header from "../components/headerfooter/Header";
+import Footer from "../components/headerfooter/Footer";
+import ProjectSidebar, {
+  Project,
+} from "../components/projectPage/ProjectSidebar";
 import ProjectFileLoad, {
   ProjectFileScore,
-} from "../components/ProjectFileLoad";
-import TQIQAPlot from "../components/TQIQAPlot";
-import CreateProjectDialog from "../components/CreateProjectDialog";
+} from "../components/projectPage/ProjectFileLoad";
+import TQIQAPlot from "../components/plotting/TQIQAPlot";
+import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 import "../styles/Pages.css";
 
 export default function ProjectView() {

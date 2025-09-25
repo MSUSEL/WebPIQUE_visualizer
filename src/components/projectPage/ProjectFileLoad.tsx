@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 // Assume your parser exports a default function that returns { tqi, aspects }
-import { parseTQIQAScores } from "../Utilities/TQIQAScoreParser";
+import { parseTQIQAScores } from "../../Utilities/TQIQAScoreParser";
 
 export type AspectItem = { name: string; value: number };
 

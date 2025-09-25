@@ -1,9 +1,9 @@
 /*import components*/
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import LandingPage from './pages/LandingPage';
-import SingleFilePage from './pages/SingleFilePage';
-import ComparePage from './pages/ComparePage';
-import ProjectView from './pages/ProjectView';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import LandingPage from "./pages/LandingPage";
+import SingleFilePage from "./pages/SingleFilePage";
+import ComparePage from "./pages/ComparePage";
+import ProjectView from "./pages/ProjectPage";
 
 const App = () => {
   return (
@@ -19,4 +19,3 @@ const App = () => {
 };
 
 export default App;
-

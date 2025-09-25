@@ -6,7 +6,7 @@ import "../styles/FileUpload.css";
 
 type Props = {
   onJsonLoaded?: (json: any) => void;
-  variant: "default" | "compact" | "menuItem";
+  variant?: "default" | "compact" | "menuItem";
 };
 
 const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {

@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   Label,
 } from "recharts";
-import type { ProjectFileScore } from "./ProjectFileLoad";
+import type { ProjectFileScore } from "../projectPage/ProjectFileLoad";
 
 export default function TQIQAPlot({ files }: { files: ProjectFileScore[] }) {
   const data = useMemo(() => {

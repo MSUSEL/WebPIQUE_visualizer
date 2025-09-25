@@ -2,9 +2,9 @@
 import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import Hamburger from "hamburger-react";
 import { useNavigate } from "react-router-dom";
-import FileUpload from "../components/FileUpload";
-import { login, signup } from "../Utilities/Authorization";
-import "../styles/HamburgerMenuStyle.css";
+import FileUpload from "../FileUpload";
+import { login, signup } from "../../Utilities/Authorization";
+import "../../styles/HamburgerMenuStyle.css";
 
 type UploadPayload = { filename: string; data: any };
 

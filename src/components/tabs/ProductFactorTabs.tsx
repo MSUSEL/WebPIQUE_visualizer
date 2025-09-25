@@ -6,13 +6,13 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import TextField from "@mui/material/TextField";
-import MuiTabs, { TabItem } from "../components/Tabs";
-import { RelationalExtract } from "../Utilities/DataParser";
-import ProbabilityDensity from "../components/ProbabilityDensity";
-import ProbabilityCDF from "../components/ProbabilityCDF";
-import CVEScoreMiniChart from "../components/CVEChart";
-import "../styles/SecurityTabs.css";
-import { DiffHints } from "../Utilities/fileDiff";
+import MuiTabs, { TabItem } from "./Tabs";
+import { RelationalExtract } from "../../Utilities/DataParser";
+import ProbabilityDensity from "../plotting/ProbabilityDensity";
+import ProbabilityCDF from "../plotting/ProbabilityCDF";
+import CVEScoreMiniChart from "../plotting/CVEChart";
+import "../../styles/SecurityTabs.css";
+import { DiffHints } from "../../Utilities/fileDiff";
 
 type ScoresType = any;
 type PF = any;
@@ -1106,7 +1106,6 @@ const ProductFactorTabs: React.FC<Props> = ({
         <label className="st-filter">
           <span className="st-filter-label">Vulnerable Package</span>
           <Autocomplete
-            sx={{ minWidth: 260 }}
             options={allPkgOptions}
             value={pkgFilter ?? "ALL"}
             onChange={(_, newValue) => {
@@ -1152,7 +1151,6 @@ const ProductFactorTabs: React.FC<Props> = ({
         <label className="st-filter">
           <span className="st-filter-label">CWE lookup</span>
           <Autocomplete
-            sx={{ minWidth: 260 }}
             options={allCweOptions}
             value={cweFilter}
             onChange={(_, v) => setCweLocal((v ?? "ALL") as string)}

@@ -1,7 +1,7 @@
 // create project and load file dialog box
 import React, { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { parseTQIQAScores } from "../Utilities/TQIQAScoreParser";
+import { parseTQIQAScores } from "../../Utilities/TQIQAScoreParser";
 import type { ProjectFileScore, AspectItem } from "./ProjectFileLoad";
 
 const MAX_FILES = 12;

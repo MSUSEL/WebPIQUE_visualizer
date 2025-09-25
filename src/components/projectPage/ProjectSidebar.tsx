@@ -1,7 +1,7 @@
 // project sidebar - allows user to create project and add files
 import CIcon from "@coreui/icons-react";
 import { cilListRich, cilAccountLogout, cilPlus } from "@coreui/icons";
-import "../styles/ProjectSidebar.css";
+import "../../styles/ProjectSidebar.css";
 
 export type Project = { id: string; name: string };
 export type ProjectFileLite = { fileName: string };
