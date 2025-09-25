@@ -1,7 +1,9 @@
 // visualizer for single file consumption
 import SingleFileComponent from "../components/SingleFileComponent";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
+import Header from "../components/headerfooter/Header";
+import Footer from "../components/headerfooter/Footer";
+import { Provider, createStore } from "jotai";
+const pageStore = createStore();
 import "../styles/Pages.css";
 
 const SingleFilePage = () => {
@@ -9,7 +11,9 @@ const SingleFilePage = () => {
     <div className="app-container">
       <Header />
       <main className="main-content">
-        <SingleFileComponent />
+        <Provider store={pageStore}>
+          <SingleFileComponent />
+        </Provider>
       </main>
       <Footer />
     </div>

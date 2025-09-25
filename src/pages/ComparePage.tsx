@@ -1,6 +1,6 @@
 import CompareComponent from "../components/CompareComponent";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
+import Header from "../components/headerfooter/Header";
+import Footer from "../components/headerfooter/Footer";
 import "../styles/Pages.css";
 
 const ComparePage = () => {

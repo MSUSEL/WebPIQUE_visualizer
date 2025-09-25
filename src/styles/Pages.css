@@ -29,7 +29,7 @@
   border-bottom: 2px solid #ccc;
 }
 
-.aspects-section {
+.secondary-header .aspects-section {
   background-color: #d6e9e7;
   display: flex;
   padding: 8px;
@@ -37,4 +37,21 @@
   justify-content: center;
   gap: 12px;
   padding-top: 120px;
+}
+
+/* Project view style */
+.project-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* right pane */
+.project-main {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
 }

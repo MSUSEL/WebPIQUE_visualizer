@@ -65,13 +65,12 @@
   gap: 1rem;
   height: auto;
   width: auto;
-  transform: scale(0.9);
   overflow: visible;
 }
 
 .aspect-gauge-item .gauge-score {
-  margin-top: 15px;
   font-size: 17px;
+  margin-top: -20px;
 }
 
 .aspect-gauge-item {
@@ -85,6 +84,7 @@
   text-align: center;
   overflow: visible;
   border: 1px solid rgb(78, 78, 78);
+  transform: scale(0.8);
 }
 
 .aspect-gauge-item svg {
@@ -101,7 +101,7 @@
 }
 
 .aspect-gauge-item:hover {
-  transform: scale(1.05);
+  transform: scale(0.85);
 }
 
 .gauge-title {

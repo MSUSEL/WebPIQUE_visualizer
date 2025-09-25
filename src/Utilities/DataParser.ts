@@ -2,16 +2,253 @@
 // The parser works for TQI and Quality Aspects on other PIQUE outputs
 // Parser is unique to display WebPIQUE product factors...updata Product Factor section for other PIQUE models
 
-// Interfaces for parser
+// ---------------- Relational model (for compact & full) ----------------
+export interface PFRow {
+  id: string;
+  name: string;
+  value: number;
+  description?: string;
+  aspect?: string;
+}
+
+export interface MeasureRow {
+  id: string;
+  name: string;
+  value: number;
+  description?: string;
+  thresholds?: number[];
+  positive?: boolean;
+}
+
+export interface DiagnosticRow {
+  id: string;
+  name: string;
+  toolName?: string;
+  value?: number;
+  description?: string;
+}
+
+export interface PFMeasureEdge {
+  pfId: string;
+  measureId: string;
+  weight?: number;
+}
+
+export interface MeasureDiagnosticEdge {
+  measureId: string;
+  diagnosticId: string;
+}
+
+export interface DiagnosticFinding {
+  diagnosticId: string;
+  id: string;
+  title?: string;
+  alias?: string;
+  description?: string;
+  fixed?: any;
+  vulnSource?: string;
+  vulnSourceVersion?: string;
+  fixedVersion?: string;
+  byTool?: { tool: string; score?: number }[];
+}
+
+export interface RelationalExtract {
+  productFactors: PFRow[];
+  measures: MeasureRow[];
+  diagnostics: DiagnosticRow[];
+  pfMeasures: PFMeasureEdge[];
+  measureDiagnostics: MeasureDiagnosticEdge[];
+  findings: DiagnosticFinding[];
+}
+
+const __isVulnId = (key: string) => /^(?:CVE|GHSA)-/i.test(key);
+
+// Build a unified relational view from a PIQUE JSON file.
+export function buildRelationalExtract(json: any): RelationalExtract {
+  const productFactors: PFRow[] = [];
+  const measures: MeasureRow[] = [];
+  const diagnostics: DiagnosticRow[] = [];
+  const pfMeasures: PFMeasureEdge[] = [];
+  const measureDiagnostics: MeasureDiagnosticEdge[] = [];
+  const findings: DiagnosticFinding[] = [];
+
+  const measuresRoot = (json.measures ?? {}) as Record<string, any>;
+  const diagnosticsRoot = (json.diagnostics ?? {}) as Record<string, any>;
+
+  // indexes to resolve by key OR name
+  const measureIdByName = new Map<string, string>();
+  for (const [mid, m] of Object.entries(measuresRoot)) {
+    const nm = String((m as any)?.name ?? mid).trim();
+    measureIdByName.set(nm, mid);
+    measureIdByName.set(mid, mid);
+  }
+  const diagIdByName = new Map<string, string>();
+  for (const [did, d] of Object.entries(diagnosticsRoot)) {
+    const nm = String((d as any)?.name ?? did).trim();
+    diagIdByName.set(nm, did);
+    diagIdByName.set(did, did);
+  }
+  const resolveMeasureId = (labelOrKey: string) =>
+    measureIdByName.get(labelOrKey) ?? null;
+  const resolveDiagId = (labelOrKey: string) =>
+    diagIdByName.get(labelOrKey) ?? null;
+
+  // ---------------- product_factors -> measures (weights + children) ----------------
+  for (const [pfId, pfObjRaw] of Object.entries(
+    json.factors?.product_factors ?? {}
+  )) {
+    const pfObj = pfObjRaw as any;
+    productFactors.push({
+      id: String(pfId),
+      name: String((pfObj as any)?.name ?? pfId),
+      value: Number((pfObj as any)?.value ?? 0),
+      description: (pfObj as any)?.description ?? "",
+    });
+
+    // PF -> Measure edges from weights (compact)
+    const weights = ((pfObj as any)?.weights ?? {}) as Record<string, number>;
+    for (const [label, w] of Object.entries(weights)) {
+      const mid = resolveMeasureId(label) ?? resolveMeasureId(String(label));
+      if (mid)
+        pfMeasures.push({
+          pfId: String(pfId),
+          measureId: String(mid),
+          weight: Number(w ?? 0),
+        });
+    }
+
+    // PF -> Measure edges from children (full)
+    const childMeasures = ((pfObj as any)?.children ?? {}) as Record<
+      string,
+      any
+    >;
+    for (const [mKey, mObj] of Object.entries(childMeasures)) {
+      const mName = String((mObj as any)?.name ?? mKey);
+      const mid = resolveMeasureId(mKey) ?? resolveMeasureId(mName) ?? mKey;
+      if (mid) {
+        const w = (weights as any)[mKey] ?? (weights as any)[mName] ?? 0;
+        pfMeasures.push({
+          pfId: String(pfId),
+          measureId: String(mid),
+          weight: Number(w ?? 0),
+        });
+      }
+    }
+  }
+
+  // ---------------- measures ----------------
+  for (const [mid, m] of Object.entries(measuresRoot)) {
+    measures.push({
+      id: String(mid),
+      name: String((m as any)?.name ?? mid),
+      value: Number((m as any)?.value ?? 0),
+      description: (m as any)?.description ?? "",
+      thresholds: Array.isArray((m as any)?.thresholds)
+        ? (m as any).thresholds.map(Number)
+        : [],
+      positive: (m as any)?.positive,
+    });
+
+    // For compact JSON: add Measure -> Diagnostic edges from measure.weights
+    const mWeights = ((m as any)?.weights ?? {}) as Record<string, number>;
+    for (const [label] of Object.entries(mWeights)) {
+      const did = resolveDiagId(String(label));
+      if (did) {
+        measureDiagnostics.push({
+          measureId: String(mid),
+          diagnosticId: String(did),
+        });
+      }
+    }
+  }
+
+  // ---------------- diagnostics ----------------
+  for (const [did, d] of Object.entries(diagnosticsRoot)) {
+    diagnostics.push({
+      id: String(did),
+      name: String((d as any)?.name ?? did),
+      toolName: (d as any)?.toolName ?? "",
+      value: Number((d as any)?.value ?? 0),
+      description: (d as any)?.description ?? "",
+    });
+  }
+
+  // ---------------- edges/findings from full JSON children ----------------
+  for (const [_pfId, pfObjRaw] of Object.entries(
+    json.factors?.product_factors ?? {}
+  )) {
+    const pfObj = pfObjRaw as any;
+    const measureChildren = ((pfObj as any)?.children ?? {}) as Record<
+      string,
+      any
+    >;
+    for (const [measureKey, measureObj] of Object.entries(measureChildren)) {
+      const measureName = String((measureObj as any)?.name ?? measureKey);
+      const measureId =
+        resolveMeasureId(measureKey) ??
+        resolveMeasureId(measureName) ??
+        measureKey;
+
+      const diagChildren = (measureObj as any)?.children ?? {};
+      for (const [diagKey, diagObj] of Object.entries(diagChildren)) {
+        const diagName = String((diagObj as any)?.name ?? diagKey);
+        const diagId =
+          resolveDiagId(diagKey) ?? resolveDiagId(diagName) ?? diagKey;
+
+        measureDiagnostics.push({
+          measureId: String(measureId),
+          diagnosticId: String(diagId),
+        });
+
+        const findingChildren = (diagObj as any)?.children ?? {};
+        for (const [findingKey, fObj] of Object.entries(findingChildren)) {
+          if (!__isVulnId(String(findingKey))) continue;
+          findings.push({
+            diagnosticId: String(diagId),
+            id: String((fObj as any)?.name ?? findingKey),
+            title: String(
+              (fObj as any)?.title ??
+                (fObj as any)?.summary ??
+                (fObj as any)?.name ??
+                findingKey
+            ),
+            alias: String((fObj as any)?.alias ?? ""),
+            description: (fObj as any)?.description ?? "",
+            fixed: (fObj as any)?.fixed,
+            vulnSource: (fObj as any)?.vulnSource ?? "",
+            vulnSourceVersion: (fObj as any)?.vulnSourceVersion ?? "",
+            fixedVersion: (fObj as any)?.fixedVersion ?? "",
+            byTool: [
+              {
+                tool: String((diagObj as any)?.toolName ?? diagKey),
+                score: Number((fObj as any)?.value ?? 0),
+              },
+            ],
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    productFactors,
+    measures,
+    diagnostics,
+    pfMeasures,
+    measureDiagnostics,
+    findings,
+  };
+}
+
+// ---------------- High-level score model used by the UI ----------------
 export interface CVEByTool {
-  //this is specific to WebPIQUE
   tool: string;
   score: number;
 }
 
 export interface CVEItem {
-  //this is specific to WebPIQUE
   name: string;
+  alias?: string;
   description?: string;
   fixed?: string;
   vulnSource?: string;
@@ -22,13 +259,11 @@ export interface CVEItem {
 }
 
 export interface ProductFactor {
-  //this is specific to WebPIQUE
   name: string;
   value: number;
-  description: string;
-  type: string;
-  aspect: string;
-  benchmarkSize?: number;
+  description?: string;
+  type?: string;
+  aspect?: string;
   measures: {
     name: string;
     description: string;
@@ -39,43 +274,41 @@ export interface ProductFactor {
   cves: CVEItem[];
 }
 
+export type ProductFactorsByAspect = Record<string, ProductFactor[]>;
+
+export interface VulnerabilitySummary {
+  cveCount: number;
+}
+
 export interface ParsedScore {
   tqiScore: number;
   aspects: { name: string; value: number }[];
   productFactorsByAspect: ProductFactorsByAspect;
-  vulnerabilitySummary?: VulnerabilitySummary; //this is specific to WebPIQUE
-  cweProductFactors?: ProductFactor[]; //this is specific to WebPIQUE
+  vulnerabilitySummary?: VulnerabilitySummary;
+  cweProductFactors?: ProductFactor[];
 }
 
-export interface ProductFactorsByAspect {
-  [aspectName: string]: ProductFactor[];
-}
-
-export interface VulnerabilitySummary {
-  //this is specific to WebPIQUE
-  cveCount: number;
-}
-
-// helper to pull both CVE and GHSA in findings
+// helper for CVE/GHSA
 const isVulnId = (key: string): boolean => /^(?:CVE|GHSA)-/i.test(key);
 
+// ---------------- Main entry ----------------
 export function parsePIQUEJSON(json: any): {
   scores: ParsedScore;
   productFactorsByAspect: ProductFactorsByAspect;
+  relational: RelationalExtract;
 } {
-  //variables for TQI and quality aspect scores, and product factor infomration
   const tqiRaw = json.factors?.tqi;
   const tqiNode = tqiRaw ? Object.values(tqiRaw)[0] : null;
-  const qualityAspectsRaw = json.factors.quality_aspects || {};
-  const productFactorsRaw = json.factors.product_factors || {};
+  const qualityAspectsRaw = json.factors?.quality_aspects || {};
+  const productFactorsRaw = json.factors?.product_factors || {};
 
-  //extract and store TQI score
+  // TQI
   let tqiScore = 0;
   if (tqiNode && typeof (tqiNode as any).value === "number") {
     tqiScore = (tqiNode as any).value;
   }
 
-  //extract and store aspect scores
+  // Aspects
   const aspects = Object.entries(qualityAspectsRaw).map(
     ([aspectName, aspectData]: any) => ({
       name: aspectName,
@@ -83,104 +316,123 @@ export function parsePIQUEJSON(json: any): {
     })
   );
 
-  //extract and store product factor information by aspect
+  // Product factors per aspect (full: children; compact: weights)
   const productFactorsByAspect: ProductFactorsByAspect = {};
   for (const [aspectName, rawData] of Object.entries(qualityAspectsRaw)) {
-    const aspectData = rawData as { value: number; children?: unknown };
-    const children: string[] = Array.isArray(aspectData.children)
-      ? (aspectData.children as string[])
+    const aspect = (rawData ?? {}) as {
+      value?: number;
+      children?: any;
+      weights?: Record<string, number>;
+    };
+    const childArray: string[] = Array.isArray(aspect.children)
+      ? (aspect.children as string[])
       : [];
+    const childObjKeys: string[] =
+      !Array.isArray(aspect.children) &&
+      aspect.children &&
+      typeof aspect.children === "object"
+        ? Object.keys(aspect.children as Record<string, any>)
+        : [];
+    const weightKeys = Object.keys(
+      (aspect.weights ?? {}) as Record<string, number>
+    );
+    const pfKeys: string[] = childArray.length
+      ? childArray
+      : childObjKeys.length
+      ? childObjKeys
+      : weightKeys;
+
     const pfList: ProductFactor[] = [];
-
-    for (const pfKey of children) {
-      const pfName = pfKey as string;
-      const pfData = productFactorsRaw[pfName];
-      if (pfData) {
-
-        pfList.push({
-          name: pfName as string,
-          aspect: aspectName,
-        } as any);
-      }
+    for (const pfKey of pfKeys) {
+      const pfData = (productFactorsRaw as any)[pfKey];
+      if (!pfData) continue;
+      pfList.push({
+        name: String(pfData?.name ?? pfKey),
+        value: Number(pfData?.value ?? 0),
+        description: pfData?.description ?? "",
+        measures: [],
+        cves: [],
+      });
     }
-
     productFactorsByAspect[aspectName] = pfList;
   }
 
-  //extract CWE product factors, specific to WebPIQUE
+  // CWE-product-factors (for legacy Security views)
   const cweProductFactors: ProductFactor[] = [];
-
-  for (const [key, pfDataRaw] of Object.entries(
-    json.factors?.product_factors || {}
-  )) {
+  for (const [key, pfDataRaw] of Object.entries(productFactorsRaw)) {
     const pfData = pfDataRaw as any;
+    if (!(key.startsWith("Product_Factor") || key.startsWith("Pillar")))
+      continue;
     const weightsMap = (pfData?.weights ?? {}) as Record<string, number>;
 
-    if (key.startsWith("Product_Factor")) {
-      const children = pfData.children;
-      const measures: {
-        name: string;
-        description: string;
-        score: number;
-        threshold: number[];
-        weight: number;
-      }[] = [];
+    const measures: {
+      name: string;
+      description: string;
+      score: number;
+      threshold: number[];
+      weight: number;
+    }[] = [];
 
-      if (children && typeof children === "object") {
-        for (const [measureKey, measureObj] of Object.entries(children)) {
-          if (typeof measureObj === "object" && measureObj !== null) {
-            const m = measureObj as any;
-
-            // weight lookup by key, then by name (covers both common JSON shapes)
-            const weight = Number(
-              weightsMap[measureKey] ?? weightsMap[m.name] ?? 0
-            );
-
-            measures.push({
-              name: (measureObj as any).name ?? measureKey,
-              description: (measureObj as any).description ?? "",
-              score: (measureObj as any).value ?? 0,
-              weight,
-              threshold: Array.isArray((measureObj as any).thresholds)
-                ? (measureObj as any).thresholds.map(Number)
-                : [],
-            });
-          }
-        }
+    const children = pfData.children;
+    if (children && typeof children === "object") {
+      for (const [measureKey, measureObj] of Object.entries(children)) {
+        const m = measureObj as any;
+        const weight = Number(
+          weightsMap[measureKey] ?? weightsMap[m?.name] ?? 0
+        );
+        measures.push({
+          name: String(m?.name ?? measureKey),
+          description: String(m?.description ?? ""),
+          score: Number(m?.value ?? 0),
+          weight,
+          threshold: Array.isArray(m?.thresholds)
+            ? m.thresholds.map(Number)
+            : [],
+        });
       }
+    } else {
+      // compact: derive measure list from global measures using PF->Measure edges
+      for (const [mKey, w] of Object.entries(weightsMap)) {
+        const m = (json.measures ?? {})[mKey] ?? {};
+        measures.push({
+          name: String((m as any)?.name ?? mKey),
+          description: String((m as any)?.description ?? ""),
+          score: Number((m as any)?.value ?? 0),
+          weight: Number(w ?? 0),
+          threshold: Array.isArray((m as any)?.thresholds)
+            ? (m as any).thresholds.map(Number)
+            : [],
+        });
+      }
+    }
 
-      //extract CVE, specific to WebPIQUE
-      const cveMap = new Map<string, CVEItem>();
-
-      for (const measureObj of Object.values(pfData.children ?? {})) {
+    // CVEs (only present in full JSON under measure.children)
+    const cveMap = new Map<string, CVEItem>();
+    if (children && typeof children === "object") {
+      for (const measureObj of Object.values(children ?? {})) {
         if (!measureObj || typeof measureObj !== "object") continue;
-
         for (const [diagKey, diagObj] of Object.entries(
           (measureObj as any).children ?? {}
         )) {
-          const diag = diagObj as any;
-          const tool = diag?.toolName ?? diagKey; // Grype / Trivy / etc.
-
+          const tool = (diagObj as any)?.toolName ?? diagKey;
           for (const [findingKey, findingObj] of Object.entries(
-            diag?.children ?? {}
+            (diagObj as any).children ?? {}
           )) {
             if (!isVulnId(findingKey)) continue;
-
             const f = findingObj as any;
             const name = f.name ?? findingKey;
-
-            // get CVE item
             let item = cveMap.get(name);
             if (!item) {
               item = {
                 name,
+                alias: f.alias ?? "",
                 description: f.description ?? "",
                 fixed:
                   f.fixed === true || f.fixed === "true" || f.fixed === "fixed"
                     ? "Fixed"
                     : f.fixed === false || f.fixed === "false"
-                      ? "Not fixed"
-                      : f.fixed || "Not fixed", //set fixed status to either "Fixed" or "Not fixed"
+                    ? "Not fixed"
+                    : f.fixed || "Not fixed",
                 vulnSource: f.vulnSource ?? "",
                 vulnSourceVersion: f.vulnSourceVersion ?? "",
                 fixedVersion: f.fixedVersion ?? "",
@@ -189,74 +441,43 @@ export function parsePIQUEJSON(json: any): {
               };
               cveMap.set(name, item);
             }
-
-            item.byTool.push({
-              tool,
-              score: Number(f.value ?? 0),
-            });
+            item.byTool.push({ tool, score: Number(f.value ?? 0) });
           }
         }
       }
-
-      let benchmarkSize = 0;
-      for (const m of measures) {
-        if (Array.isArray(m.threshold) && m.threshold.length) {
-          benchmarkSize = m.threshold.length;
-          break;
-        }
-      }
-
-      // log mismatches if thresholds aren’t consistent
-      const mismatch = measures.some(
-        (m) =>
-          (m.threshold?.length ?? 0) !== 0 &&
-          (m.threshold?.length ?? 0) !== benchmarkSize
-      );
-      if (mismatch)
-        console.warn("Inconsistent threshold lengths under PF", key);
-
-      cweProductFactors.push({
-        name: key,
-        value: pfData.value ?? 0,
-        description: pfData.description ?? "",
-        measures,
-        type: "CWE",
-        aspect: "",
-        cves: Array.from(cveMap.values()),
-        benchmarkSize,
-      });
     }
+
+    cweProductFactors.push({
+      name: key,
+      value: Number(pfData?.value ?? 0),
+      description: pfData?.description ?? "",
+      measures,
+      type: "CWE",
+      aspect: "",
+      cves: Array.from(cveMap.values()),
+    });
   }
 
-
-  // Recursively traverse diagnostics to extract CVEs
+  // vuln summary
   function collectVulnIds(obj: any): Set<string> {
     const found = new Set<string>();
+    if (!obj) return found;
     const stack = [obj];
-
-    while (stack.length > 0) {
-      const current = stack.pop();
-      if (!current || typeof current !== "object") continue;
-
-      for (const [key, value] of Object.entries(current)) {
-        // OLD: if (key.startsWith("CVE-")) { found.add(key); }  // :contentReference[oaicite:5]{index=5}
-        if (isVulnId(key)) {
-          found.add(key);
-        } else if (typeof value === "object") {
-          stack.push(value);
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur && typeof cur === "object") {
+        for (const [key, value] of Object.entries(cur)) {
+          if (__isVulnId(key)) found.add(key);
+          if (value && typeof value === "object") stack.push(value);
         }
       }
     }
-
     return found;
   }
+  const cveCount = collectVulnIds(json.factors?.product_factors || {}).size;
 
-  const allVulnIds = collectVulnIds(json.factors?.product_factors || {});
-  const cveCount = allVulnIds.size;
-
-  const vulnerabilitySummary = {
-    cveCount,
-  };
+  const relational = buildRelationalExtract(json);
+  const vulnerabilitySummary = { cveCount };
 
   return {
     scores: {
@@ -267,5 +488,6 @@ export function parsePIQUEJSON(json: any): {
       cweProductFactors,
     },
     productFactorsByAspect,
+    relational,
   };
 }

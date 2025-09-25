@@ -1,0 +1,12 @@
+.project-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.project-main {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

@@ -57,9 +57,7 @@ const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
       }}
       value={value}
       maxValue={1}
-      style={{
-        transform: title === "TQI Score" ? "scale(0.95)" : "scale(0.9)",
-      }}
+      style={{ width: 220, height: 140 }}
     />
     <div className="gauge-score">Current score: {value.toFixed(4)}</div>
   </div>
