@@ -1,12 +1,126 @@
-.project-layout {
-    display: flex;
-    min-height: 100vh;
+/* ProjectPage styling */
+/* Layout shell for the page */
+.project-page .project-layout {
+  display: flex;
+  min-height: 100vh;
 }
 
-.project-main {
-    flex: 1;
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+/* ensure the main column hugs the top-left (not centered) */
+.project-page .project-main {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start; /* top */
+  justify-content: flex-start; /* left */
+  margin-top: 80px;
+}
+
+/* Compact two-column row: chart (flexible) | files (fixed width) */
+.project-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 520px; /* chart | file box */
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+}
+
+/* Make sure grid children don't overflow */
+.project-plot,
+.project-files {
+  min-width: 0;
+}
+
+.project-plot {
+  width: 800px;
+}
+
+.project-files {
+  margin-left: -50px;
+}
+
+/* ----- File panel list ----- */
+
+.project-files .file-box {
+  border: 1px solid var(--muted-border, #ccc);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  width: 520px;
+}
+
+/* One column by default */
+.project-files .file-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 10px;
+  row-gap: 6px;
+  width: 100%;
+}
+
+/* Switch to two columns when there are > 6 files */
+.project-files .file-list.two-col {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Each row */
+.project-files .file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  min-width: 0;
+}
+
+/* Highlighted selection */
+.project-files .file-row.selected {
+  background: rgba(59, 130, 246, 0.12);
+  font-weight: 600;
+}
+
+/* Ellipsis for long names */
+.project-files .file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-panel {
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  min-height: 280px;
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+  padding: 8px;
+  resize: vertical;
+}
+
+.sashRenderDots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sashRenderDots span {
+  width: 900px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--muted-border, #bbb);
+  margin-left: 700px;
+  background: #75aedd;
+}
+/* hover / active state */
+.sashRenderDots:hover,
+.sashRenderDots.is-active {
+  background: #005a9e;
+}
+.detail-view {
+  margin-top: -20px;
+  height: 100%;
+  overflow: auto;
 }

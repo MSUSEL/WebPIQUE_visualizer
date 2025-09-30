@@ -1,6 +1,6 @@
 // project sidebar - allows user to create project and add files
 import CIcon from "@coreui/icons-react";
-import { cilListRich, cilAccountLogout, cilPlus } from "@coreui/icons";
+import { cilListRich, cilPlus, cilTrash } from "@coreui/icons";
 import "../../styles/ProjectSidebar.css";
 
 export type Project = { id: string; name: string };
@@ -12,7 +12,7 @@ export default function ProjectSidebar({
   filesByProject,
   onAddProject,
   onSelectProject,
-  onLogout,
+  onRemoveProject,
 }: {
   projects: Project[];
   activeProjectId: string | null;
@@ -20,6 +20,7 @@ export default function ProjectSidebar({
   onAddProject: () => void;
   onSelectProject: (id: string) => void;
   onLogout?: () => void;
+  onRemoveProject: (id: string) => void;
 }) {
   return (
     <aside className="simple-sidebar">
@@ -48,7 +49,6 @@ export default function ProjectSidebar({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log("open dialog");
                 onAddProject();
               }}
             >
@@ -64,6 +64,12 @@ export default function ProjectSidebar({
                 <li
                   key={p.id}
                   className={p.id === activeProjectId ? "active" : undefined}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                  }}
                 >
                   <span
                     className="project-name"
@@ -74,28 +80,49 @@ export default function ProjectSidebar({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") onSelectProject(p.id);
                     }}
+                    style={{
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
                   >
                     {p.name}
                   </span>
 
-                  {filesByProject?.[p.id]?.length ? (
-                    <ul className="group-list nested">
-                      {filesByProject[p.id].map((f) => (
-                        <li key={`${p.id}::${f.fileName}`} className="muted">
-                          • {f.fileName}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${p.name}`}
+                    title="Remove project"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onRemoveProject(p.id);
+                    }}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      padding: 2,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <CIcon className="icon" icon={cilTrash} />
+                  </button>
                 </li>
               ))
             )}
           </ul>
         </div>
-
-        <button className="item logout-link" onClick={onLogout}>
-          <CIcon className="icon" icon={cilAccountLogout} /> Logout
+        {/*
+        <button
+          className="item logout-link"
+          onClick={() => {
+            navigate("/"); // go to LandingPage ("/")
+          }}
+        >
+          <CIcon className="icon" icon={cilAccountLogout} /> Home
         </button>
+        */}
       </nav>
     </aside>
   );
