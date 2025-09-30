@@ -1,7 +1,7 @@
 // component to display scores with gauges under header
 import GaugeComponent from "react-gauge-component";
-import "../styles/ScoreGauges.css";
-import { ParsedScore } from "../Utilities/DataParser";
+import "../../styles/ScoreGauges.css";
+import { ParsedScore } from "../../Utilities/DataParser";
 
 interface ScoreGaugesProps {
   scores: ParsedScore;

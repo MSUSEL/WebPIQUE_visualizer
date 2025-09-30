@@ -1,4 +1,5 @@
 // project file loader; compresses raw json files and uncompresses on render when needed
+// project file loader; compresses raw json files and uncompresses on render when needed
 import { useEffect, useMemo, useRef, useState } from "react";
 import LZString from "lz-string";
 import { parseTQIQAScores } from "../../Utilities/TQIQAScoreParser";
@@ -12,8 +13,9 @@ export type ProjectFileScore = {
   fileDateISO: string; // lastModified ISO
   tqi: number | null;
   aspects: AspectItem[];
-  /* raw parsed JSON, used by Single/Compare viewers (inflated on demand) */
+  rawKey?: string;
   raw?: any;
+  needsRaw?: boolean;
 };
 
 export type ViewMode = "single" | "compare";
@@ -22,14 +24,12 @@ const MAX_FILES = 12;
 const GENERIC_SCHEMA_MSG =
   "This file doesn’t match the supported schema. Please refer to the documentation.";
 
-/* small helpers */
 const toNum = (v: any): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
 const isObj = (x: any) => x && typeof x === "object" && !Array.isArray(x);
 
-/* quick input-schema sanity check (same shape you already accept) */
 function validateSchema(root: any): boolean {
   if (!isObj(root)) return false;
   const hasFactors = isObj(root.factors);
@@ -46,18 +46,19 @@ function validateSchema(root: any): boolean {
 }
 
 /* compressed raw helpers (UTF16-friendly for localStorage) */
-function saveCompressedRaw(id: string, json: any) {
+function saveCompressedRawViaKey(rawKey: string, json: any) {
   try {
     const txt = JSON.stringify(json);
     const comp = LZString.compressToUTF16(txt);
-    localStorage.setItem(`raw:${id}`, comp);
+    localStorage.setItem(rawKey, comp);
   } catch {
     /* ignore */
   }
 }
-function loadCompressedRaw(id: string): any | undefined {
+function loadCompressedRawViaKey(rawKey?: string): any | undefined {
+  if (!rawKey) return undefined;
   try {
-    const comp = localStorage.getItem(`raw:${id}`);
+    const comp = localStorage.getItem(rawKey);
     if (!comp) return undefined;
     const txt = LZString.decompressFromUTF16(comp);
     if (!txt) return undefined;
@@ -76,7 +77,6 @@ export default function ProjectFileLoad({
   onSelectionChange,
   viewMode: controlledMode,
   onViewModeChange,
-  /* notify parent with viewer payload + current selection */
   onViewerPayload,
 }: {
   projectId: string | null;
@@ -99,91 +99,116 @@ export default function ProjectFileLoad({
   const mode: ViewMode = controlledMode ?? localMode[0];
   const setLocalMode = localMode[1];
 
-  /* load any persisted files for this project, inflate raw if available */
+  /* HYDRATE + MIGRATE */
   useEffect(() => {
     if (!projectId) return;
     const saved = localStorage.getItem(`wp_project_files:${projectId}`);
     if (saved) {
-      const rawList = JSON.parse(saved) as ProjectFileScore[];
+      type Legacy = ProjectFileScore & {
+        raw?: unknown;
+        rawKey?: string;
+        needsRaw?: boolean;
+      };
+      const list = JSON.parse(saved) as Legacy[];
 
-      const arr: ProjectFileScore[] = rawList.map((s) => {
-        const maybeRaw = loadCompressedRaw(s.id);
-        return maybeRaw ? { ...s, raw: maybeRaw } : s;
+      const migrated: ProjectFileScore[] = list.map((s) => {
+        let rawKey = s.rawKey; // keep if present
+        if (s.raw !== undefined) {
+          const candidateKey = `raw:${s.id}`;
+          try {
+            saveCompressedRawViaKey(candidateKey, s.raw);
+          } catch {}
+          rawKey = candidateKey;
+          const { raw, ...rest } = s as any;
+          s = rest;
+        }
+        if (!rawKey) {
+          const candidateKey = `raw:${s.id}`;
+          if (localStorage.getItem(candidateKey)) {
+            rawKey = candidateKey;
+          }
+        }
+        const needsRaw = !rawKey || !localStorage.getItem(rawKey);
+
+        return {
+          ...s,
+          rawKey,
+          needsRaw,
+        };
       });
 
-      arr.sort(
+      // sort and persist back (without legacy inline raw)
+      migrated.sort(
         (a, b) =>
           new Date(a.fileDateISO).getTime() - new Date(b.fileDateISO).getTime()
       );
 
-      setScores(arr);
+      setScores(migrated);
+      localStorage.setItem(
+        `wp_project_files:${projectId}`,
+        JSON.stringify(migrated)
+      );
     } else {
       setScores([]);
     }
+
     setSelected(new Set());
     setHydrated(true);
   }, [projectId]);
 
-  /* persist changes + notify parent with current file list; ensure compressed raw exists for items that carry raw in memory */
+  /* BUBBLE UP SCORES TO PARENT */
   useEffect(() => {
-    if (!projectId || !hydrated) return;
+    if (projectId && hydrated) onScores(projectId, scores);
+  }, [projectId, hydrated, scores, onScores]);
 
-    localStorage.setItem(
-      `wp_project_files:${projectId}`,
-      JSON.stringify(scores)
-    );
-
-    // make sure compressed copies exist when raw is present in memory
-    for (const s of scores) {
-      if (s.raw != null && !localStorage.getItem(`raw:${s.id}`)) {
-        saveCompressedRaw(s.id, s.raw);
-      }
-    }
-
-    onScores(projectId, scores);
-  }, [projectId, scores, onScores, hydrated]);
-
-  /* whenever selection changes, bubble up + resolve viewer payload (inflate raw on demand if missing) */
+  /* SELECTION -> VIEWER PAYLOAD (inflate via rawKey) */
   useEffect(() => {
     const ids = Array.from(selected);
     onSelectionChange?.(ids);
 
-    const ensureRaw = (id?: string): UploadPayload | undefined => {
-      if (!id) return undefined;
-      const idx = scores.findIndex((s) => s.id === id);
-      if (idx < 0) return undefined;
-      const row = scores[idx];
+    const build = (id?: string) => {
+      const row = scores.find((s) => s.id === id);
+      if (!row) return undefined;
 
-      // if missing raw in memory, inflate from compressed store now
-      let raw = row.raw;
-      if (raw == null) {
-        raw = loadCompressedRaw(row.id);
-        if (raw != null) {
-          setScores((prev) => {
-            const copy = [...prev];
-            copy[idx] = { ...copy[idx], raw };
-            return copy;
-          });
-        }
+      const fileMillis = Date.parse(row.fileDateISO);
+      const candidates = [
+        row.rawKey,
+        `raw:${row.id}`,
+        Number.isFinite(fileMillis)
+          ? `raw:${row.fileName}-${fileMillis}`
+          : undefined,
+      ].filter(Boolean) as string[];
+
+      let data: any | undefined;
+      let usedKey: string | undefined;
+
+      for (const key of candidates) {
+        const comp = localStorage.getItem(key);
+        if (!comp) continue;
+        const txt = LZString.decompressFromUTF16(comp);
+        if (!txt) continue;
+        try {
+          data = JSON.parse(txt);
+          usedKey = key;
+          break;
+        } catch {}
       }
-      if (raw == null) return undefined;
-      return { filename: row.fileName, data: raw };
+
+      if (!data) return undefined;
+      return { filename: row.fileName, data };
     };
 
     if (mode === "single") {
-      const only = ids[0];
-      onViewerPayload?.({ mode: "single", file: ensureRaw(only) }, ids);
+      onViewerPayload?.({ mode: "single", file: build(ids[0]) }, ids);
     } else {
-      const a = ids[0];
-      const b = ids[1];
       onViewerPayload?.(
-        { mode: "compare", file1: ensureRaw(a), file2: ensureRaw(b) },
+        { mode: "compare", file1: build(ids[0]), file2: build(ids[1]) },
         ids
       );
     }
   }, [selected, scores, mode, onSelectionChange, onViewerPayload]);
 
-  /* handlers */
+  /* IMPORT: write compressed immediately and persist rawKey */
   async function handleFiles(fileList: FileList | null) {
     if (!projectId || !fileList) return;
     const files = Array.from(fileList);
@@ -214,7 +239,6 @@ export default function ProjectFileLoad({
           return;
         }
 
-        // fast extract for plot
         const out: any = parseTQIQAScores(json);
         const tqi =
           toNum(out?.tqi) ??
@@ -237,19 +261,21 @@ export default function ProjectFileLoad({
             })
           : [];
 
-        const id = crypto.randomUUID();
+        const id = `${file.name}-${file.lastModified}`;
+        const rawKey = `raw:${id}`;
 
-        // write compressed raw immediately so future sessions can inflate it
-        saveCompressedRaw(id, json);
+        // write compressed raw immediately
+        saveCompressedRawViaKey(rawKey, json);
 
         parsed.push({
           id,
+          rawKey,
           fileName: file.name,
           fileDateISO: new Date(file.lastModified).toISOString(),
           tqi,
           aspects,
-          raw: json, // keep in-memory so viewers work right away
-        });
+          needsRaw: false,
+        } as ProjectFileScore);
       }
 
       parsed.sort(
@@ -258,27 +284,23 @@ export default function ProjectFileLoad({
       );
 
       setScores(parsed.slice(0, MAX_FILES));
-      setSelected(new Set()); // clear selection after (re)load
+      setSelected(new Set()); // clear selection after load
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
   }
 
-  /* toggle with selection cap (1 in single mode, 2 in compare mode) */
+  /* toggle with selection cap */
   function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
+      if (next.has(id)) next.delete(id);
+      else {
         if (mode === "single") {
           next.clear();
           next.add(id);
         } else {
-          if (next.size >= 2) {
-            const first = Array.from(next)[0];
-            next.delete(first);
-          }
+          if (next.size >= 2) next.delete(Array.from(next)[0]);
           next.add(id);
         }
       }
@@ -286,7 +308,6 @@ export default function ProjectFileLoad({
     });
   }
 
-  /* derived rendering bits */
   const twoCol = scores.length > 6;
   const sorted = useMemo(() => {
     const copy = [...scores];
@@ -342,6 +363,14 @@ export default function ProjectFileLoad({
               Compare Two Files
             </button>
           </div>
+
+          {/* NEW: a short hint for the active mode */}
+          <div className="muted" style={{ marginTop: 8 }}>
+            {mode === "single"
+              ? "Select one file to view file information."
+              : "Two file comparison is currently inactive while we finish a fix. Please select 'Compare' from the menu to compare two files."}{" "}
+            {/*"Select two files to view a comparison between file information. */}
+          </div>
         </div>
 
         <hr />
@@ -375,6 +404,14 @@ export default function ProjectFileLoad({
                   >
                     {label}
                   </span>
+                  {s.needsRaw && (
+                    <span
+                      title="Compressed data missing — re-import this file once."
+                      style={{ marginLeft: 6, color: "#b45309" }}
+                    >
+                      (re-import)
+                    </span>
+                  )}
                 </li>
               );
             })}

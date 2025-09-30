@@ -1,7 +1,7 @@
 //react class for landing page (page 1)
 import Header from "../components/headerfooter/Header";
 import Footer from "../components/headerfooter/Footer";
-import FileUpload from "../components/FileUpload";
+import FileUpload from "../components/headerfooter/FileUpload";
 import "../styles/Pages.css";
 
 const LandingPage = () => {

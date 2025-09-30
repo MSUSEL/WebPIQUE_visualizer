@@ -151,7 +151,7 @@ export default function TQIQAPlot({
                 }
                 tick={{ fontSize: 12 }}
                 label={{
-                  value: "Date",
+                  value: "File Date",
                   position: "bottom",
                   offset: 4,
                   style: {

@@ -1,30 +1,29 @@
 /* ProjectPage styling */
-/* Layout shell for the page */
+
+/* --- Layout shell --- */
 .project-page .project-layout {
   display: flex;
-  min-height: 100vh;
 }
 
-/* ensure the main column hugs the top-left (not centered) */
 .project-page .project-main {
   flex: 1;
   padding: 24px;
   display: flex;
-  align-items: flex-start; /* top */
-  justify-content: flex-start; /* left */
-  margin-top: 80px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  margin-top: 80px; /* matches your header spacing */
 }
 
-/* Compact two-column row: chart (flexible) | files (fixed width) */
+/* --- Top row: chart (flex) | files (fixed) --- */
 .project-two-col {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 520px; /* chart | file box */
+  grid-template-columns: minmax(0, 1fr) 720px; /* chart | file box */
   gap: 16px;
   align-items: start;
   width: 100%;
 }
 
-/* Make sure grid children don't overflow */
+/* Ensure grid children don't overflow */
 .project-plot,
 .project-files {
   min-width: 0;
@@ -34,12 +33,7 @@
   width: 800px;
 }
 
-.project-files {
-  margin-left: -50px;
-}
-
-/* ----- File panel list ----- */
-
+/* --- File panel --- */
 .project-files .file-box {
   border: 1px solid var(--muted-border, #ccc);
   border-radius: 8px;
@@ -48,24 +42,21 @@
   width: 520px;
 }
 
-/* One column by default */
 .project-files .file-list {
   list-style: none;
   margin: 0;
   padding-left: 0;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr; /* one column by default */
   column-gap: 10px;
   row-gap: 6px;
   width: 100%;
 }
 
-/* Switch to two columns when there are > 6 files */
 .project-files .file-list.two-col {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr; /* two columns when > 6 files */
 }
 
-/* Each row */
 .project-files .file-row {
   display: flex;
   align-items: center;
@@ -74,13 +65,11 @@
   min-width: 0;
 }
 
-/* Highlighted selection */
 .project-files .file-row.selected {
   background: rgba(59, 130, 246, 0.12);
   font-weight: 600;
 }
 
-/* Ellipsis for long names */
 .project-files .file-name {
   flex: 1;
   min-width: 0;
@@ -89,38 +78,68 @@
   white-space: nowrap;
 }
 
-.detail-panel {
-  margin-top: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
-  min-height: 280px;
-  max-height: calc(100vh - 240px);
+/* --- Bottom viewer pane --- */
+.detail-view {
+  height: 100%;
   overflow: auto;
-  padding: 8px;
-  resize: vertical;
+  background: #fff;
 }
 
-.sashRenderDots {
+/* Start message (no project) */
+.start_message {
+  margin: auto;
+  text-align: center;
+}
+
+/* --- SplitPane sash (horizontal) --- */
+.project-sashRenderDots {
+  position: relative;
+  height: 8px;
+  width: 70%;
+  margin: 0 auto;
+  left: 35%;
+  transform: translateX(-50%);
+  cursor: row-resize;
+  background: #75aedd;
+  border-radius: 9999px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.sashRenderDots span {
-  width: 900px;
-  height: 7px;
-  border-radius: 4px;
-  background: var(--muted-border, #bbb);
-  margin-left: 700px;
-  background: #75aedd;
+
+/* three dots */
+.project-sashRenderDots::before,
+.project-sashRenderDots::after,
+.project-sashRenderDots span {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
 }
-/* hover / active state */
-.sashRenderDots:hover,
-.sashRenderDots.is-active {
+
+/* left / middle / right dots */
+.project-sashRenderDots::before {
+  left: 48%;
+}
+.project-sashRenderDots span {
+  left: 50%;
+}
+.project-sashRenderDots::after {
+  left: 52%;
+}
+
+/* hover */
+.project-sashRenderDots:hover,
+.project-sashRenderDots.is-active {
   background: #005a9e;
 }
-.detail-view {
-  margin-top: -20px;
-  height: 100%;
-  overflow: auto;
+
+/* icon (used in empty state prompt) */
+.project-icon {
+  width: 20px;
+  height: 20px;
 }

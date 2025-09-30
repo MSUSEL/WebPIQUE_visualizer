@@ -1,10 +1,10 @@
 // page to display single PIQIUE output file (page 2)
 import React, { useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import ScoreGauges from "./ScoreGauges";
-import ProductFactorTabs from "./tabs/ProductFactorTabs";
-import { parsePIQUEJSON, RelationalExtract } from "../Utilities/DataParser";
-import { DiffHints } from "../Utilities/fileDiff";
+import ScoreGauges from "../plotting/ScoreGauges";
+import ProductFactorTabs from "../tabs/ProductFactorTabs";
+import { parsePIQUEJSON, RelationalExtract } from "../../Utilities/DataParser";
+import { DiffHints } from "../../Utilities/fileDiff";
 
 // Jotai
 import { useAtomValue, useSetAtom } from "jotai";
@@ -17,7 +17,7 @@ import {
   cweBucketAtom,
   fixedFilterAtom,
   SecTabName,
-} from "../state/visualAtoms";
+} from "../../state/visualAtoms";
 
 type Props = {
   jsonData?: any;

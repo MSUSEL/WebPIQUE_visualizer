@@ -1,4 +1,4 @@
-import CompareComponent from "../components/CompareComponent";
+import CompareComponent from "../components/nonProject/CompareComponent";
 import Header from "../components/headerfooter/Header";
 import Footer from "../components/headerfooter/Footer";
 import "../styles/Pages.css";

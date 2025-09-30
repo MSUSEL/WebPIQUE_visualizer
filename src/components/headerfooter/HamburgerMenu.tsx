@@ -2,7 +2,7 @@
 import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import Hamburger from "hamburger-react";
 import { useNavigate } from "react-router-dom";
-import FileUpload from "../FileUpload";
+import FileUpload from "../headerfooter/FileUpload";
 //import { login, signup } from "../../Utilities/Authorization";
 import "../../styles/HamburgerMenuStyle.css";
 
@@ -26,11 +26,9 @@ const HamburgerMenu: React.FC = () => {
   const loginRowRef = useRef<HTMLDivElement>(null);
 
   // authorization component handler
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleCompare = () => {
     if (!leftJson || !rightJson) return;
@@ -67,8 +65,6 @@ const HamburgerMenu: React.FC = () => {
     if (!isOpen || !showLogin) {
       setUsername("");
       setPassword("");
-      setAuthError(null);
-      setAuthMode("login");
       setAuthLoading(false);
     }
   }, [isOpen, showLogin]);

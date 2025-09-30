@@ -12,28 +12,19 @@ import ProjectFileLoad, {
 import TQIQAPlot from "../components/plotting/TQIQAPlot";
 import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 
-import SingleFileComponent from "../components/SingleFileComponent";
-import CompareComponent from "../components/CompareComponent";
+import SingleFileComponent from "../components/nonProject/SingleFileComponent";
+import CompareComponent from "../components/nonProject/CompareComponent";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import "split-pane-react/esm/themes/default.css";
-import LZString from "lz-string";
 
 import "../styles/Pages.css";
 import "../styles/ProjectViewStyle.css";
+import CIcon from "@coreui/icons-react";
+import { cilPlus } from "@coreui/icons";
 
-// helper for compressed file load
-function loadCompressedRaw(id: string): any | undefined {
-  try {
-    const comp = localStorage.getItem(`raw:${id}`);
-    if (!comp) return undefined;
-    const txt = LZString.decompressFromUTF16(comp);
-    if (!txt) return undefined;
-    return JSON.parse(txt);
-  } catch {
-    return undefined;
-  }
-}
+// helper for compressed file load (wrapper we pass through)
+type UploadPayload = { filename: string; data: any };
 
 export default function ProjectView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -47,6 +38,30 @@ export default function ProjectView() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [rowSizes, setRowSizes] = useState<number[]>([65, 35]);
+
+  function ErrorBoundary(props: { children: React.ReactNode }) {
+    const [err, setErr] = useState<Error | null>(null);
+    // minimal boundary via try/catch-wrapper render:
+    // (If you prefer a class boundary, you can swap it in.)
+    if (err) {
+      return (
+        <div style={{ padding: 16 }}>
+          <h4>Viewer error</h4>
+          <pre style={{ whiteSpace: "pre-wrap" }}>
+            {String(err.message || err)}
+          </pre>
+          <div className="muted">See console for stack trace.</div>
+        </div>
+      );
+    }
+    try {
+      return <>{props.children}</>;
+    } catch (e: any) {
+      console.error("Viewer crashed:", e);
+      setErr(e);
+      return null;
+    }
+  }
 
   // ---------- load/save projects ----------
   useEffect(() => {
@@ -85,6 +100,20 @@ export default function ProjectView() {
       )
     )
       return;
+
+    // remove any compressed raws for the project files
+    const files = filesByProject[id] ?? [];
+    for (const f of files) {
+      const key = f.rawKey ?? `raw:${f.id}`;
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    }
+
+    localStorage.removeItem(`wp_project_files:${id}`);
+    // drop the scores list for this project
+    localStorage.removeItem(`wp_project_files:${id}`);
+
     const nextProjects = projects.filter((p) => p.id !== id);
     setProjects(nextProjects);
     setFilesByProject((prev) => {
@@ -92,54 +121,27 @@ export default function ProjectView() {
       delete copy[id];
       return copy;
     });
-    localStorage.removeItem(`wp_project_files:${id}`);
     setActiveProjectId((curr) =>
       curr === id ? nextProjects[0]?.id ?? null : curr
     );
   }
 
-  // ---------- derive viewer payloads from selection + files ----------
-  const selectedFiles = useMemo(
-    () => activeFiles.filter((f) => selectedIds.includes(f.id)),
-    [activeFiles, selectedIds]
-  );
+  // ---------- viewer payloads (from loader) ----------
+  const [singlePayload, setSinglePayload] = useState<
+    UploadPayload | undefined
+  >();
+  const [comparePayload, setComparePayload] = useState<
+    { file1?: UploadPayload; file2?: UploadPayload } | undefined
+  >();
 
-  const getRaw = (f?: ProjectFileScore) =>
-    f?.raw ?? (f ? loadCompressedRaw(f.id) : undefined);
-
-  const singlePayload = useMemo(() => {
-    if (viewMode !== "single" || selectedFiles.length < 1) return undefined;
-    const f = selectedFiles[0];
-    const raw = getRaw(f);
-    return raw ? { filename: f.fileName, data: raw } : undefined;
-  }, [viewMode, selectedFiles]);
-
-  const comparePayload = useMemo(() => {
-    if (viewMode !== "compare" || selectedFiles.length !== 2) return undefined;
-    const [a, b] = selectedFiles;
-    const ra = getRaw(a);
-    const rb = getRaw(b);
-    return ra && rb
-      ? {
-          file1: { filename: a.fileName, data: ra },
-          file2: { filename: b.fileName, data: rb },
-        }
-      : undefined;
-  }, [viewMode, selectedFiles]);
-
+  // render sash only if a valid selection exists
   const hasSelection = useMemo(() => {
-    if (viewMode === "single") return selectedFiles.length === 1;
-    if (viewMode === "compare") return selectedFiles.length === 2;
+    if (viewMode === "single") return selectedIds.length === 1;
+    if (viewMode === "compare") return selectedIds.length === 2;
     return false;
-  }, [viewMode, selectedFiles]);
+  }, [viewMode, selectedIds]);
 
-  // split pane sizing and collapse
-  const isCollapsed = useMemo(() => !hasSelection, [hasSelection]);
-  const effectiveSizes = isCollapsed ? [100, 0] : rowSizes;
-
-  useEffect(() => {
-    if (!isCollapsed && rowSizes[1] === 0) setRowSizes([65, 35]);
-  }, [isCollapsed, rowSizes]);
+  const effectiveSizes = hasSelection ? rowSizes : [100, 0];
 
   // ---------- render ----------
   return (
@@ -174,13 +176,16 @@ export default function ProjectView() {
                 split="horizontal"
                 sizes={effectiveSizes}
                 onChange={setRowSizes}
-                sashRender={() => (
-                  <div className="sashRenderDots">
-                    <span />
-                  </div>
-                )}
-                style={{ height: "calc(100vh - 140px)" }}
+                sashRender={() =>
+                  hasSelection ? (
+                    <div className="project-sashRenderDots">
+                      <span />
+                    </div>
+                  ) : null
+                }
+                style={{ height: "80vh" }}
               >
+                {/* TOP: plot + file list (ALWAYS mounted) */}
                 <Pane minSize={240}>
                   <div className="project-two-col">
                     <section className="project-plot">
@@ -208,51 +213,68 @@ export default function ProjectView() {
                           }))
                         }
                         onSelectionChange={setSelectedIds}
+                        onViewerPayload={(v) => {
+                          if (v.mode === "single") {
+                            setComparePayload(undefined);
+                            setSinglePayload(v.file);
+                          } else {
+                            setSinglePayload(undefined);
+                            setComparePayload({
+                              file1: v.file1,
+                              file2: v.file2,
+                            });
+                          }
+                        }}
                       />
                     </section>
                   </div>
                 </Pane>
 
-                {/* bottom: detail viewer */}
-                <Pane minSize={0}>
+                {/* BOTTOM: viewer */}
+                <Pane minSize={180}>
                   <section className="detail-view">
-                    {viewMode === "single" ? (
-                      singlePayload ? (
+                    {viewMode === "single" && singlePayload ? (
+                      <>
                         <SingleFileComponent jsonData={singlePayload} />
-                      ) : hasSelection ? (
-                        <div className="muted">
-                          This file was added before raw data was cached. Please
-                          re-import it to view details.
-                        </div>
-                      ) : (
-                        <div className="muted"></div>
-                      )
-                    ) : comparePayload ? (
-                      <MemoryRouter
-                        initialEntries={[
-                          { pathname: "/cmp", state: comparePayload },
-                        ]}
+                      </>
+                    ) : null}
+
+                    {/* Temporary compare placeholder */}
+                    {viewMode === "compare" &&
+                    comparePayload?.file1 &&
+                    comparePayload?.file2 ? (
+                      <div
+                        style={{
+                          padding: 24,
+                          height: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textAlign: "center",
+                          gap: 12,
+                        }}
                       >
-                        <Routes>
-                          <Route path="/cmp" element={<CompareComponent />} />
-                        </Routes>
-                      </MemoryRouter>
-                    ) : hasSelection ? (
-                      <div className="muted">
-                        One or both selected files were added before raw data
-                        was cached. Please re-import both files to compare.
+                        <h3 style={{ margin: 0 }}>Compare view coming soon</h3>
+                        <p style={{ maxWidth: 640, opacity: 0.8 }}>
+                          The compare experience is temporarily disabled while
+                          we finish a fix. You can still view individual files
+                          using <strong>Single File</strong>.
+                        </p>
                       </div>
-                    ) : (
-                      <div className="muted"></div>
-                    )}
+                    ) : null}
                   </section>
                 </Pane>
               </SplitPane>
             ) : (
-              <div className="muted">
-                <h2>
-                  <strong>Create a project to begin.</strong>
-                </h2>
+              <div className="start_message">
+                <h3>
+                  <strong>
+                    To begin, create a project by clicking the{" "}
+                    <CIcon className="project-icon" icon={cilPlus} /> icon in
+                    the sidebar.{" "}
+                  </strong>
+                </h3>
               </div>
             )}
           </main>

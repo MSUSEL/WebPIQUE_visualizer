@@ -5,15 +5,15 @@ import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
 import { Switch, FormControlLabel } from "@mui/material";
 import "split-pane-react/esm/themes/default.css";
-import "../styles/CompareStyle.css";
+import "../../styles/CompareStyle.css";
 
 import SingleFileComponent from "./SingleFileComponent";
-import { parsePIQUEJSON } from "../Utilities/DataParser";
-import { buildDiffHints, DiffHints } from "../Utilities/fileDiff";
+import { parsePIQUEJSON } from "../../Utilities/DataParser";
+import { buildDiffHints, DiffHints } from "../../Utilities/fileDiff";
 
 // Jotai
 import { Provider, createStore } from "jotai";
-import { aspectAtom, securityTabAtom } from "../state/visualAtoms";
+import { aspectAtom, securityTabAtom } from "../../state/visualAtoms";
 
 type UploadPayload = { filename: string; data: any };
 type OneChild = React.ReactElement;

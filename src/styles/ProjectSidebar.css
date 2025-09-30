@@ -77,7 +77,6 @@
 
 .add-btn {
   margin-left: auto;
-  /* ⬅ pushes the + to the right */
   width: 28px;
   height: 28px;
   border: 1px solid #d0d5dd;
@@ -127,7 +126,6 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px 0 42px;
-  /* indent under the label */
 }
 
 .new-project input {
@@ -144,14 +142,12 @@
   margin-left: -14px;
 }
 
-/* inline rename look & feel */
 .group-list li {
   padding: 4px 0;
 }
 
 .project-name {
   cursor: text;
-  /* hints that it's editable */
   display: inline-block;
   padding: 2px 4px;
   border-radius: 4px;
@@ -176,7 +172,7 @@
   font-weight: 700;
   font-size: 20px;
   border: 1px solid lightgrey;
-  background-color: rgb(138, 145, 241);
+  background-color: rgba(96, 165, 250, 0.45);
 }
 
 .item {

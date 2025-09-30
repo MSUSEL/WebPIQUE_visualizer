@@ -1,9 +1,13 @@
 // create project and load file dialog box
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import LZString from "lz-string"; // NEW: for compressed storage
 import type { ProjectFileScore, AspectItem } from "./ProjectFileLoad";
 
 const MAX_FILES = 12;
+
+const [loading, setLoading] = useState(false);
+const [progress, setProgress] = useState(0);
 
 // --- small helpers ----------------------------------------------------------
 const isObj = (x: any) => x && typeof x === "object" && !Array.isArray(x);
@@ -63,19 +67,23 @@ export default function CreateProjectDialog({
     [files.length]
   );
 
-  const pickFiles = () => inputRef.current?.click();
-
   // core loader: validates, parses, caps at 12, and de-dupes by fileName
   async function handleFiles(fileList: FileList | null) {
     if (!fileList) return;
 
-    // Lazy-load the parser only when needed
+    // Start loading immediately so the bar can mount even if the import is slow
+    setLoading(true);
+    setProgress(0);
+    // Give React a frame to paint the bar before doing any heavy work
+    await new Promise(requestAnimationFrame);
+
     let parseTQIQAScores: any;
     try {
       ({ parseTQIQAScores } = await import("../../Utilities/TQIQAScoreParser"));
     } catch (e) {
       console.error("Failed to load TQI/QA parser", e);
       alert("Unable to load the score parser module. Please try again.");
+      setLoading(false);
       return;
     }
 
@@ -90,59 +98,90 @@ export default function CreateProjectDialog({
     const trimmed = incoming.slice(0, roomLeft);
 
     const next: ProjectFileScore[] = [...files];
-    for (const f of trimmed) {
-      if (!f.name.toLowerCase().endsWith(".json")) {
-        alert(`Only JSON files are allowed. Skipped: ${f.name}`);
-        continue;
+
+    try {
+      const total = trimmed.length || 1;
+      let processed = 0;
+
+      for (const f of trimmed) {
+        if (!f.name.toLowerCase().endsWith(".json")) {
+          alert(`Only JSON files are allowed. Skipped: ${f.name}`);
+          continue;
+        }
+
+        let json: any;
+        try {
+          json = JSON.parse(await f.text());
+        } catch {
+          alert(`Invalid JSON: ${f.name}`);
+          continue;
+        }
+
+        if (!validateLikelySchema(json)) {
+          alert(
+            `"${f.name}" doesn’t match the supported schema. Please refer to the documentation.`
+          );
+          continue;
+        }
+
+        // --- Light parser for top plot ---
+        const fileMillis = f.lastModified;
+        const id = `${f.name}-${fileMillis}`;
+        const rawKey = `raw:${id}`;
+
+        // light parser only
+        let parsed: any;
+        try {
+          parsed = parseTQIQAScores(json);
+        } catch (err) {
+          console.error("parseTQIQAScores error", err);
+          alert(`Could not parse scores from ${f.name}`);
+          continue;
+        }
+        const tqi: number | null =
+          parsed?.tqi ??
+          parsed?.tqiScore ??
+          parsed?.scores?.tqi ??
+          parsed?.scores?.tqiScore ??
+          null;
+
+        const aspects = normalizeAspects(
+          parsed?.aspects ?? parsed?.scores?.aspects ?? []
+        );
+
+        // write compressed raw once
+        try {
+          const txt = JSON.stringify(json);
+          const comp = LZString.compressToUTF16(txt);
+          localStorage.setItem(rawKey, comp);
+        } catch (e) {
+          console.warn("Failed to persist compressed raw for", f.name, e);
+        }
+
+        // create/update entry
+        const entry: ProjectFileScore = {
+          id,
+          rawKey,
+          fileName: f.name,
+          fileDateISO: new Date(fileMillis).toISOString(),
+          tqi,
+          aspects,
+          needsRaw: false,
+        };
+        const idx = next.findIndex((x) => x.fileName === f.name);
+        if (idx >= 0) next[idx] = entry;
+        else next.push(entry);
+
+        // ---- progress & yield so the bar paints ----
+        processed += 1;
+        setProgress(processed / total);
+        await new Promise(requestAnimationFrame);
       }
 
-      let json: any;
-      try {
-        json = JSON.parse(await f.text());
-      } catch {
-        alert(`Invalid JSON: ${f.name}`);
-        continue;
-      }
-
-      if (!validateLikelySchema(json)) {
-        alert(`"${f.name}" does not look like a supported score file.`);
-        continue;
-      }
-
-      let parsed: any;
-      try {
-        parsed = parseTQIQAScores(json);
-      } catch (err) {
-        console.error("parseTQIQAScores error", err);
-        alert(`Could not parse scores from ${f.name}`);
-        continue;
-      }
-
-      const tqi: number | null =
-        parsed?.tqi ??
-        parsed?.tqiScore ??
-        parsed?.scores?.tqi ??
-        parsed?.scores?.tqiScore ??
-        null;
-
-      const aspects = normalizeAspects(
-        parsed?.aspects ?? parsed?.scores?.aspects ?? []
-      );
-
-      // de-dupe by filename; replace if same name already exists in the list
-      const idx = next.findIndex((x) => x.fileName === f.name);
-      const entry: ProjectFileScore = {
-        id: crypto.randomUUID(),
-        fileName: f.name,
-        fileDateISO: new Date(f.lastModified).toISOString(),
-        tqi,
-        aspects,
-      };
-      if (idx >= 0) next[idx] = entry;
-      else next.push(entry);
+      setFiles(next);
+    } finally {
+      setLoading(false);
     }
-
-    setFiles(next);
   }
 
   function removeFile(id: string) {
@@ -284,6 +323,40 @@ export default function CreateProjectDialog({
           >
             Drag & drop up to {MAX_FILES} JSON files here
           </div>
+
+          {/* Loading bar */}
+          {loading && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 12,
+                  opacity: 0.8,
+                }}
+              >
+                <span>Files loading</span>
+                <span>{Math.round(progress * 100)}%</span>
+              </div>
+              <div
+                style={{
+                  height: 8,
+                  borderRadius: 999,
+                  background: "#eee",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.max(2, progress * 100)}%`, // keep a small sliver visible at 0%
+                    height: "100%",
+                    background: "#0d6efd",
+                    transition: "width .2s linear",
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Selected files list */}
           {files.length > 0 && (

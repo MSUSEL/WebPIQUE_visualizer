@@ -2,7 +2,7 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import "../styles/FileUpload.css";
+import "../../styles/FileUpload.css";
 
 type Props = {
   onJsonLoaded?: (json: any) => void;
