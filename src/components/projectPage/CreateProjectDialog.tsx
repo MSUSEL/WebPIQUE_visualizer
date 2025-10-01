@@ -6,9 +6,6 @@ import type { ProjectFileScore, AspectItem } from "./ProjectFileLoad";
 
 const MAX_FILES = 12;
 
-const [loading, setLoading] = useState(false);
-const [progress, setProgress] = useState(0);
-
 // --- small helpers ----------------------------------------------------------
 const isObj = (x: any) => x && typeof x === "object" && !Array.isArray(x);
 
@@ -52,6 +49,9 @@ export default function CreateProjectDialog({
   const [name, setName] = useState("");
   const [files, setFiles] = useState<ProjectFileScore[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   // always reseed name on open; clear when closed so the default increments every time
   useEffect(() => {
@@ -224,8 +224,9 @@ export default function CreateProjectDialog({
   const dropZoneStyle: React.CSSProperties = {
     marginTop: 8,
     border: "2px dashed #c7c7c7",
+    height: 90,
     borderRadius: 10,
-    padding: 16,
+    padding: 26,
     textAlign: "center" as const,
     userSelect: "none" as const,
   };
@@ -425,8 +426,8 @@ export default function CreateProjectDialog({
               !name.trim()
                 ? "Enter a project name"
                 : files.length === 0
-                ? "Add at least one file"
-                : "Create project"
+                  ? "Add at least one file"
+                  : "Create project"
             }
           >
             Continue
