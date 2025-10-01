@@ -368,7 +368,7 @@ export default function ProjectFileLoad({
           <div className="muted" style={{ marginTop: 8 }}>
             {mode === "single"
               ? "Select one file to view file information."
-              : "Two file comparison is currently inactive while we finish a fix. Please select 'Compare' from the menu to compare two files."}{" "}
+              : "Select two files to compare their file information."}{" "}
             {/*"Select two files to view a comparison between file information. */}
           </div>
         </div>

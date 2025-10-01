@@ -1,4 +1,10 @@
 /* ProjectPage styling */
+/* split root should fill its parent instead of fixed vh */
+.split-root {
+  width: 100%;
+  height: 100%;
+  min-height: 420px; /* guard on very short viewports */
+}
 
 /* --- Layout shell --- */
 .project-page .project-layout {
@@ -11,16 +17,19 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  margin-top: 80px; /* matches your header spacing */
+  margin-top: 80px;
+  min-height: 0;
 }
 
 /* --- Top row: chart (flex) | files (fixed) --- */
 .project-two-col {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 720px; /* chart | file box */
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 640px); /* chart | file box */
   gap: 16px;
   align-items: start;
   width: 100%;
+  min-height: 0;
+  overflow: auto;
 }
 
 /* Ensure grid children don't overflow */
@@ -29,17 +38,14 @@
   min-width: 0;
 }
 
-.project-plot {
-  width: 800px;
-}
-
 /* --- File panel --- */
 .project-files .file-box {
   border: 1px solid var(--muted-border, #ccc);
   border-radius: 8px;
   padding: 12px;
   background: #fff;
-  width: 520px;
+  width: 100%;
+  box-sizing: border-box; /* ensure padding doesn't overflow */
 }
 
 .project-files .file-list {
@@ -47,10 +53,16 @@
   margin: 0;
   padding-left: 0;
   display: grid;
-  grid-template-columns: 1fr; /* one column by default */
+  grid-template-columns: 1fr;
   column-gap: 10px;
   row-gap: 6px;
   width: 100%;
+}
+
+@media (min-width: 1200px) {
+  .project-files .file-list.two-col {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .project-files .file-list.two-col {
@@ -96,9 +108,9 @@
   position: relative;
   height: 8px;
   width: 70%;
-  margin: 0 auto;
-  left: 35%;
-  transform: translateX(-50%);
+  margin: 0;
+  left: 15%;
+  transform: none;
   cursor: row-resize;
   background: #75aedd;
   border-radius: 9999px;
@@ -123,13 +135,13 @@
 
 /* left / middle / right dots */
 .project-sashRenderDots::before {
-  left: 48%;
+  left: calc(50% - 6px);
 }
 .project-sashRenderDots span {
   left: 50%;
 }
 .project-sashRenderDots::after {
-  left: 52%;
+  left: calc(50% + 6px);
 }
 
 /* hover */

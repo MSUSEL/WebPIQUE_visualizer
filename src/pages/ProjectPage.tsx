@@ -1,5 +1,5 @@
 // project page
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Header from "../components/headerfooter/Header";
 import Footer from "../components/headerfooter/Footer";
 import ProjectSidebar, {
@@ -14,7 +14,6 @@ import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 
 import SingleFileComponent from "../components/nonProject/SingleFileComponent";
 import CompareComponent from "../components/nonProject/CompareComponent";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import "split-pane-react/esm/themes/default.css";
 
@@ -38,30 +37,10 @@ export default function ProjectView() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [rowSizes, setRowSizes] = useState<number[]>([65, 35]);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const topContentRef = useRef<HTMLDivElement | null>(null);
 
-  function ErrorBoundary(props: { children: React.ReactNode }) {
-    const [err, setErr] = useState<Error | null>(null);
-    // minimal boundary via try/catch-wrapper render:
-    // (If you prefer a class boundary, you can swap it in.)
-    if (err) {
-      return (
-        <div style={{ padding: 16 }}>
-          <h4>Viewer error</h4>
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {String(err.message || err)}
-          </pre>
-          <div className="muted">See console for stack trace.</div>
-        </div>
-      );
-    }
-    try {
-      return <>{props.children}</>;
-    } catch (e: any) {
-      console.error("Viewer crashed:", e);
-      setErr(e);
-      return null;
-    }
-  }
+  const userResizedRef = useRef(false);
 
   // ---------- load/save projects ----------
   useEffect(() => {
@@ -91,6 +70,7 @@ export default function ProjectView() {
     setFilesByProject((prev) => ({ ...prev, [id]: first12 }));
     localStorage.setItem(`wp_project_files:${id}`, JSON.stringify(first12));
     setActiveProjectId(id);
+    setCreateOpen(false);
   }
 
   function handleRemoveProject(id: string) {
@@ -142,6 +122,34 @@ export default function ProjectView() {
   }, [viewMode, selectedIds]);
 
   const effectiveSizes = hasSelection ? rowSizes : [100, 0];
+  const handleSizesChange = (sizes: number[]) => setRowSizes(sizes);
+  const handleChangeStart = () => {
+    userResizedRef.current = true;
+  };
+  const handleChangeEnd = () => {};
+
+  useEffect(() => {
+    const recompute = () => {
+      const container = splitContainerRef.current;
+      const top = topContentRef.current;
+      if (!container || !top || userResizedRef.current) return;
+
+      const containerH = container.clientHeight;
+      const contentH = top.scrollHeight;
+      if (containerH <= 0 || contentH <= 0) return;
+
+      const padded = contentH + 12;
+      const pct = Math.max(30, Math.min(75, (padded / containerH) * 100));
+      setRowSizes([pct, 100 - pct]);
+    };
+
+    recompute();
+    const onResize = () => {
+      if (!userResizedRef.current) recompute();
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [activeFiles, selectedIds, viewMode]);
 
   // ---------- render ----------
   return (
@@ -172,100 +180,90 @@ export default function ProjectView() {
 
           <main className="project-main">
             {activeProjectId ? (
-              <SplitPane
-                split="horizontal"
-                sizes={effectiveSizes}
-                onChange={setRowSizes}
-                sashRender={() =>
-                  hasSelection ? (
-                    <div className="project-sashRenderDots">
-                      <span />
-                    </div>
-                  ) : null
-                }
-                style={{ height: "80vh" }}
-              >
-                {/* TOP: plot + file list (ALWAYS mounted) */}
-                <Pane minSize={240}>
-                  <div className="project-two-col">
-                    <section className="project-plot">
-                      <header className="st-section-hdr">
-                        <h2>
-                          TQI &amp; Quality Aspect Score Tracker for{" "}
-                          {projects.find((p) => p.id === activeProjectId)?.name}
-                        </h2>
-                      </header>
-                      <TQIQAPlot
-                        files={activeFiles}
-                        selectedIds={selectedIds}
-                      />
-                    </section>
-
-                    <section className="project-files">
-                      <ProjectFileLoad
-                        projectId={activeProjectId}
-                        viewMode={viewMode}
-                        onViewModeChange={setViewMode}
-                        onScores={(pid, scores) =>
-                          setFilesByProject((prev) => ({
-                            ...prev,
-                            [pid]: scores,
-                          }))
-                        }
-                        onSelectionChange={setSelectedIds}
-                        onViewerPayload={(v) => {
-                          if (v.mode === "single") {
-                            setComparePayload(undefined);
-                            setSinglePayload(v.file);
-                          } else {
-                            setSinglePayload(undefined);
-                            setComparePayload({
-                              file1: v.file1,
-                              file2: v.file2,
-                            });
-                          }
-                        }}
-                      />
-                    </section>
-                  </div>
-                </Pane>
-
-                {/* BOTTOM: viewer */}
-                <Pane minSize={180}>
-                  <section className="detail-view">
-                    {viewMode === "single" && singlePayload ? (
-                      <>
-                        <SingleFileComponent jsonData={singlePayload} />
-                      </>
-                    ) : null}
-
-                    {/* Temporary compare placeholder */}
-                    {viewMode === "compare" &&
-                    comparePayload?.file1 &&
-                    comparePayload?.file2 ? (
-                      <div
-                        style={{
-                          padding: 24,
-                          height: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          textAlign: "center",
-                          gap: 12,
-                        }}
-                      >
-                        <h3 style={{ margin: 0 }}>Compare view coming soon</h3>
-                        <p style={{ maxWidth: 640, opacity: 0.8 }}>
-                          The compare experience is temporarily disabled while
-                          we finish a fix. You can still view individual files
-                          using <strong>Single File</strong>.
-                        </p>
+              <div ref={splitContainerRef} className="split-root">
+                <SplitPane
+                  split="horizontal"
+                  sizes={effectiveSizes}
+                  onChange={handleSizesChange}
+                  onDragStart={handleChangeStart}
+                  onDragEnd={handleChangeEnd}
+                  sashRender={() =>
+                    hasSelection ? (
+                      <div className="project-sashRenderDots">
+                        <span />
                       </div>
-                    ) : null}
-                  </section>
-                </Pane>
-              </SplitPane>
+                    ) : null
+                  }
+                >
+                  <Pane minSize={240}>
+                    {/* top content wrapper we measure */}
+                    <div ref={topContentRef} className="project-two-col">
+                      <section className="project-plot">
+                        <header className="st-section-hdr">
+                          <h2>
+                            TQI &amp; Quality Aspect Score Tracker for{" "}
+                            {
+                              projects.find((p) => p.id === activeProjectId)
+                                ?.name
+                            }
+                          </h2>
+                        </header>
+                        <TQIQAPlot
+                          files={activeFiles}
+                          selectedIds={selectedIds}
+                        />
+                      </section>
+
+                      <section className="project-files">
+                        <ProjectFileLoad
+                          projectId={activeProjectId}
+                          viewMode={viewMode}
+                          onViewModeChange={setViewMode}
+                          onScores={(pid, scores) =>
+                            setFilesByProject((prev) => ({
+                              ...prev,
+                              [pid]: scores,
+                            }))
+                          }
+                          onSelectionChange={setSelectedIds}
+                          onViewerPayload={(v) => {
+                            if (v.mode === "single") {
+                              setComparePayload(undefined);
+                              setSinglePayload(v.file);
+                            } else {
+                              setSinglePayload(undefined);
+                              setComparePayload({
+                                file1: v.file1,
+                                file2: v.file2,
+                              });
+                            }
+                          }}
+                        />
+                      </section>
+                    </div>
+                  </Pane>
+
+                  <Pane minSize={180}>
+                    <section className="detail-view">
+                      {viewMode === "single" && singlePayload ? (
+                        <SingleFileComponent jsonData={singlePayload} />
+                      ) : null}
+                      {viewMode === "compare" &&
+                      comparePayload?.file1 &&
+                      comparePayload?.file2 ? (
+                        <div style={{ height: "100%" }}>
+                          <CompareComponent
+                            file1={comparePayload.file1}
+                            file2={comparePayload.file2}
+                            embedded
+                            initialSizes={[50, 50]}
+                          />
+                        </div>
+                      ) : null}
+                    </section>
+                  </Pane>
+                </SplitPane>
+              </div>
             ) : (
               <div className="start_message">
                 <h3>

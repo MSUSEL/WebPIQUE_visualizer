@@ -21,13 +21,24 @@ type OneChild = React.ReactElement;
 const SASH_W = 8;
 type DiffFilter = "all" | "differing" | "unique";
 
-const Compare: React.FC = () => {
+type CompareProps = {
+  file1?: UploadPayload;
+  file2?: UploadPayload;
+  embedded?: boolean;
+  initialSizes?: number[];
+};
+
+const Compare: React.FC<CompareProps> = (props) => {
   const { state } = useLocation() as {
     state?: { file1?: UploadPayload; file2?: UploadPayload };
   };
-  const file1 = state?.file1;
-  const file2 = state?.file2;
+
+  // prefer props, fallback to router state
+  const file1 = props.file1 ?? state?.file1;
+  const file2 = props.file2 ?? state?.file2;
   if (!file1 || !file2) return <Navigate to="/" replace />;
+
+  const sizesInit = props.initialSizes ?? [50, 50];
 
   const file1Name = file1.filename ?? "File 1";
   const file2Name = file2.filename ?? "File 2";
@@ -78,7 +89,7 @@ const Compare: React.FC = () => {
 
   // compare-only UI state
   const [diffFilter, setDiffFilter] = useState<DiffFilter>("all");
-  const [sizes, setSizes] = useState<number[]>([50, 50]);
+  const [sizes, setSizes] = useState<number[]>(sizesInit);
   const [syncScroll, setSyncScroll] = useState(true);
 
   // one shared Jotai store so both panes mirror atom changes
@@ -118,7 +129,7 @@ const Compare: React.FC = () => {
     <div className="compare-app-container">
       <main
         className="compare-main-content"
-        style={{ height: "calc(100vh - 140px)" }}
+        style={{ height: props.embedded ? "100%" : "calc(100vh - 140px)" }}
       >
         <div
           className="compare-filenames"
