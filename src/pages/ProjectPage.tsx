@@ -11,16 +11,10 @@ import ProjectFileLoad, {
 } from "../components/projectPage/ProjectFileLoad";
 import TQIQAPlot from "../components/plotting/TQIQAPlot";
 import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
-
-import SingleFileComponent from "../components/nonProject/SingleFileComponent";
-import CompareComponent from "../components/nonProject/CompareComponent";
-import SplitPane, { Pane } from "split-pane-react";
-import "split-pane-react/esm/themes/default.css";
+import ModalPopout from "../components/projectPage/ModalPopout";
 
 import "../styles/Pages.css";
 import "../styles/ProjectViewStyle.css";
-import CIcon from "@coreui/icons-react";
-import { cilPlus } from "@coreui/icons";
 
 // helper for compressed file load (wrapper we pass through)
 type UploadPayload = { filename: string; data: any };
@@ -36,11 +30,11 @@ export default function ProjectView() {
   // selection for plot + viewers
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
-  const [rowSizes, setRowSizes] = useState<number[]>([65, 35]);
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const topContentRef = useRef<HTMLDivElement | null>(null);
 
-  const userResizedRef = useRef(false);
+  // modal for visualized single or compare files, popout window
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<ViewMode>("single");
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // ---------- load/save projects ----------
   useEffect(() => {
@@ -114,43 +108,6 @@ export default function ProjectView() {
     { file1?: UploadPayload; file2?: UploadPayload } | undefined
   >();
 
-  // render sash only if a valid selection exists
-  const hasSelection = useMemo(() => {
-    if (viewMode === "single") return selectedIds.length === 1;
-    if (viewMode === "compare") return selectedIds.length === 2;
-    return false;
-  }, [viewMode, selectedIds]);
-
-  const effectiveSizes = hasSelection ? rowSizes : [100, 0];
-  const handleSizesChange = (sizes: number[]) => setRowSizes(sizes);
-  const handleChangeStart = () => {
-    userResizedRef.current = true;
-  };
-  const handleChangeEnd = () => {};
-
-  useEffect(() => {
-    const recompute = () => {
-      const container = splitContainerRef.current;
-      const top = topContentRef.current;
-      if (!container || !top || userResizedRef.current) return;
-
-      const containerH = container.clientHeight;
-      const contentH = top.scrollHeight;
-      if (containerH <= 0 || contentH <= 0) return;
-
-      const padded = contentH + 12;
-      const pct = Math.max(30, Math.min(75, (padded / containerH) * 100));
-      setRowSizes([pct, 100 - pct]);
-    };
-
-    recompute();
-    const onResize = () => {
-      if (!userResizedRef.current) recompute();
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [activeFiles, selectedIds, viewMode]);
-
   // ---------- render ----------
   return (
     <div className="project-page app-container">
@@ -180,102 +137,97 @@ export default function ProjectView() {
 
           <main className="project-main">
             {activeProjectId ? (
-              <div ref={splitContainerRef} className="split-root">
-                <SplitPane
-                  split="horizontal"
-                  sizes={effectiveSizes}
-                  onChange={handleSizesChange}
-                  onDragStart={handleChangeStart}
-                  onDragEnd={handleChangeEnd}
-                  sashRender={() =>
-                    hasSelection ? (
-                      <div className="project-sashRenderDots">
-                        <span />
-                      </div>
-                    ) : null
-                  }
-                >
-                  <Pane minSize={240}>
-                    {/* top content wrapper we measure */}
-                    <div ref={topContentRef} className="project-two-col">
-                      <section className="project-plot">
-                        <header className="st-section-hdr">
-                          <h2>
-                            TQI &amp; Quality Aspect Score Tracker for{" "}
-                            {
-                              projects.find((p) => p.id === activeProjectId)
-                                ?.name
-                            }
-                          </h2>
-                        </header>
-                        <TQIQAPlot
-                          files={activeFiles}
-                          selectedIds={selectedIds}
-                        />
-                      </section>
+              <div className="split-root">
+                {/* keep container sizing rules */}
+                {/* top content wrapper */}
+                <div className="project-two-col">
+                  <section className="project-plot">
+                    <header className="st-section-hdr">
+                      <h2>
+                        TQI &amp; Quality Aspect Score Tracker for{" "}
+                        {projects.find((p) => p.id === activeProjectId)?.name}
+                      </h2>
+                    </header>
+                    <TQIQAPlot files={activeFiles} selectedIds={selectedIds} />
+                  </section>
 
-                      <section className="project-files">
-                        <ProjectFileLoad
-                          projectId={activeProjectId}
-                          viewMode={viewMode}
-                          onViewModeChange={setViewMode}
-                          onScores={(pid, scores) =>
-                            setFilesByProject((prev) => ({
-                              ...prev,
-                              [pid]: scores,
-                            }))
-                          }
-                          onSelectionChange={setSelectedIds}
-                          onViewerPayload={(v) => {
-                            if (v.mode === "single") {
-                              setComparePayload(undefined);
-                              setSinglePayload(v.file);
-                            } else {
-                              setSinglePayload(undefined);
-                              setComparePayload({
-                                file1: v.file1,
-                                file2: v.file2,
-                              });
-                            }
-                          }}
-                        />
-                      </section>
+                  <section className="project-files">
+                    <ProjectFileLoad
+                      projectId={activeProjectId}
+                      viewMode={viewMode}
+                      onViewModeChange={setViewMode}
+                      onScores={(pid, scores) =>
+                        setFilesByProject((prev) => ({
+                          ...prev,
+                          [pid]: scores,
+                        }))
+                      }
+                      onSelectionChange={setSelectedIds}
+                      onViewerPayload={(v) => {
+                        if (v.mode === "single") {
+                          setComparePayload(undefined);
+                          setSinglePayload(v.file);
+                        } else {
+                          setSinglePayload(undefined);
+                          setComparePayload({ file1: v.file1, file2: v.file2 });
+                        }
+                      }}
+                    />
+
+                    {/* NEW: Visualize button lives under the file box */}
+                    <div className="visualize-btn-row">
+                      <button
+                        className="visualize-btn"
+                        disabled={
+                          (viewMode === "single" && selectedIds.length !== 1) ||
+                          (viewMode === "compare" && selectedIds.length !== 2)
+                        }
+                        onClick={() => {
+                          setModalOpen(true);
+                          setModalMode(viewMode);
+                          // the payloads (singlePayload/comparePayload) were just set by onViewerPayload()
+                        }}
+                      >
+                        Visualize
+                      </button>
                     </div>
-                  </Pane>
-
-                  <Pane minSize={180}>
-                    <section className="detail-view">
-                      {viewMode === "single" && singlePayload ? (
-                        <SingleFileComponent jsonData={singlePayload} />
-                      ) : null}
-                      {viewMode === "compare" &&
-                      comparePayload?.file1 &&
-                      comparePayload?.file2 ? (
-                        <div style={{ height: "100%" }}>
-                          <CompareComponent
-                            file1={comparePayload.file1}
-                            file2={comparePayload.file2}
-                            embedded
-                            initialSizes={[50, 50]}
-                          />
-                        </div>
-                      ) : null}
-                    </section>
-                  </Pane>
-                </SplitPane>
+                  </section>
+                </div>
               </div>
             ) : (
-              <div className="start_message">
-                <h3>
-                  <strong>
-                    To begin, create a project by clicking the{" "}
-                    <CIcon className="project-icon" icon={cilPlus} /> icon in
-                    the sidebar.{" "}
-                  </strong>
-                </h3>
-              </div>
+              <div className="start_message">{/* unchanged */}</div>
             )}
           </main>
+
+          {isModalOpen && (
+            <ModalPopout onClose={() => setModalOpen(false)}>
+              <iframe
+                ref={iframeRef}
+                title="Visualizer"
+                className="viewer-iframe"
+                src="/viewer" // <-- new route we'll add below
+                onLoad={() => {
+                  const msg =
+                    modalMode === "single"
+                      ? {
+                          type: "viewer-payload",
+                          mode: "single",
+                          file: singlePayload,
+                        }
+                      : {
+                          type: "viewer-payload",
+                          mode: "compare",
+                          file1: comparePayload?.file1,
+                          file2: comparePayload?.file2,
+                        };
+                  iframeRef.current?.contentWindow?.postMessage(
+                    msg,
+                    window.location.origin
+                  );
+                }}
+              />
+            </ModalPopout>
+          )}
         </div>
       </div>
       <Footer />

@@ -11,7 +11,7 @@ import SingleFileComponent from "./SingleFileComponent";
 import { parsePIQUEJSON } from "../../Utilities/DataParser";
 import { buildDiffHints, DiffHints } from "../../Utilities/fileDiff";
 
-// Jotai
+// Jotai to prevent rerender on click
 import { Provider, createStore } from "jotai";
 import { aspectAtom, securityTabAtom } from "../../state/visualAtoms";
 

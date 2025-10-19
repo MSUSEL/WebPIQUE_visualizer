@@ -155,6 +155,11 @@
   border-color: rgba(217, 48, 37, 0.35);
 }
 
+.legend-chip--diff:active {
+  border: 1px solid black;
+  box-shadow: #666;
+}
+
 .legend-chip--unique {
   background: rgba(227, 116, 0, 0.1);
   border-color: rgba(227, 116, 0, 0.4);
@@ -183,6 +188,11 @@
   flex: 0 0 auto;
   padding: 6px 10px;
   text-align: center;
+}
+
+.legend-reset:active {
+  color: white;
+  background-color: black;
 }
 
 .legend-chip:focus-visible,
