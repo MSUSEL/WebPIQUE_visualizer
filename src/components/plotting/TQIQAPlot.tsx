@@ -21,7 +21,7 @@ export default function TQIQAPlot({
   files: ProjectFileScore[];
   selectedIds?: string[];
 }) {
-  // 1) Build rows sorted by date, but give each row an ordinal x index (0..n-1)
+  // build rows sorted by date, giving each row an ordinal x index (0..n-1)
   const data = useMemo(() => {
     const sorted = [...files].sort(
       (a, b) =>
@@ -30,7 +30,7 @@ export default function TQIQAPlot({
     return sorted.map((f, i) => {
       const dateMs = new Date(f.fileDateISO).getTime();
       const row: any = {
-        x: i, // ← ordinal position for equal spacing
+        x: i, // ordinal position for equal spacing
         fileId: f.id,
         dateMs,
         fileName: f.fileName,
@@ -62,7 +62,7 @@ export default function TQIQAPlot({
     return Array.from(s);
   }, [data]);
 
-  // 2) Highlight band per selected file using index-based half-step window
+  // highlight band per selected file using index-based half-step window
   const highlightBands = useMemo(() => {
     if (!data.length || !selectedIds.length) return [];
     const bands: { x1: number; x2: number }[] = [];
@@ -140,7 +140,7 @@ export default function TQIQAPlot({
               margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              {/* 3) Ordinal X-axis: equally spaced ticks (0..n-1) formatted as dates */}
+              {/* ordinal X-axis: equally spaced ticks (0..n-1) formatted as dates */}
               <XAxis
                 dataKey="x"
                 type="number"
