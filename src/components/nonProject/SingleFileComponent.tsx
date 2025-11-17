@@ -155,7 +155,11 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   return (
     <div className="app-container">
       <main className="main-content">
-        <ScoreGauges scores={scores} onAspectClick={handleAspectClick} />
+        <ScoreGauges
+          scores={scores}
+          onAspectClick={handleAspectClick}
+          selectedAspect={selectedAspect}
+        />
 
         {selectedAspect ? (
           <ProductFactorTabs

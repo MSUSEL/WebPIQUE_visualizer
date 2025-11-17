@@ -25,3 +25,42 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.45);
 }
+
+.file-row .icon-button {
+  font-size: 0.95rem;
+  padding: 0 2px;
+}
+
+.add-file-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+}
+
+/* When user CAN add files */
+.add-file-btn.can-add {
+  border: 2px solid #063b1a;
+  background: #f3f4f6;
+  color: #065f46;
+  cursor: pointer;
+}
+
+.add-file-btn.can-add:hover {
+  background: #e5e7eb;
+  box-shadow: 0 0 4px rgba(22, 163, 74, 0.4);
+}
+
+/* When user CANNOT add files (disabled state) */
+.add-file-btn.cannot-add {
+  border: 2px solid #dc2626;
+  background: #f8d7da;
+  color: #7f1d1d;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.add-file-btn.cannot-add:disabled {
+  pointer-events: none;
+}

@@ -26,7 +26,7 @@
   overflow: hidden;
 }
 
-.compare-filenames > div {
+.compare-filenames>div {
   min-width: 0;
 }
 
@@ -156,7 +156,7 @@
 }
 
 .legend-chip--diff:active {
-  border: 1px solid black;
+  border: 2px solid black;
   box-shadow: #666;
 }
 
@@ -166,7 +166,7 @@
 }
 
 .legend-count {
-  border: 1px solid lightgrey;
+  border: 2px solid lightgrey;
   border-radius: 50px;
   padding-right: 5px;
   padding-left: 5px;
@@ -182,7 +182,7 @@
 .legend-reset {
   margin-left: 10px;
   cursor: pointer;
-  border: 1px solid black;
+  border: 1px solid rgb(155, 154, 154);
   border-radius: 8px;
   width: auto;
   flex: 0 0 auto;

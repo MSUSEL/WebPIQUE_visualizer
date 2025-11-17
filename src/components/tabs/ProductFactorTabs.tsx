@@ -1,5 +1,4 @@
-// component to render quality-aspect Product Factors/CWEs, CVEs/Diagnostics, and LoC
-/// component to render quality-aspect Product Factors/CWEs, CVEs/Diagnostics, and LoC
+// component to render quality-aspect Product Factors/CWEs, CVEs/Diagnostics
 import React, { useMemo, useState } from "react";
 import { Box, Collapse } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -40,6 +39,9 @@ type Props = {
   diffFilter?: "all" | "differing" | "unique";
 };
 
+type AssocItem = { name: string; description?: string };
+
+
 // ------- helpers -------
 const bucketFor = (score: number): "critical" | "severe" | "moderate" =>
   score < 0.6 ? "critical" : score < 0.8 ? "severe" : "moderate";
@@ -54,13 +56,13 @@ const getSeverityInfo = (score: number): SeverityInfo =>
   score < 0.6
     ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
     : score < 0.8
-    ? {
+      ? {
         color: "rgb(240,228,066)",
         border: "dashed",
         label: "Score 0.6–0.8",
         icon: "🟡",
       }
-    : {
+      : {
         color: "rgb(000,158,115)",
         border: "dotted",
         label: "Score ≥ 0.8",
@@ -121,10 +123,10 @@ const flagForPF = (name: string, hints?: DiffHints): FlagKind =>
   !hints
     ? null
     : hints.missingPFs?.has(pfKey(name))
-    ? "unique"
-    : hints.differingPFs?.has(pfKey(name))
-    ? "diff"
-    : null;
+      ? "unique"
+      : hints.differingPFs?.has(pfKey(name))
+        ? "diff"
+        : null;
 
 const flagForMeasure = (
   pfName: string,
@@ -136,8 +138,8 @@ const flagForMeasure = (
   return hints.missingMeasures?.has(key)
     ? "unique"
     : hints.differingMeasures?.has(key)
-    ? "diff"
-    : null;
+      ? "diff"
+      : null;
 };
 
 const flagForCVE = (id: string, hints?: DiffHints): FlagKind => {
@@ -146,8 +148,8 @@ const flagForCVE = (id: string, hints?: DiffHints): FlagKind => {
   return hints.missingCVEs?.has(key)
     ? "unique"
     : hints.differingCVEs?.has(key)
-    ? "diff"
-    : null;
+      ? "diff"
+      : null;
 };
 
 const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
@@ -221,14 +223,14 @@ const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
       const m = relational.measures.find((mm) => mm.id === edge.measureId);
       return m
         ? {
-            id: m.id,
-            name: m.name,
-            description: m.description,
-            score: m.value ?? 0,
-            thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
-            weight: edge.weight ?? 0,
-            children: [],
-          }
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          score: m.value ?? 0,
+          thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
+          weight: edge.weight ?? 0,
+          children: [],
+        }
         : null;
     })
     .filter(Boolean) as any[];
@@ -421,8 +423,8 @@ const ProductFactorTabs: React.FC<Props> = ({
     vulnSource?: string;
     vulnSourceVersion?: string;
     fixedVersion?: string;
-    cwePillars?: string[];
-    cweMeasures?: string[];
+    cwePillars?: AssocItem[];
+    cweMeasures?: AssocItem[];
     byTool: any[];
     raw: any[];
   };
@@ -461,23 +463,22 @@ const ProductFactorTabs: React.FC<Props> = ({
     const groupedById = new Map<string, GroupedCVE>();
     if (!relational) return [];
 
-    const pfNameById = new Map<string, string>();
-    (relational.productFactors ?? []).forEach((p) =>
-      pfNameById.set(p.id, p.name)
-    );
-    const measureNameById = new Map<string, string>();
-    (relational.measures ?? []).forEach((m) =>
-      measureNameById.set(m.id, m.name)
-    );
+    // full rows to grab descriptions
+    const pfById = new Map<string, any>();
+    (relational.productFactors ?? []).forEach((p) => pfById.set(p.id, p));
+
+    const measureById = new Map<string, any>();
+    (relational.measures ?? []).forEach((m) => measureById.set(m.id, m));
 
     const diagToMeasures = new Map<string, string[]>();
-    relational.measureDiagnostics.forEach((e) => {
+    (relational.measureDiagnostics ?? []).forEach((e) => {
       const arr = diagToMeasures.get(e.diagnosticId) ?? [];
       arr.push(e.measureId);
       diagToMeasures.set(e.diagnosticId, arr);
     });
+
     const measureToPFs = new Map<string, string[]>();
-    relational.pfMeasures.forEach((e) => {
+    (relational.pfMeasures ?? []).forEach((e) => {
       const arr = measureToPFs.get(e.measureId) ?? [];
       arr.push(e.pfId);
       measureToPFs.set(e.measureId, arr);
@@ -489,25 +490,36 @@ const ProductFactorTabs: React.FC<Props> = ({
 
       const diagId = f.diagnosticId;
       const measureIds = diagToMeasures.get(diagId) ?? [];
+
       let inAspect = false;
-      const pfNamesInAspect = new Set<string>();
-      const measureNamesInAspect = new Set<string>();
+      const pfLabelsInAspect = new Map<string, string>();      // PF name -> desc
+      const measureLabelsInAspect = new Map<string, string>(); // measure name -> desc
 
       for (const mid of measureIds) {
-        const pfs = measureToPFs.get(mid) ?? [];
-        const anyInAspectHere = pfs.some((pfId) => aspectPfIdSet.has(pfId));
+        const pfIds = measureToPFs.get(mid) ?? [];
+        const anyInAspectHere = pfIds.some((pfId) => aspectPfIdSet.has(pfId));
         if (!anyInAspectHere) continue;
+
         inAspect = true;
-        const mName = measureNameById.get(mid) ?? "";
+
+        const mRow = measureById.get(mid);
+        const mName = mRow?.name ?? "";
         const mLabel = cleanAssocLabel(mName);
-        if (mLabel) measureNamesInAspect.add(mLabel);
-        for (const pfId of pfs) {
+        if (mLabel) {
+          measureLabelsInAspect.set(mLabel, mRow?.description ?? "");
+        }
+
+        for (const pfId of pfIds) {
           if (!aspectPfIdSet.has(pfId)) continue;
-          const pfName = pfNameById.get(pfId) ?? "";
+          const pfRow = pfById.get(pfId);
+          const pfName = pfRow?.name ?? "";
           const pfLabel = cleanAssocLabel(pfName);
-          if (pfLabel) pfNamesInAspect.add(pfLabel);
+          if (pfLabel) {
+            pfLabelsInAspect.set(pfLabel, pfRow?.description ?? "");
+          }
         }
       }
+
       if (!inAspect) continue;
 
       let g = groupedById.get(id);
@@ -524,36 +536,56 @@ const ProductFactorTabs: React.FC<Props> = ({
           fixedVersion: f.fixedVersion,
           byTool: (f.byTool ?? []).slice(),
           raw: [f],
-          cwePillars: Array.from(pfNamesInAspect).sort(),
-          cweMeasures: Array.from(measureNamesInAspect).sort(),
+          cwePillars: Array.from(pfLabelsInAspect.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, description]) => ({ name, description })),
+          cweMeasures: Array.from(measureLabelsInAspect.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, description]) => ({ name, description })),
         };
         groupedById.set(id, g);
       } else {
+        // merge tools
         const existing = new Set(
           (g.byTool ?? []).map((t: any) => `${t.tool}|${t.score ?? ""}`)
         );
         for (const t of f.byTool ?? []) {
           const key = `${t.tool}|${t.score ?? ""}`;
-          if (!existing.has(key)) (g.byTool ?? (g.byTool = [])).push(t);
+          if (!existing.has(key)) g.byTool.push(t);
         }
-        (g.raw ?? (g.raw = [])).push(f);
-        for (const code of pfNamesInAspect)
-          if (!g.cwePillars!.includes(code)) g.cwePillars!.push(code);
-        for (const code of measureNamesInAspect)
-          if (!g.cweMeasures!.includes(code)) g.cweMeasures!.push(code);
+
+        g.raw.push(f);
+
+        // merge PFs / measures
+        for (const [name, description] of pfLabelsInAspect.entries()) {
+          if (!g.cwePillars!.some((x) => x.name === name)) {
+            g.cwePillars!.push({ name, description });
+          }
+        }
+        for (const [name, description] of measureLabelsInAspect.entries()) {
+          if (!g.cweMeasures!.some((x) => x.name === name)) {
+            g.cweMeasures!.push({ name, description });
+          }
+        }
       }
     }
 
+    // apply package / fixed / CWE filters
     return Array.from(groupedById.values()).filter((g) => {
-      const basePass = cveMatches({ vulnSource: g.vulnSource, fixed: g.fixed });
+      const basePass = cveMatches({
+        vulnSource: g.vulnSource,
+        fixed: g.fixed,
+      });
       if (!basePass) return false;
+
       if (cweFilter === "ALL") return true;
       const labels = [...(g.cwePillars ?? []), ...(g.cweMeasures ?? [])]
-        .map(cleanAssocLabel)
+        .map((it) => cleanAssocLabel(it.name))
         .filter(Boolean);
       return labels.includes(cweFilter);
     });
   }, [relational, aspectPfIdSet, pkgFilter, fixedFilter, cweFilter]);
+
 
   const packageOptions = useMemo(() => {
     const set = new Set<string>();
@@ -571,12 +603,12 @@ const ProductFactorTabs: React.FC<Props> = ({
   const cweOptions = useMemo(() => {
     const set = new Set<string>();
     groupedCves.forEach((g) => {
-      (g.cwePillars ?? []).forEach((nm) => {
-        const lab = cleanAssocLabel(nm);
+      (g.cwePillars ?? []).forEach((it) => {
+        const lab = cleanAssocLabel(it.name);
         if (lab) set.add(lab);
       });
-      (g.cweMeasures ?? []).forEach((nm) => {
-        const lab = cleanAssocLabel(nm);
+      (g.cweMeasures ?? []).forEach((it) => {
+        const lab = cleanAssocLabel(it.name);
         if (lab) set.add(lab);
       });
     });
@@ -610,31 +642,48 @@ const ProductFactorTabs: React.FC<Props> = ({
     description?: string;
     toolName?: string;
     value?: number;
-    measures: string[];
-    productFactors: string[];
+    measures: AssocItem[];
+    productFactors: AssocItem[];
   };
 
   const nonCveDiagnostics = useMemo<DiagCard[]>(() => {
     if (!relational) return [];
-    const measuresById = new Map(relational.measures.map((m) => [m.id, m]));
-    const diagsById = new Map(relational.diagnostics.map((d) => [d.id, d]));
+
+    const measuresById = new Map<string, any>(
+      (relational.measures ?? []).map((m) => [m.id, m])
+    );
+    const diagsById = new Map<string, any>(
+      (relational.diagnostics ?? []).map((d) => [d.id, d])
+    );
+    const pfNameById = new Map<string, string>();
+    (relational.productFactors ?? []).forEach((p) =>
+      pfNameById.set(p.id, p.name)
+    );
+
+    const measureDescByName = new Map<string, string>();
+    (relational.measures ?? []).forEach((m) => {
+      if (m?.name) measureDescByName.set(m.name, m.description ?? "");
+    });
+
+    const pfDescByName = new Map<string, string>();
+    (aspectPFs ?? []).forEach((pf: any) => {
+      if (pf?.name) pfDescByName.set(pf.name, pf.description ?? "");
+    });
+
     const diagToMeasures = new Map<string, Set<string>>();
-    relational.measureDiagnostics.forEach((e) => {
+    (relational.measureDiagnostics ?? []).forEach((e) => {
       const s = diagToMeasures.get(e.diagnosticId) ?? new Set<string>();
       s.add(e.measureId);
       diagToMeasures.set(e.diagnosticId, s);
     });
+
     const measureToPFs = new Map<string, Set<string>>();
-    relational.pfMeasures.forEach((e) => {
+    (relational.pfMeasures ?? []).forEach((e) => {
       const s = measureToPFs.get(e.measureId) ?? new Set<string>();
       s.add(e.pfId);
       measureToPFs.set(e.measureId, s);
     });
-    const pfNameById = new Map<string, string>();
-    aspectPFs.forEach((pf: any) => {
-      const id = String(pf?.id ?? pf?.name ?? "");
-      if (id) pfNameById.set(id, String(pf?.name ?? id));
-    });
+
     const diagHasFindings = new Set<string>();
     (relational.findings ?? []).forEach((f) =>
       diagHasFindings.add(f.diagnosticId)
@@ -642,31 +691,52 @@ const ProductFactorTabs: React.FC<Props> = ({
 
     const cards: DiagCard[] = [];
     const seen = new Set<string>();
+
     for (const [diagId, measureIdsSet] of diagToMeasures.entries()) {
       const diagRow = diagsById.get(diagId);
       const diagName = String(diagRow?.name ?? diagId);
-      if (isVulnId(diagId) || isVulnId(diagName)) continue; // CVE/GHSA handled elsewhere
+
+      if (isVulnId(diagId) || isVulnId(diagName)) continue;
+
       if (diagHasFindings.has(diagId)) continue;
 
       const measureIds = Array.from(measureIdsSet);
       const pfNames = new Set<string>();
       const mNames = new Set<string>();
+
       for (const mid of measureIds) {
         const pfIds = Array.from(measureToPFs.get(mid) ?? []);
         const anyInAspect = pfIds.some((id) => aspectPfIdSet.has(id));
         if (!anyInAspect) continue;
+
         const m = measuresById.get(mid);
         if (m?.name) mNames.add(m.name);
+
         pfIds.forEach((id) => {
           if (aspectPfIdSet.has(id)) {
-            const nm = pfNameById.get(id) ?? id;
+            const nm = pfNameById.get(id) ?? String(id);
             pfNames.add(nm);
           }
         });
       }
+
       if (pfNames.size === 0) continue;
       if (seen.has(diagId)) continue;
       seen.add(diagId);
+
+      const productFactors = Array.from(pfNames)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({
+          name,
+          description: pfDescByName.get(name),
+        }));
+
+      const measures = Array.from(mNames)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({
+          name,
+          description: measureDescByName.get(name),
+        }));
 
       cards.push({
         id: diagId,
@@ -674,46 +744,19 @@ const ProductFactorTabs: React.FC<Props> = ({
         description: diagRow?.description,
         toolName: diagRow?.toolName,
         value: diagRow?.value,
-        measures: Array.from(mNames).sort(),
-        productFactors: Array.from(pfNames).sort(),
+        measures,
+        productFactors,
       });
     }
+
     if (diffHints) {
       // Compare page: alphabetize by diagnostic name for horizontal alignment
       cards.sort((a, b) => a.name.localeCompare(b.name));
     }
-    // Single-file: keep input order (no sort)
+    // Single-file: keep input order
     return cards;
   }, [relational, aspectPFs, aspectPfIdSet, diffHints]);
 
-  // apply legend diff filter and alignment+bucket sort for CVEs
-  const visibleCves = useMemo(() => {
-    // honor the legend's diff filter
-    const base = (() => {
-      const mode = diffFilter ?? "all";
-      if (!diffHints || mode === "all") return groupedCves;
-      if (mode === "differing")
-        return groupedCves.filter((g) => diffHints.differingCVEs?.has(g.id));
-      // mode === "unique"
-      return groupedCves.filter((g) => diffHints.missingCVEs?.has(g.id));
-    })();
-
-    // compare page only: bucket sort so 🚩 above common, above ‼️; keep alpha within buckets
-    if (diffHints) {
-      const rank = (g: { id: string }) => {
-        const d = diffHints.differingCVEs?.has(g.id);
-        const u = diffHints.missingCVEs?.has(g.id);
-        // differing (0) -> common (1) -> unique (2)
-        return d ? 0 : u ? 2 : 1;
-      };
-      return [...base].sort(
-        (a, b) => rank(a) - rank(b) || String(a.id).localeCompare(String(b.id))
-      );
-    }
-
-    // single-file: keep source order (no sort)
-    return base;
-  }, [groupedCves, diffHints, diffFilter]);
 
   // ---------- Tab labels & headers ----------
   const hasCWE = (aspectPFs ?? []).some(
@@ -727,7 +770,7 @@ const ProductFactorTabs: React.FC<Props> = ({
   const hasPackageVulns = groupedCves.length > 0;
   const secondTabLabel = hasPackageVulns
     ? "Package Vulnerabilities"
-    : "Diagnostics";
+    : "Findings";
   const secondHeader = hasPackageVulns
     ? `# of package vulnerabilities: ${groupedCves.length}`
     : `# of findings: ${nonCveDiagnostics.length}`;
@@ -767,9 +810,8 @@ const ProductFactorTabs: React.FC<Props> = ({
             <span className="st-chip-count">{counts.moderate}</span>
           </button>
           <button
-            className={`st-chip st-chip--all ${
-              bucket === "all" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+              }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -828,7 +870,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
-                      diffHints?.pfFieldDiffs.get(pf.name)?.value
+                        diffHints?.pfFieldDiffs.get(pf.name)?.value
                         ? "diff-field"
                         : ""
                     }
@@ -864,7 +906,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                         <span
                           className={
                             !diffHints?.missingPFs?.has(pf.name) &&
-                            pfDiff?.benchmarkSize
+                              pfDiff?.benchmarkSize
                               ? "diff-field"
                               : ""
                           }
@@ -970,7 +1012,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                                     </span>
                                   </li>
                                   <li>
-                                    Weight: The measure contributed a{" "}
+                                    <strong>Weight:</strong> The measure contributed a{" "}
                                     <strong>
                                       <span
                                         className={
@@ -1074,7 +1116,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                                 ...v,
                                 [pf.name]: Math.min(
                                   (v[pf.name] ?? INITIAL_MEASURES) +
-                                    PAGE_MEASURES,
+                                  PAGE_MEASURES,
                                   allMeasures.length
                                 ),
                               }))
@@ -1095,7 +1137,7 @@ const ProductFactorTabs: React.FC<Props> = ({
     ),
   });
 
-  // --- Tab 2: Package Vulnerabilities (if any) else Diagnostics ---
+  // --- Tab 2: Package Vulnerabilities (if any) else Findings ---
   const tabsSecondContent = hasPackageVulns ? (
     <Box className="st-root">
       <h3 className="st-h3">{secondHeader}</h3>
@@ -1189,7 +1231,7 @@ const ProductFactorTabs: React.FC<Props> = ({
       </div>
 
       <Box>
-        {visibleCves.map((g) => {
+        {filteredCves.map((g) => {
           const byTool = g.byTool ?? [];
           const cveDiff = diffHints?.cveFieldDiffs?.get(g.id);
           const toolsStr = (g.byTool ?? []).length
@@ -1237,16 +1279,35 @@ const ProductFactorTabs: React.FC<Props> = ({
                 </li>
                 {g.cwePillars?.length ? (
                   <li>
-                    <strong>Associated Product Factors:</strong>{" "}
-                    {g.cwePillars.map(cleanAssocLabel).join(", ")}
+                    <strong>Associated Product Factor(s):</strong>{" "}
+                    {g.cwePillars.map((pf, idx) => (
+                      <span
+                        key={pf.name + idx}
+                        className="assoc-hover"
+                        title={pf.description || "No description available"}
+                      >
+                        {cleanAssocLabel(pf.name)}
+                        {idx < g.cwePillars!.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
                   </li>
                 ) : null}
                 {g.cweMeasures?.length ? (
                   <li>
                     <strong>Associated Measure(s):</strong>{" "}
-                    {g.cweMeasures.map(cleanAssocLabel).join(", ")}
+                    {g.cweMeasures.map((m, idx) => (
+                      <span
+                        key={m.name + idx}
+                        className="assoc-hover"
+                        title={m.description || "No description available"}
+                      >
+                        {cleanAssocLabel(m.name)}
+                        {idx < g.cweMeasures!.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
                   </li>
                 ) : null}
+
                 <li>
                   <strong>Finding Identified From: </strong>{" "}
                   <span className={cveDiff?.byTool ? "diff-field" : ""}>
@@ -1270,7 +1331,7 @@ const ProductFactorTabs: React.FC<Props> = ({
       <Box>
         {nonCveDiagnostics.length === 0 ? (
           <div style={{ opacity: 0.7 }}>
-            No diagnostics available for this aspect.
+            No findings available for this aspect.
           </div>
         ) : (
           nonCveDiagnostics.map((d) => (
@@ -1283,20 +1344,39 @@ const ProductFactorTabs: React.FC<Props> = ({
               <h4 className="cve-title">{d.name}</h4>
               <ul className="cve-list">
                 <li>
-                  <strong>Tool:</strong> {d.toolName || "—"}
+                  <strong>Finding from Tool(s):</strong> {d.toolName || "—"}
                 </li>
                 <li>
                   <strong>Score Reported by Tool:</strong>{" "}
                   {typeof d.value === "number" ? d.value.toFixed(4) : "—"}
                 </li>
                 <li>
-                  <strong>Associated Product factor(s):</strong>{" "}
-                  {d.productFactors.join(", ")}
+                  <strong>Associated Product Factor(s):</strong>{" "}
+                  {d.productFactors.map((pf, idx) => (
+                    <span
+                      key={pf.name + idx}
+                      className="assoc-hover"
+                      title={pf.description || "No description available"}
+                    >
+                      {cleanAssocLabel(pf.name)}
+                      {idx < d.productFactors.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
                 </li>
                 <li>
                   <strong>Associated Measure(s):</strong>{" "}
-                  {d.measures.join(", ")}
+                  {d.measures.map((m, idx) => (
+                    <span
+                      key={m.name + idx}
+                      className="assoc-hover"
+                      title={m.description || "No description available"}
+                    >
+                      {cleanAssocLabel(m.name)}
+                      {idx < d.measures.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
                 </li>
+
                 {d.description && (
                   <li>
                     <strong>Description:</strong> {d.description}
@@ -1311,18 +1391,6 @@ const ProductFactorTabs: React.FC<Props> = ({
   );
 
   tabs.push({ label: secondTabLabel, content: tabsSecondContent });
-
-  // --- Tab 3: Lines of Code Vulnerabilities (placeholder) ---
-  tabs.push({
-    label: "Lines of Code Vulnerabilities",
-    content: (
-      <Box className="st-root">
-        <h3 className="st-h3"># of Lines of Code Vulnerabilities: </h3>
-        <hr className="st-divider st-divider--narrow" />
-        <h3>Coming soon</h3>
-      </Box>
-    ),
-  });
 
   // controlled/uncontrolled tab selection
   const [localTab, setLocalTab] = useState<SecTabName>("PF");

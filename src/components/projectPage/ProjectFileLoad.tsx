@@ -54,18 +54,6 @@ function saveCompressedRawViaKey(rawKey: string, json: any) {
     /* ignore */
   }
 }
-function loadCompressedRawViaKey(rawKey?: string): any | undefined {
-  if (!rawKey) return undefined;
-  try {
-    const comp = localStorage.getItem(rawKey);
-    if (!comp) return undefined;
-    const txt = LZString.decompressFromUTF16(comp);
-    if (!txt) return undefined;
-    return JSON.parse(txt);
-  } catch {
-    return undefined;
-  }
-}
 
 /* upload payload shape used by the viewers */
 export type UploadPayload = { filename: string; data: any };
@@ -95,8 +83,11 @@ export default function ProjectFileLoad({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const localMode = useState<ViewMode>("single");
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
   const mode: ViewMode = controlledMode ?? localMode[0];
   const setLocalMode = localMode[1];
+  const canAddMore = scores.length < MAX_FILES;
 
   /* HYDRATE + MIGRATE */
   useEffect(() => {
@@ -210,15 +201,25 @@ export default function ProjectFileLoad({
   /* IMPORT: write compressed immediately and persist rawKey */
   async function handleFiles(fileList: FileList | null) {
     if (!projectId || !fileList) return;
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
-    if (files.length > MAX_FILES) {
-      alert(`Please select at most ${MAX_FILES} files.`);
+    const incoming = Array.from(fileList);
+    if (incoming.length === 0) return;
+
+    // how many more files can this project hold?
+    const roomLeft = MAX_FILES - scores.length;
+    if (roomLeft <= 0) {
+      alert(`This project already has the maximum of ${MAX_FILES} files.`);
       return;
     }
+    if (incoming.length > roomLeft) {
+      alert(
+        `You can add at most ${roomLeft} more file(s) to this project. Only the first ${roomLeft} will be added.`
+      );
+    }
+    const files = incoming.slice(0, roomLeft);
 
     try {
-      const parsed: ProjectFileScore[] = [];
+      // start from existing scores instead of replacing them
+      const next: ProjectFileScore[] = [...scores];
 
       for (const file of files) {
         if (!file.name.toLowerCase().endsWith(".json")) {
@@ -266,7 +267,7 @@ export default function ProjectFileLoad({
         // write compressed raw immediately
         saveCompressedRawViaKey(rawKey, json);
 
-        parsed.push({
+        const entry: ProjectFileScore = {
           id,
           rawKey,
           fileName: file.name,
@@ -274,18 +275,101 @@ export default function ProjectFileLoad({
           tqi,
           aspects,
           needsRaw: false,
-        } as ProjectFileScore);
+        };
+
+        // if a file with the same name already exists in this project, replace it;
+        // otherwise append as a new file
+        const existingIdx = next.findIndex((s) => s.fileName === file.name);
+        if (existingIdx >= 0) next[existingIdx] = entry;
+        else next.push(entry);
       }
 
-      parsed.sort(
+      next.sort(
         (a, b) =>
           new Date(a.fileDateISO).getTime() - new Date(b.fileDateISO).getTime()
       );
 
-      setScores(parsed.slice(0, MAX_FILES));
+      setScores(next);
       setSelected(new Set()); // clear selection after load
     } finally {
       if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function handleReplaceFile(fileList: FileList | null) {
+    if (!projectId || !fileList || !replaceTargetId) return;
+    const file = Array.from(fileList)[0];
+    if (!file) return;
+
+    try {
+      if (!file.name.toLowerCase().endsWith(".json")) {
+        alert("Only JSON files are allowed.");
+        return;
+      }
+
+      const text = await file.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        alert("Invalid JSON file.");
+        return;
+      }
+
+      if (!validateSchema(json)) {
+        alert(GENERIC_SCHEMA_MSG);
+        return;
+      }
+
+      const out: any = parseTQIQAScores(json);
+      const tqi =
+        toNum(out?.tqi) ??
+        toNum(out?.tqiScore) ??
+        toNum(out?.scores?.tqi) ??
+        toNum(out?.scores?.tqiScore) ??
+        null;
+
+      const aspects: AspectItem[] = Array.isArray(out?.aspects)
+        ? out.aspects.map((a: any) => {
+          if (Array.isArray(a))
+            return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
+          if (a && typeof a === "object")
+            return {
+              name: String(a.name ?? a.aspect ?? a.id ?? ""),
+              value: Number(a.value ?? a.score ?? a.val ?? NaN),
+            };
+          if (typeof a === "string") return { name: a, value: NaN };
+          return { name: "", value: Number(a) };
+        })
+        : [];
+
+      setScores((prev) => {
+        const idx = prev.findIndex((s) => s.id === replaceTargetId);
+        if (idx < 0) return prev;
+
+        const old = prev[idx];
+        const rawKey = old.rawKey ?? `raw:${old.id}`;
+
+        // overwrite compressed raw for this row
+        saveCompressedRawViaKey(rawKey, json);
+
+        const updated: ProjectFileScore = {
+          ...old,
+          fileName: file.name,
+          fileDateISO: new Date(file.lastModified).toISOString(),
+          tqi,
+          aspects,
+          rawKey,
+          needsRaw: false,
+        };
+
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      });
+    } finally {
+      setReplaceTargetId(null);
+      if (replaceInputRef.current) replaceInputRef.current.value = "";
     }
   }
 
@@ -307,6 +391,15 @@ export default function ProjectFileLoad({
     });
   }
 
+  function removeFile(id: string) {
+    setScores((prev) => prev.filter((s) => s.id !== id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
   const twoCol = scores.length > 6;
   const sorted = useMemo(() => {
     const copy = [...scores];
@@ -319,6 +412,7 @@ export default function ProjectFileLoad({
 
   return (
     <section className="fileload-section">
+      {/* Hidden inputs for add + replace */}
       <input
         ref={inputRef}
         type="file"
@@ -326,6 +420,14 @@ export default function ProjectFileLoad({
         style={{ display: "none" }}
         multiple
         onChange={(e) => handleFiles(e.target.files)}
+      />
+
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept=".json,application/json"
+        style={{ display: "none" }}
+        onChange={(e) => handleReplaceFile(e.target.files)}
       />
 
       <div className="file-box">
@@ -361,16 +463,35 @@ export default function ProjectFileLoad({
             </button>
           </div>
 
-          {/* NEW: a short hint for the active mode */}
           <div className="muted" style={{ marginTop: 8 }}>
             {mode === "single"
               ? "Select one file to view file information."
-              : "Select two files to compare their file information."}{" "}
-            {/*"Select two files to view a comparison between file information. */}
+              : "Select two files to compare their file information."}
           </div>
         </div>
 
         <hr />
+
+        {/* Add File button row */}
+        <div className="file-box__add-row">
+          <button
+            type="button"
+            className={`add-file-btn ${canAddMore ? "can-add" : "cannot-add"
+              }`}
+            disabled={!canAddMore}
+            onClick={() => {
+              if (!canAddMore) return;
+              inputRef.current?.click();
+            }}
+          >
+            + Add File
+          </button>
+          {!canAddMore && (
+            <span className="muted" style={{ marginLeft: 8 }}>
+              Maximum of {MAX_FILES} files per project.
+            </span>
+          )}
+        </div>
 
         {sorted.length === 0 ? (
           <div className="muted">No files loaded.</div>
@@ -386,6 +507,11 @@ export default function ProjectFileLoad({
                 <li
                   key={s.id}
                   className={`file-row ${isSel ? "selected" : ""}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
                 >
                   <input
                     type="checkbox"
@@ -393,6 +519,7 @@ export default function ProjectFileLoad({
                     onChange={() => toggle(s.id)}
                     aria-label={`Select ${s.fileName}`}
                   />
+
                   <span
                     className="file-name"
                     title={`${s.fileName}\n${new Date(
@@ -401,6 +528,7 @@ export default function ProjectFileLoad({
                   >
                     {label}
                   </span>
+
                   {s.needsRaw && (
                     <span
                       title="Compressed data missing — re-import this file once."
@@ -409,6 +537,42 @@ export default function ProjectFileLoad({
                       (re-import)
                     </span>
                   )}
+
+                  {/* CHANGE (pencil) */}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="Change this file"
+                    aria-label={`Change ${s.fileName}`}
+                    onClick={() => {
+                      setReplaceTargetId(s.id);
+                      replaceInputRef.current?.click();
+                    }}
+                    style={{
+                      marginLeft: 8,
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✎
+                  </button>
+
+                  {/* REMOVE (X) */}
+                  <button
+                    type="button"
+                    onClick={() => removeFile(s.id)}
+                    aria-label={`Remove ${s.fileName} from project`}
+                    title="Remove file from project"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      marginLeft: 6,
+                    }}
+                  >
+                    ✕
+                  </button>
                 </li>
               );
             })}
@@ -417,4 +581,5 @@ export default function ProjectFileLoad({
       </div>
     </section>
   );
+
 }

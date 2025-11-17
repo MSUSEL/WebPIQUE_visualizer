@@ -1,6 +1,6 @@
 // project sidebar - allows user to create project and add files
 import CIcon from "@coreui/icons-react";
-import { cilListRich, cilPlus, cilTrash } from "@coreui/icons";
+import { cilListRich, cilPlus, cilTrash, cilPencil } from "@coreui/icons";
 import "../../styles/ProjectSidebar.css";
 
 export type Project = { id: string; name: string };
@@ -13,6 +13,7 @@ export default function ProjectSidebar({
   onAddProject,
   onSelectProject,
   onRemoveProject,
+  onRenameProject,
 }: {
   projects: Project[];
   activeProjectId: string | null;
@@ -21,6 +22,7 @@ export default function ProjectSidebar({
   onSelectProject: (id: string) => void;
   onLogout?: () => void;
   onRemoveProject: (id: string) => void;
+  onRenameProject: (id: string, name: string) => void;
 }) {
   return (
     <aside className="simple-sidebar">
@@ -91,6 +93,29 @@ export default function ProjectSidebar({
 
                   <button
                     type="button"
+                    aria-label={`Rename ${p.name}`}
+                    title="Rename project"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const newName = window.prompt("Rename project", p.name);
+                      if (newName && newName.trim() && newName.trim() !== p.name) {
+                        onRenameProject(p.id, newName.trim());
+                      }
+                    }}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      padding: 2,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <CIcon className="icon" icon={cilPencil} />
+                  </button>
+
+                  <button
+                    type="button"
                     aria-label={`Remove ${p.name}`}
                     title="Remove project"
                     onClick={(e) => {
@@ -108,6 +133,7 @@ export default function ProjectSidebar({
                   >
                     <CIcon className="icon" icon={cilTrash} />
                   </button>
+
                 </li>
               ))
             )}

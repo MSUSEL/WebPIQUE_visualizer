@@ -70,9 +70,43 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
     measurePeerWeights: new Map(),
   };
 
+  const collectPFs = (scores: any): any[] => {
+    const out: any[] = [];
+    const seen = new Set<string>();
+
+    // 1) Prefer productFactorsByAspect if present
+    const byAspect = scores?.productFactorsByAspect as
+      | Record<string, any[]>
+      | undefined;
+
+    if (byAspect && typeof byAspect === "object") {
+      for (const list of Object.values(byAspect)) {
+        for (const pf of list ?? []) {
+          const name = pf?.name;
+          if (name && !seen.has(name)) {
+            seen.add(name);
+            out.push(pf);
+          }
+        }
+      }
+    }
+
+    // 2) Fallback / supplement: cweProductFactors (Security-only legacy path)
+    for (const pf of scores?.cweProductFactors ?? []) {
+      const name = pf?.name;
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        out.push(pf);
+      }
+    }
+
+    return out;
+  };
+
+
   // pf and measure comparison
-  const lPFs: any[] = leftScores?.cweProductFactors ?? [];
-  const rPFs: any[] = rightScores?.cweProductFactors ?? [];
+  const lPFs: any[] = collectPFs(leftScores);
+  const rPFs: any[] = collectPFs(rightScores);
 
   const rByName = new Map<string, any>();
   for (const p of rPFs) if (p?.name) rByName.set(p.name, p);
@@ -162,6 +196,7 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
   }
 
   // package vulnerability differences
+  // package vulnerability / diagnostics differences
   const collectCVEs = (scores: any) => {
     const map = new Map<
       string,
@@ -173,10 +208,13 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
         byTool: Set<string>;
       }
     >();
-    for (const pf of scores?.cweProductFactors ?? []) {
+
+    for (const pf of collectPFs(scores)) {
       for (const c of pf?.cves ?? []) {
-        const id = c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
+        const id =
+          c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
         if (!id) continue;
+
         map.set(id, {
           pkg: (c?.vulnSource ?? "").trim(),
           vulnVer: (c?.vulnSourceVersion ?? "").trim(),
@@ -186,8 +224,10 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
         });
       }
     }
+
     return map;
   };
+
 
   const L = collectCVEs(leftScores);
   const R = collectCVEs(rightScores);

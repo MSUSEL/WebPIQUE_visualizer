@@ -6,6 +6,7 @@ import { ParsedScore } from "../../Utilities/DataParser";
 interface ScoreGaugesProps {
   scores: ParsedScore;
   onAspectClick?: (aspectName: string) => void;
+  selectedAspect?: string | null;
 }
 
 interface GaugeProps {
@@ -63,7 +64,7 @@ const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
   </div>
 );
 
-const ScoreGauges: React.FC<ScoreGaugesProps> = ({ scores, onAspectClick }) => {
+const ScoreGauges: React.FC<ScoreGaugesProps> = ({ scores, onAspectClick, selectedAspect, }) => {
   if (!scores || typeof scores.tqiScore !== "number") {
     return <div>No score data available.</div>;
   }
@@ -78,16 +79,24 @@ const ScoreGauges: React.FC<ScoreGaugesProps> = ({ scores, onAspectClick }) => {
       <div className="aspects-section">
         <div className="aspects-header">Quality Aspects</div>
         <div className="aspects-gauges">
-          {(scores.aspects || []).map((aspect) => (
-            <div className="aspect-gauge-item" key={aspect.name}>
-              <GaugeDisplay
+          {(scores.aspects || []).map((aspect) => {
+            const isActive = selectedAspect === aspect.name;
+
+            return (
+              <div
+                className={`aspect-gauge-item${isActive ? " aspect-gauge-item--active" : ""
+                  }`}
                 key={aspect.name}
-                title={aspect.name}
-                value={aspect.value}
-                onClick={() => onAspectClick?.(aspect.name)}
-              />
-            </div>
-          ))}
+              >
+                <GaugeDisplay
+                  key={aspect.name}
+                  title={aspect.name}
+                  value={aspect.value}
+                  onClick={() => onAspectClick?.(aspect.name)}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

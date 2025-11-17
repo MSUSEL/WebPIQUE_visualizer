@@ -1,5 +1,10 @@
 // side-by-side compare with synced panes - mostly unique to webpique
-import React, { useMemo, useState, useCallback } from "react";
+import React, {
+  useMemo,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
@@ -63,28 +68,94 @@ const Compare: React.FC<CompareProps> = (props) => {
     [scores1, scores2]
   );
 
-  // legend counts
-  const union = <T,>(a: Iterable<T>, b: Iterable<T>) =>
-    new Set<T>([...a, ...b]);
-  const cweDiffCount = useMemo(
-    () =>
-      union(leftHints.differingPFs, rightHints.differingPFs).size +
-      union(leftHints.differingMeasures, rightHints.differingMeasures).size,
-    [leftHints, rightHints]
+  // ---------- helpers for per-aspect counts ----------
+
+  // union with predicate (used to filter to active aspect)
+  const unionFiltered = useCallback(
+    <T,>(
+      a: Iterable<T>,
+      b: Iterable<T>,
+      predicate: (value: T) => boolean
+    ): Set<T> => {
+      const out = new Set<T>();
+      for (const v of a) if (predicate(v)) out.add(v);
+      for (const v of b) if (predicate(v)) out.add(v);
+      return out;
+    },
+    []
   );
-  const cweUniqueCount = useMemo(
-    () =>
-      union(leftHints.missingPFs, rightHints.missingPFs).size +
-      union(leftHints.missingMeasures, rightHints.missingMeasures).size,
-    [leftHints, rightHints]
+
+  const getAspectPFNames = useCallback(
+    (scores: any, aspectName: string | null): string[] => {
+      if (!scores || !aspectName) return [];
+      const byAspect = (scores?.productFactorsByAspect ??
+        {}) as Record<string, any[]>;
+      let list = (byAspect?.[aspectName] ?? []) as any[];
+
+      // fallback for "Security" to legacy cweProductFactors, like ProductFactorTabs
+      if (list.length === 0 && /security/i.test(aspectName || "")) {
+        list = (scores?.cweProductFactors ?? []) as any[];
+      }
+
+      return list
+        .map((pf) => pf?.name)
+        .filter(
+          (name: any): name is string =>
+            typeof name === "string" && !!name
+        );
+    },
+    []
   );
-  const cveDiffCount = useMemo(
-    () => union(leftHints.differingCVEs, rightHints.differingCVEs).size,
-    [leftHints, rightHints]
+
+  const getAspectPFNameSet = useCallback(
+    (scoresLeft: any, scoresRight: any, aspectName: string | null) => {
+      const set = new Set<string>();
+      for (const name of getAspectPFNames(scoresLeft, aspectName))
+        set.add(name);
+      for (const name of getAspectPFNames(scoresRight, aspectName))
+        set.add(name);
+      return set;
+    },
+    [getAspectPFNames]
   );
-  const cveUniqueCount = useMemo(
-    () => union(leftHints.missingCVEs, rightHints.missingCVEs).size,
-    [leftHints, rightHints]
+
+  const getAspectDiagIdSet = useCallback(
+    (scoresLeft: any, scoresRight: any, aspectName: string | null) => {
+      const out = new Set<string>();
+      if (!aspectName) return out;
+
+      const addFromScores = (scores: any) => {
+        if (!scores) return;
+        const byAspect = (scores?.productFactorsByAspect ??
+          {}) as Record<string, any[]>;
+        let list = (byAspect?.[aspectName] ?? []) as any[];
+
+        // again, fallback to legacy Security-only CWEs if needed
+        if (list.length === 0 && /security/i.test(aspectName || "")) {
+          list = (scores?.cweProductFactors ?? []) as any[];
+        }
+
+        for (const pf of list ?? []) {
+          // diagnostics may be under cves or a more generic diagnostics field
+          const diags = (pf?.cves ?? pf?.diagnostics ?? []) as any[];
+          for (const c of diags) {
+            const id =
+              c?.cveId ??
+              c?.id ??
+              c?.name ??
+              c?.CVE ??
+              c?.CVE_ID ??
+              null;
+            if (id) out.add(String(id));
+          }
+        }
+      };
+
+      addFromScores(scoresLeft);
+      addFromScores(scoresRight);
+      return out;
+    },
+    []
   );
 
   // compare-only UI state
@@ -95,12 +166,150 @@ const Compare: React.FC<CompareProps> = (props) => {
   // one shared Jotai store so both panes mirror atom changes
   const sharedStore = useMemo(() => createStore(), []);
 
+  // local state to force re-render when the active aspect changes in the Jotai store
+  const [aspectVersion, setAspectVersion] = useState(0);
+
+  useEffect(() => {
+    const unsub = sharedStore.sub(aspectAtom, () => {
+      setAspectVersion((v) => v + 1);
+    });
+    return unsub;
+  }, [sharedStore]);
+
+  const activeAspect = sharedStore.get(aspectAtom) as string | null;
+
+  // legend counts - now scoped to ACTIVE Quality Aspect
+  const cweDiffCount = useMemo(() => {
+    if (!activeAspect) return 0;
+
+    const pfNames = getAspectPFNameSet(scores1, scores2, activeAspect);
+    if (pfNames.size === 0) return 0;
+
+    const diffsPF = unionFiltered(
+      leftHints.differingPFs,
+      rightHints.differingPFs,
+      (name) => pfNames.has(String(name))
+    );
+
+    const diffsMeasures = unionFiltered(
+      leftHints.differingMeasures,
+      rightHints.differingMeasures,
+      (key) => {
+        const pfName = String(key).split("|", 1)[0];
+        return pfNames.has(pfName);
+      }
+    );
+
+    return diffsPF.size + diffsMeasures.size;
+  }, [
+    leftHints,
+    rightHints,
+    scores1,
+    scores2,
+    activeAspect,
+    aspectVersion,
+    getAspectPFNameSet,
+    unionFiltered,
+  ]);
+
+  const cweUniqueCount = useMemo(() => {
+    if (!activeAspect) return 0;
+
+    const pfNames = getAspectPFNameSet(scores1, scores2, activeAspect);
+    if (pfNames.size === 0) return 0;
+
+    const uniquePFs = unionFiltered(
+      leftHints.missingPFs,
+      rightHints.missingPFs,
+      (name) => pfNames.has(String(name))
+    );
+
+    const uniqueMeasures = unionFiltered(
+      leftHints.missingMeasures,
+      rightHints.missingMeasures,
+      (key) => {
+        const pfName = String(key).split("|", 1)[0];
+        return pfNames.has(pfName);
+      }
+    );
+
+    return uniquePFs.size + uniqueMeasures.size;
+  }, [
+    leftHints,
+    rightHints,
+    scores1,
+    scores2,
+    activeAspect,
+    aspectVersion,
+    getAspectPFNameSet,
+    unionFiltered,
+  ]);
+
+  const cveDiffCount = useMemo(() => {
+    if (!activeAspect) return 0;
+
+    const aspectDiagIds = getAspectDiagIdSet(
+      scores1,
+      scores2,
+      activeAspect
+    );
+    if (aspectDiagIds.size === 0) return 0;
+
+    const diffs = unionFiltered(
+      leftHints.differingCVEs,
+      rightHints.differingCVEs,
+      (id) => aspectDiagIds.has(String(id))
+    );
+
+    return diffs.size;
+  }, [
+    leftHints,
+    rightHints,
+    scores1,
+    scores2,
+    activeAspect,
+    aspectVersion,
+    getAspectDiagIdSet,
+    unionFiltered,
+  ]);
+
+  const cveUniqueCount = useMemo(() => {
+    if (!activeAspect) return 0;
+
+    const aspectDiagIds = getAspectDiagIdSet(
+      scores1,
+      scores2,
+      activeAspect
+    );
+    if (aspectDiagIds.size === 0) return 0;
+
+    const uniques = unionFiltered(
+      leftHints.missingCVEs,
+      rightHints.missingCVEs,
+      (id) => aspectDiagIds.has(String(id))
+    );
+
+    return uniques.size;
+  }, [
+    leftHints,
+    rightHints,
+    scores1,
+    scores2,
+    activeAspect,
+    aspectVersion,
+    getAspectDiagIdSet,
+    unionFiltered,
+  ]);
+
   // legend actions: set atoms directly in both panes; compare only updates diffFilter
   const activate = useCallback(
     (tab: "CWE" | "CVE", filter: DiffFilter) => {
       const mapped = tab === "CWE" ? "PF" : "VULN_OR_DIAG";
-      sharedStore.set(aspectAtom, "Security");
+
+      // Don't force the aspect to "Security" anymore.
+      // Just ensure the underlying tab in the Security view is synced.
       sharedStore.set(securityTabAtom, mapped);
+
       setDiffFilter((prev) => (prev === filter ? "all" : filter));
     },
     [sharedStore]
@@ -296,3 +505,4 @@ const Compare: React.FC<CompareProps> = (props) => {
 };
 
 export default React.memo(Compare);
+

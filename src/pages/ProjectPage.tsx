@@ -81,7 +81,7 @@ export default function ProjectView() {
       const key = f.rawKey ?? `raw:${f.id}`;
       try {
         localStorage.removeItem(key);
-      } catch {}
+      } catch { }
     }
 
     localStorage.removeItem(`wp_project_files:${id}`);
@@ -99,6 +99,17 @@ export default function ProjectView() {
       curr === id ? nextProjects[0]?.id ?? null : curr
     );
   }
+
+  const handleRenameProject = (id: string, name: string) => {
+    setProjects((prev) => {
+      const next = prev.map((p) =>
+        p.id === id ? { ...p, name } : p
+      );
+      // If you persist projects, also update localStorage here:
+      localStorage.setItem("wp_projects", JSON.stringify(next));
+      return next;
+    });
+  };
 
   // ---------- viewer payloads (from loader) ----------
   const [singlePayload, setSinglePayload] = useState<
@@ -126,6 +137,7 @@ export default function ProjectView() {
             onAddProject={() => setCreateOpen(true)}
             onSelectProject={setActiveProjectId}
             onRemoveProject={handleRemoveProject}
+            onRenameProject={handleRenameProject}
           />
 
           <CreateProjectDialog
@@ -210,16 +222,16 @@ export default function ProjectView() {
                   const msg =
                     modalMode === "single"
                       ? {
-                          type: "viewer-payload",
-                          mode: "single",
-                          file: singlePayload,
-                        }
+                        type: "viewer-payload",
+                        mode: "single",
+                        file: singlePayload,
+                      }
                       : {
-                          type: "viewer-payload",
-                          mode: "compare",
-                          file1: comparePayload?.file1,
-                          file2: comparePayload?.file2,
-                        };
+                        type: "viewer-payload",
+                        mode: "compare",
+                        file1: comparePayload?.file1,
+                        file2: comparePayload?.file2,
+                      };
                   iframeRef.current?.contentWindow?.postMessage(
                     msg,
                     window.location.origin
