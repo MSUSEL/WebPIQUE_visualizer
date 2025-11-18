@@ -26,7 +26,7 @@ export default function ProjectSidebar({
 }) {
   return (
     <aside className="simple-sidebar">
-      <div className="brand">WebPIQUE Project Visualizer</div>
+      <div className="brand">Project List</div>
       <hr className="horizontal-line" />
 
       <nav>
@@ -99,7 +99,11 @@ export default function ProjectSidebar({
                       e.preventDefault();
                       e.stopPropagation();
                       const newName = window.prompt("Rename project", p.name);
-                      if (newName && newName.trim() && newName.trim() !== p.name) {
+                      if (
+                        newName &&
+                        newName.trim() &&
+                        newName.trim() !== p.name
+                      ) {
                         onRenameProject(p.id, newName.trim());
                       }
                     }}
@@ -133,7 +137,6 @@ export default function ProjectSidebar({
                   >
                     <CIcon className="icon" icon={cilTrash} />
                   </button>
-
                 </li>
               ))
             )}

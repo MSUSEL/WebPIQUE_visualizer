@@ -107,7 +107,7 @@ export default function ProjectFileLoad({
           const candidateKey = `raw:${s.id}`;
           try {
             saveCompressedRawViaKey(candidateKey, s.raw);
-          } catch { }
+          } catch {}
           rawKey = candidateKey;
           const { raw, ...rest } = s as any;
           s = rest;
@@ -181,7 +181,7 @@ export default function ProjectFileLoad({
           data = JSON.parse(txt);
           usedKey = key;
           break;
-        } catch { }
+        } catch {}
       }
 
       if (!data) return undefined;
@@ -249,16 +249,16 @@ export default function ProjectFileLoad({
 
         const aspects: AspectItem[] = Array.isArray(out?.aspects)
           ? out.aspects.map((a: any) => {
-            if (Array.isArray(a))
-              return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
-            if (a && typeof a === "object")
-              return {
-                name: String(a.name ?? a.aspect ?? a.id ?? ""),
-                value: Number(a.value ?? a.score ?? a.val ?? NaN),
-              };
-            if (typeof a === "string") return { name: a, value: NaN };
-            return { name: "", value: Number(a) };
-          })
+              if (Array.isArray(a))
+                return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
+              if (a && typeof a === "object")
+                return {
+                  name: String(a.name ?? a.aspect ?? a.id ?? ""),
+                  value: Number(a.value ?? a.score ?? a.val ?? NaN),
+                };
+              if (typeof a === "string") return { name: a, value: NaN };
+              return { name: "", value: Number(a) };
+            })
           : [];
 
         const id = `${file.name}-${file.lastModified}`;
@@ -331,16 +331,16 @@ export default function ProjectFileLoad({
 
       const aspects: AspectItem[] = Array.isArray(out?.aspects)
         ? out.aspects.map((a: any) => {
-          if (Array.isArray(a))
-            return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
-          if (a && typeof a === "object")
-            return {
-              name: String(a.name ?? a.aspect ?? a.id ?? ""),
-              value: Number(a.value ?? a.score ?? a.val ?? NaN),
-            };
-          if (typeof a === "string") return { name: a, value: NaN };
-          return { name: "", value: Number(a) };
-        })
+            if (Array.isArray(a))
+              return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
+            if (a && typeof a === "object")
+              return {
+                name: String(a.name ?? a.aspect ?? a.id ?? ""),
+                value: Number(a.value ?? a.score ?? a.val ?? NaN),
+              };
+            if (typeof a === "string") return { name: a, value: NaN };
+            return { name: "", value: Number(a) };
+          })
         : [];
 
       setScores((prev) => {
@@ -439,8 +439,9 @@ export default function ProjectFileLoad({
           <div className="file-box__actions">
             <button
               type="button"
-              className={`btn btn-light ${mode === "single" ? "is-active" : ""
-                }`}
+              className={`btn btn-light ${
+                mode === "single" ? "is-active" : ""
+              }`}
               onClick={() =>
                 onViewModeChange
                   ? onViewModeChange("single")
@@ -451,8 +452,9 @@ export default function ProjectFileLoad({
             </button>
             <button
               type="button"
-              className={`btn btn-light ${mode === "compare" ? "is-active" : ""
-                }`}
+              className={`btn btn-light ${
+                mode === "compare" ? "is-active" : ""
+              }`}
               onClick={() =>
                 onViewModeChange
                   ? onViewModeChange("compare")
@@ -476,8 +478,7 @@ export default function ProjectFileLoad({
         <div className="file-box__add-row">
           <button
             type="button"
-            className={`add-file-btn ${canAddMore ? "can-add" : "cannot-add"
-              }`}
+            className={`add-file-btn ${canAddMore ? "can-add" : "cannot-add"}`}
             disabled={!canAddMore}
             onClick={() => {
               if (!canAddMore) return;
@@ -507,11 +508,6 @@ export default function ProjectFileLoad({
                 <li
                   key={s.id}
                   className={`file-row ${isSel ? "selected" : ""}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
                 >
                   <input
                     type="checkbox"
@@ -549,7 +545,6 @@ export default function ProjectFileLoad({
                       replaceInputRef.current?.click();
                     }}
                     style={{
-                      marginLeft: 8,
                       border: "none",
                       background: "transparent",
                       cursor: "pointer",
@@ -568,7 +563,6 @@ export default function ProjectFileLoad({
                       border: "none",
                       background: "transparent",
                       cursor: "pointer",
-                      marginLeft: 6,
                     }}
                   >
                     ✕
@@ -581,5 +575,4 @@ export default function ProjectFileLoad({
       </div>
     </section>
   );
-
 }

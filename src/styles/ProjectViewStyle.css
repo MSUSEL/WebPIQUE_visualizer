@@ -165,15 +165,15 @@
 .visualize-btn {
   padding: 8px 14px;
   border-radius: 10px;
-  border: 1px solid #005a9e;
-  background: #0ea5e9;
-  color: #fff;
+  border: 1px solid #9bbcf9;
+  background: #2679f5;
+  color: #f3e8e8;
   font-weight: 600;
   cursor: pointer;
 }
 .visualize-btn:disabled {
-  background: #cbd5e1;
-  border-color: #cbd5e1;
-  color: #475569;
+  background: #8a8c8d;
+  border-color: #727679;
+  color: #afafaf;
   cursor: not-allowed;
 }
