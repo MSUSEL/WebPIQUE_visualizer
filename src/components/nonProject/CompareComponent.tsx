@@ -1,10 +1,5 @@
 // side-by-side compare with synced panes - mostly unique to webpique
-import React, {
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-} from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
@@ -21,7 +16,6 @@ import { Provider, createStore } from "jotai";
 import { aspectAtom, securityTabAtom } from "../../state/visualAtoms";
 
 type UploadPayload = { filename: string; data: any };
-type OneChild = React.ReactElement;
 
 const SASH_W = 8;
 type DiffFilter = "all" | "differing" | "unique";
@@ -33,15 +27,40 @@ type CompareProps = {
   initialSizes?: number[];
 };
 
+// key used by HamburgerMenu hard navigation
+const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
+
 const Compare: React.FC<CompareProps> = (props) => {
   const { state } = useLocation() as {
     state?: { file1?: UploadPayload; file2?: UploadPayload };
   };
 
-  // prefer props, fallback to router state
-  const file1 = props.file1 ?? state?.file1;
-  const file2 = props.file2 ?? state?.file2;
-  if (!file1 || !file2) return <Navigate to="/" replace />;
+  // 1) prefer props (embedded usage)
+  // 2) fallback to router state
+  // 3) fallback to localStorage payload (hard navigation)
+  let file1: UploadPayload | undefined = props.file1 ?? state?.file1;
+  let file2: UploadPayload | undefined = props.file2 ?? state?.file2;
+
+  if (!file1 || !file2) {
+    try {
+      const raw = localStorage.getItem(COMPARE_PAYLOAD_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          file1?: UploadPayload;
+          file2?: UploadPayload;
+        };
+        if (!file1 && parsed.file1) file1 = parsed.file1;
+        if (!file2 && parsed.file2) file2 = parsed.file2;
+      }
+    } catch (err) {
+      console.error("Error reading compare payload from localStorage", err);
+    }
+  }
+
+  if (!file1 || !file2) {
+    // still nothing – go home
+    return <Navigate to="/" replace />;
+  }
 
   const sizesInit = props.initialSizes ?? [50, 50];
 
@@ -70,7 +89,6 @@ const Compare: React.FC<CompareProps> = (props) => {
 
   // ---------- helpers for per-aspect counts ----------
 
-  // union with predicate (used to filter to active aspect)
   const unionFiltered = useCallback(
     <T,>(
       a: Iterable<T>,
@@ -88,8 +106,10 @@ const Compare: React.FC<CompareProps> = (props) => {
   const getAspectPFNames = useCallback(
     (scores: any, aspectName: string | null): string[] => {
       if (!scores || !aspectName) return [];
-      const byAspect = (scores?.productFactorsByAspect ??
-        {}) as Record<string, any[]>;
+      const byAspect = (scores?.productFactorsByAspect ?? {}) as Record<
+        string,
+        any[]
+      >;
       let list = (byAspect?.[aspectName] ?? []) as any[];
 
       // fallback for "Security" to legacy cweProductFactors, like ProductFactorTabs
@@ -100,8 +120,7 @@ const Compare: React.FC<CompareProps> = (props) => {
       return list
         .map((pf) => pf?.name)
         .filter(
-          (name: any): name is string =>
-            typeof name === "string" && !!name
+          (name: any): name is string => typeof name === "string" && !!name
         );
     },
     []
@@ -126,26 +145,22 @@ const Compare: React.FC<CompareProps> = (props) => {
 
       const addFromScores = (scores: any) => {
         if (!scores) return;
-        const byAspect = (scores?.productFactorsByAspect ??
-          {}) as Record<string, any[]>;
+        const byAspect = (scores?.productFactorsByAspect ?? {}) as Record<
+          string,
+          any[]
+        >;
         let list = (byAspect?.[aspectName] ?? []) as any[];
 
-        // again, fallback to legacy Security-only CWEs if needed
+        // fallback to legacy Security-only CWEs if needed
         if (list.length === 0 && /security/i.test(aspectName || "")) {
           list = (scores?.cweProductFactors ?? []) as any[];
         }
 
         for (const pf of list ?? []) {
-          // diagnostics may be under cves or a more generic diagnostics field
           const diags = (pf?.cves ?? pf?.diagnostics ?? []) as any[];
           for (const c of diags) {
             const id =
-              c?.cveId ??
-              c?.id ??
-              c?.name ??
-              c?.CVE ??
-              c?.CVE_ID ??
-              null;
+              c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
             if (id) out.add(String(id));
           }
         }
@@ -178,7 +193,7 @@ const Compare: React.FC<CompareProps> = (props) => {
 
   const activeAspect = sharedStore.get(aspectAtom) as string | null;
 
-  // legend counts - now scoped to ACTIVE Quality Aspect
+  // legend counts - scoped to ACTIVE Quality Aspect
   const cweDiffCount = useMemo(() => {
     if (!activeAspect) return 0;
 
@@ -248,11 +263,7 @@ const Compare: React.FC<CompareProps> = (props) => {
   const cveDiffCount = useMemo(() => {
     if (!activeAspect) return 0;
 
-    const aspectDiagIds = getAspectDiagIdSet(
-      scores1,
-      scores2,
-      activeAspect
-    );
+    const aspectDiagIds = getAspectDiagIdSet(scores1, scores2, activeAspect);
     if (aspectDiagIds.size === 0) return 0;
 
     const diffs = unionFiltered(
@@ -276,11 +287,7 @@ const Compare: React.FC<CompareProps> = (props) => {
   const cveUniqueCount = useMemo(() => {
     if (!activeAspect) return 0;
 
-    const aspectDiagIds = getAspectDiagIdSet(
-      scores1,
-      scores2,
-      activeAspect
-    );
+    const aspectDiagIds = getAspectDiagIdSet(scores1, scores2, activeAspect);
     if (aspectDiagIds.size === 0) return 0;
 
     const uniques = unionFiltered(
@@ -306,8 +313,6 @@ const Compare: React.FC<CompareProps> = (props) => {
     (tab: "CWE" | "CVE", filter: DiffFilter) => {
       const mapped = tab === "CWE" ? "PF" : "VULN_OR_DIAG";
 
-      // Don't force the aspect to "Security" anymore.
-      // Just ensure the underlying tab in the Security view is synced.
       sharedStore.set(securityTabAtom, mapped);
 
       setDiffFilter((prev) => (prev === filter ? "all" : filter));
@@ -325,14 +330,6 @@ const Compare: React.FC<CompareProps> = (props) => {
       <span />
     </div>
   );
-
-  const MaybeSyncPane = ({
-    enabled,
-    children,
-  }: {
-    enabled: boolean;
-    children: OneChild;
-  }) => (enabled ? <ScrollSyncPane>{children}</ScrollSyncPane> : children);
 
   return (
     <div className="compare-app-container">
@@ -436,7 +433,7 @@ const Compare: React.FC<CompareProps> = (props) => {
             </span>
           </div>
           <div className="legend-caption">
-            🚩 present in both files but fields differ. ‼️ present in only one
+            🚩: present in both files but fields differ. ‼️: present in only one
             file.
           </div>
         </div>
@@ -505,4 +502,3 @@ const Compare: React.FC<CompareProps> = (props) => {
 };
 
 export default React.memo(Compare);
-

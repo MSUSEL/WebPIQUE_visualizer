@@ -49,11 +49,44 @@ type Props = {
   relational?: RelationalExtract;
 };
 
+// key used by HamburgerMenu hard navigation
+const SINGLE_PAYLOAD_KEY = "wp_single_payload";
+
 const SingleFileVisualizer: React.FC<Props> = (props) => {
   const location = useLocation();
-  const jsonDataInput =
+
+  // 1) props.jsonData (supports embedded usage & Compare)
+  // 2) router state from /visualizer navigation
+  // 3) localStorage payload from hard navigation
+  let jsonDataInput =
     (props.jsonData && (props.jsonData.data ?? props.jsonData)) ??
-    location.state?.jsonData;
+    (location.state as any)?.jsonData;
+
+  if (!jsonDataInput) {
+    try {
+      const raw = localStorage.getItem(SINGLE_PAYLOAD_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        jsonDataInput = parsed?.data ?? parsed;
+      }
+    } catch (err) {
+      console.error("Error reading single-file payload from localStorage", err);
+    }
+  }
+
+  if (!jsonDataInput) {
+    return (
+      <div className="app-container">
+        <main className="main-content">
+          <p style={{ textAlign: "center", marginTop: "2rem" }}>
+            <strong>
+              No file loaded. Use the menu to upload a PIQUE JSON file.
+            </strong>
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   // parse once per input
   const parsed = useMemo(() => parsePIQUEJSON(jsonDataInput), [jsonDataInput]);

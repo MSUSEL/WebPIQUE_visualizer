@@ -1,15 +1,17 @@
-//component for hamburger menu and it's functionality
 import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import Hamburger from "hamburger-react";
 import { useNavigate } from "react-router-dom";
 import FileUpload from "../headerfooter/FileUpload";
-//import { login, signup } from "../../Utilities/Authorization";
 import "../../styles/HamburgerMenuStyle.css";
 
 type UploadPayload = { filename: string; data: any };
 
-const MENU_TOP = 40; // variable for better position control
-const MENU_WIDTH = 270; // variable for better position control
+const MENU_TOP = 40;
+const MENU_WIDTH = 270;
+
+// keys for passing data between pages
+const SINGLE_PAYLOAD_KEY = "wp_single_payload";
+const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
 
 const HamburgerMenu: React.FC = () => {
   const [isOpen, setOpen] = useState(false);
@@ -19,24 +21,56 @@ const HamburgerMenu: React.FC = () => {
   const [rightJson, setRightJson] = useState<UploadPayload | null>(null);
 
   const [submenuTop, setSubmenuTop] = useState<number>(MENU_TOP);
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // still available if you need it elsewhere
 
   // anchor: measure the top of the "Compare" and "Login" rows inside the menu
   const compareRowRef = useRef<HTMLDivElement>(null);
   const loginRowRef = useRef<HTMLDivElement>(null);
 
-  // authorization component handler
+  // authorization component handler (currently unused UI)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  const handleCompare = () => {
-    if (!leftJson || !rightJson) return;
-    // close menus before navigating
+  // --- helper: close menu + hard navigation ---
+  const hardNavigate = (path: string) => {
     setOpen(false);
     setShowCompareSubmenu(false);
     setShowLogin(false);
-    navigate("/compare", { state: { file1: leftJson, file2: rightJson } });
+    setLeftJson(null);
+    setRightJson(null);
+
+    window.location.assign(path);
+  };
+
+  // --- helper: store payload + navigate (for visualizer / compare) ---
+  const goToSingleVisualizer = (payload: UploadPayload) => {
+    try {
+      localStorage.setItem(SINGLE_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+    hardNavigate("/visualizer");
+  };
+
+  const goToCompareVisualizer = (payload: {
+    file1: UploadPayload;
+    file2: UploadPayload;
+  }) => {
+    try {
+      localStorage.setItem(COMPARE_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+    hardNavigate("/compare");
+  };
+
+  const handleCompare = () => {
+    if (!leftJson || !rightJson) return;
+    setOpen(false);
+    setShowCompareSubmenu(false);
+    setShowLogin(false);
+    goToCompareVisualizer({ file1: leftJson, file2: rightJson });
   };
 
   // reset all submenu state on close
@@ -70,33 +104,7 @@ const HamburgerMenu: React.FC = () => {
   }, [isOpen, showLogin]);
 
   const canSubmit =
-    !authLoading && username.trim().length > 0 && password.trim().length >= 6; // simple length check
-
-  /*  
-  async function handleAuthSubmit(e?: React.FormEvent) {
-    e?.preventDefault();
-    setAuthError(null);
-    if (!canSubmit) return;
-
-    try {
-      setAuthLoading(true);
-      const data =
-        authMode === "login"
-          ? await login(username.trim(), password)
-          : await signup(username.trim(), password);
-
-      setOpen(false);
-      setShowLogin(false);
-
-      // navigate to the project page
-      navigate("/projects");
-    } catch (err: any) {
-      setAuthError(err?.message ?? "Something went wrong.");
-    } finally {
-      setAuthLoading(false);
-    }
-  }
-    */
+    !authLoading && username.trim().length > 0 && password.trim().length >= 6;
 
   return (
     <div className="menu-container">
@@ -109,18 +117,17 @@ const HamburgerMenu: React.FC = () => {
           <h2 className="menu-title">WebPIQUE Visualizer Menu</h2>
           <hr />
 
+          {/* Home – full navigation */}
           <div
             className="menu-item"
             onClick={() => {
-              setOpen(false); // close the hamburger
-              setShowCompareSubmenu(false);
-              navigate("/"); // go to LandingPage ("/")
+              hardNavigate("/");
             }}
           >
             <span>Home</span>
           </div>
 
-          {/* single-file upload */}
+          {/* Single-file upload: store payload + full navigation */}
           <div
             onClick={() => {
               setShowCompareSubmenu(false);
@@ -130,14 +137,12 @@ const HamburgerMenu: React.FC = () => {
               variant="menuItem"
               onJsonLoaded={({ filename, data }: UploadPayload) => {
                 handleToggle(false);
-                navigate("/visualizer", {
-                  state: { jsonData: data, filename },
-                }); // go to SingleFilePage
+                goToSingleVisualizer({ filename, data });
               }}
             />
           </div>
 
-          {/* compare submenu toggle, go to ComparePage */}
+          {/* Compare submenu toggle */}
           <div
             ref={compareRowRef}
             className={`menu-item ${showCompareSubmenu ? "active" : ""}`}
@@ -152,32 +157,15 @@ const HamburgerMenu: React.FC = () => {
             </span>
           </div>
 
+          {/* Project – full navigation */}
           <div
             className="menu-item"
             onClick={() => {
-              setOpen(false); // close the hamburger
-              setShowCompareSubmenu(false);
-              navigate("/projects"); // go to Project page
+              hardNavigate("/projects");
             }}
           >
             <span>Project</span>
           </div>
-
-          {/* Login 
-          <div
-            ref={loginRowRef}
-            className={`menu-item ${showLogin ? "active" : ""}`}
-            onClick={() => {
-              setShowLogin((v) => !v);
-              setShowCompareSubmenu(false);
-            }}
-          >
-            <span>Login</span>
-            <span className="chevron" aria-hidden>
-              &gt;
-            </span>
-          </div>
-          */}
         </div>
       )}
 
@@ -215,79 +203,6 @@ const HamburgerMenu: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* login submenu 
-      {isOpen && showLogin && (
-        <div
-          className="submenu locked"
-          style={{ top: submenuTop, left: MENU_WIDTH }}
-        >
-          <h3 className="submenu-title">{authMode === "login" ? "Login" : "Create Account"}</h3>
-          <hr />
-
-          <form onSubmit={handleAuthSubmit}>
-            <div className="login-fields">
-              <label htmlFor="username">Username:</label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div className="login-fields">
-              <label htmlFor="password">Password:</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={authMode === "login" ? "current-password" : "new-password"}
-                placeholder="••••••••"
-              />
-            </div>
-
-            {authError && <div className="error-text">{authError}</div>}
-
-            <button
-              className="compare-button"
-              type="submit"
-              disabled={!canSubmit}
-            >
-              {authMode === "login" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
-
-          <div >
-            {authMode === "login" ? (
-              <>
-                <button
-                  type="button"
-                  className="linklike"
-                  disabled={authLoading}
-                  onClick={() => setAuthMode("signup")}
-                >
-                  Create an account
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="linklike"
-                  onClick={() => setAuthMode("login")}
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      */}
     </div>
   );
 };
