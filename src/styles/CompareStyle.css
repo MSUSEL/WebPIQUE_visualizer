@@ -26,7 +26,7 @@
   overflow: hidden;
 }
 
-.compare-filenames>div {
+.compare-filenames > div {
   min-width: 0;
 }
 
@@ -155,11 +155,6 @@
   border-color: rgba(217, 48, 37, 0.35);
 }
 
-.legend-chip--diff:active {
-  border: 2px solid black;
-  box-shadow: #666;
-}
-
 .legend-chip--unique {
   background: rgba(227, 116, 0, 0.1);
   border-color: rgba(227, 116, 0, 0.4);
@@ -190,7 +185,7 @@
   text-align: center;
 }
 
-.legend-reset:active {
+.legend-reset:hover {
   color: white;
   background-color: black;
 }
@@ -201,6 +196,15 @@
   outline-offset: 2px;
 }
 
+.legend-chip:hover {
+  border: 1px solid black;
+  color: black;
+  background: lightgrey;
+}
+
 .legend-chip.is-active {
-  border: 2px solid #444;
+  border: 2px solid black;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.45);
+  color: black;
+  background: lightgrey;
 }

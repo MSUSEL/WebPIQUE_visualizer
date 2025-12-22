@@ -174,7 +174,8 @@ const Compare: React.FC<CompareProps> = (props) => {
   );
 
   // compare-only UI state
-  const [diffFilter, setDiffFilter] = useState<DiffFilter>("all");
+  const [cweFilter, setCweFilter] = useState<DiffFilter>("all");
+  const [cveFilter, setCveFilter] = useState<DiffFilter>("all");
   const [sizes, setSizes] = useState<number[]>(sizesInit);
   const [syncScroll, setSyncScroll] = useState(true);
 
@@ -312,13 +313,22 @@ const Compare: React.FC<CompareProps> = (props) => {
   const activate = useCallback(
     (tab: "CWE" | "CVE", filter: DiffFilter) => {
       const mapped = tab === "CWE" ? "PF" : "VULN_OR_DIAG";
-
       sharedStore.set(securityTabAtom, mapped);
 
-      setDiffFilter((prev) => (prev === filter ? "all" : filter));
+      if (tab === "CWE") {
+        setCweFilter((prev) => (prev === filter ? "all" : filter));
+        setCveFilter("all"); // deactivate CVE chips
+      } else {
+        setCveFilter((prev) => (prev === filter ? "all" : filter));
+        setCweFilter("all"); // deactivate CWE chips
+      }
     },
     [sharedStore]
   );
+
+  const activeTab = sharedStore.get(securityTabAtom); // "PF" or "VULN_OR_DIAG"
+  const effectiveDiffFilter =
+    activeTab === "VULN_OR_DIAG" ? cveFilter : cweFilter;
 
   const sashRender = (_i: number, active: boolean) => (
     <div
@@ -368,53 +378,37 @@ const Compare: React.FC<CompareProps> = (props) => {
         <div className="page-legend">
           <div className="legend-row">
             <span
-              className="legend-chip legend-chip--diff"
-              role="button"
-              tabIndex={0}
+              className={`legend-chip legend-chip--diff ${
+                cweFilter === "differing" ? "is-active" : ""
+              }`}
               onClick={() => activate("CWE", "differing")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CWE", "differing")
-              }
             >
               🚩 Differing CWE items{" "}
               <span className="legend-count">{cweDiffCount}</span>
             </span>
             <span
-              className="legend-chip legend-chip--unique"
-              role="button"
-              tabIndex={0}
+              className={`legend-chip legend-chip--unique ${
+                cweFilter === "unique" ? "is-active" : ""
+              }`}
               onClick={() => activate("CWE", "unique")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CWE", "unique")
-              }
             >
               ‼️ Unique CWE items{" "}
               <span className="legend-count">{cweUniqueCount}</span>
             </span>
             <span
-              className="legend-chip legend-chip--diff"
-              role="button"
-              tabIndex={0}
+              className={`legend-chip legend-chip--diff ${
+                cveFilter === "differing" ? "is-active" : ""
+              }`}
               onClick={() => activate("CVE", "differing")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CVE", "differing")
-              }
             >
               🚩 Differing package vulnerabilities{" "}
               <span className="legend-count">{cveDiffCount}</span>
             </span>
             <span
-              className="legend-chip legend-chip--unique"
-              role="button"
-              tabIndex={0}
+              className={`legend-chip legend-chip--unique ${
+                cveFilter === "unique" ? "is-active" : ""
+              }`}
               onClick={() => activate("CVE", "unique")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                activate("CVE", "unique")
-              }
             >
               ‼️ Unique package vulnerabilities{" "}
               <span className="legend-count">{cveUniqueCount}</span>
@@ -423,13 +417,19 @@ const Compare: React.FC<CompareProps> = (props) => {
               className="legend-reset"
               role="button"
               tabIndex={0}
-              onClick={() => setDiffFilter("all")}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") && setDiffFilter("all")
-              }
+              onClick={() => {
+                setCweFilter("all");
+                setCveFilter("all");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  setCweFilter("all");
+                  setCveFilter("all");
+                }
+              }}
               title="Show all"
             >
-              All items
+              Reset
             </span>
           </div>
           <div className="legend-caption">
@@ -454,7 +454,7 @@ const Compare: React.FC<CompareProps> = (props) => {
                       <SingleFileComponent
                         jsonData={file1}
                         diffHints={leftHints}
-                        diffFilter={diffFilter}
+                        diffFilter={effectiveDiffFilter}
                       />
                     </div>
                   </ScrollSyncPane>
@@ -463,7 +463,7 @@ const Compare: React.FC<CompareProps> = (props) => {
                     <SingleFileComponent
                       jsonData={file1}
                       diffHints={leftHints}
-                      diffFilter={diffFilter}
+                      diffFilter={effectiveDiffFilter}
                     />
                   </div>
                 )}
@@ -479,7 +479,7 @@ const Compare: React.FC<CompareProps> = (props) => {
                       <SingleFileComponent
                         jsonData={file2}
                         diffHints={rightHints}
-                        diffFilter={diffFilter}
+                        diffFilter={effectiveDiffFilter}
                       />
                     </div>
                   </ScrollSyncPane>
@@ -488,7 +488,7 @@ const Compare: React.FC<CompareProps> = (props) => {
                     <SingleFileComponent
                       jsonData={file2}
                       diffHints={rightHints}
-                      diffFilter={diffFilter}
+                      diffFilter={effectiveDiffFilter}
                     />
                   </div>
                 )}
