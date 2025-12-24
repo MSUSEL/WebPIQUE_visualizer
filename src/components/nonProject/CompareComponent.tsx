@@ -67,15 +67,24 @@ const Compare: React.FC<CompareProps> = (props) => {
   const file1Name = file1.filename ?? "File 1";
   const file2Name = file2.filename ?? "File 2";
 
-  // parse once per file
-  const scores1 = useMemo(
-    () => parsePIQUEJSON((file1 as any).data ?? file1).scores,
+  // parse once per file (keep both scores + relational for CVE/diagnostic scoping)
+  const parsed1 = useMemo(
+    () => parsePIQUEJSON((file1 as any).data ?? file1),
     [file1]
   );
-  const scores2 = useMemo(
-    () => parsePIQUEJSON((file2 as any).data ?? file2).scores,
+  const parsed2 = useMemo(
+    () => parsePIQUEJSON((file2 as any).data ?? file2),
     [file2]
   );
+
+  const scores1 = parsed1?.scores;
+  const scores2 = parsed2?.scores;
+
+  // DataParser has varied slightly over time; tolerate common property names.
+  const relational1: any =
+    (parsed1 as any)?.relational ?? (parsed1 as any)?.relationalExtract ?? null;
+  const relational2: any =
+    (parsed2 as any)?.relational ?? (parsed2 as any)?.relationalExtract ?? null;
 
   // build diff hints (directional)
   const leftHints: DiffHints = useMemo(
@@ -138,36 +147,105 @@ const Compare: React.FC<CompareProps> = (props) => {
     [getAspectPFNames]
   );
 
+  // IMPORTANT: scope CVE/diagnostic IDs using relational graph (same logic as FindingsTab)
   const getAspectDiagIdSet = useCallback(
-    (scoresLeft: any, scoresRight: any, aspectName: string | null) => {
+    (
+      scoresLeft: any,
+      scoresRight: any,
+      relLeft: any,
+      relRight: any,
+      aspectName: string | null
+    ) => {
       const out = new Set<string>();
       if (!aspectName) return out;
 
-      const addFromScores = (scores: any) => {
+      const norm = (v: any) => String(v ?? "").trim();
+
+      // build PF id/name set for the ACTIVE aspect (mirrors ProductFactorTabs)
+      const aspectPfIdSet = new Set<string>();
+      const addPfIdsFromScores = (scores: any) => {
         if (!scores) return;
         const byAspect = (scores?.productFactorsByAspect ?? {}) as Record<
           string,
           any[]
         >;
         let list = (byAspect?.[aspectName] ?? []) as any[];
-
-        // fallback to legacy Security-only CWEs if needed
         if (list.length === 0 && /security/i.test(aspectName || "")) {
           list = (scores?.cweProductFactors ?? []) as any[];
         }
-
         for (const pf of list ?? []) {
-          const diags = (pf?.cves ?? pf?.diagnostics ?? []) as any[];
-          for (const c of diags) {
-            const id =
-              c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
-            if (id) out.add(String(id));
-          }
+          const id = pf?.id != null ? norm(pf.id) : "";
+          const name = pf?.name != null ? norm(pf.name) : "";
+          if (id) aspectPfIdSet.add(id);
+          if (name) aspectPfIdSet.add(name);
         }
       };
+      addPfIdsFromScores(scoresLeft);
+      addPfIdsFromScores(scoresRight);
 
-      addFromScores(scoresLeft);
-      addFromScores(scoresRight);
+      if (aspectPfIdSet.size === 0) return out;
+
+      const addFromRelational = (rel: any) => {
+        if (!rel) return;
+
+        // diagnosticId -> measureIds
+        const diagToMeasures = new Map<string, string[]>();
+        (rel.measureDiagnostics ?? []).forEach((e: any) => {
+          const diagId = norm(e?.diagnosticId);
+          const measureId = norm(e?.measureId);
+          if (!diagId || !measureId) return;
+          const arr = diagToMeasures.get(diagId) ?? [];
+          arr.push(measureId);
+          diagToMeasures.set(diagId, arr);
+        });
+
+        // measureId -> pfIds
+        const measureToPfs = new Map<string, string[]>();
+        (rel.pfMeasures ?? []).forEach((e: any) => {
+          const pfId = norm(e?.pfId);
+          const measureId = norm(e?.measureId);
+          if (!pfId || !measureId) return;
+          const arr = measureToPfs.get(measureId) ?? [];
+          arr.push(pfId);
+          measureToPfs.set(measureId, arr);
+        });
+
+        const diagTouchesAspect = (diagIdRaw: any): boolean => {
+          const diagId = norm(diagIdRaw);
+          if (!diagId) return false;
+          const measureIds = diagToMeasures.get(diagId) ?? [];
+          for (const mid of measureIds) {
+            const pfIds = measureToPfs.get(mid) ?? [];
+            for (const pfId of pfIds) {
+              if (aspectPfIdSet.has(pfId)) return true;
+            }
+          }
+          return false;
+        };
+
+        // include CVEs/GHSAs/etc stored as findings
+        // Findings are keyed by the vulnerability id (e.g., CVE-2024-4067),
+        // but the relational graph that connects them to Measures/PFs is via
+        // finding.diagnosticId -> measureDiagnostics(diagnosticId -> measureId).
+        (rel.findings ?? []).forEach((f: any) => {
+          const findingId = norm(f?.id ?? f?.cveId ?? f?.name);
+          const diagId = norm(f?.diagnosticId);
+          if (!findingId || !diagId) return;
+          if (diagTouchesAspect(diagId)) out.add(findingId);
+        });
+
+        // include tool diagnostics if they are separate objects
+        // Here, the diagnostic id itself is what links to measures.
+        (rel.diagnostics ?? []).forEach((d: any) => {
+          const diagId = norm(d?.id ?? d?.diagnosticId);
+          if (!diagId) return;
+          if (diagTouchesAspect(diagId)) out.add(diagId);
+        });
+      };
+
+      addFromRelational(relLeft);
+      addFromRelational(relRight);
+
       return out;
     },
     []
@@ -264,13 +342,19 @@ const Compare: React.FC<CompareProps> = (props) => {
   const cveDiffCount = useMemo(() => {
     if (!activeAspect) return 0;
 
-    const aspectDiagIds = getAspectDiagIdSet(scores1, scores2, activeAspect);
+    const aspectDiagIds = getAspectDiagIdSet(
+      scores1,
+      scores2,
+      relational1,
+      relational2,
+      activeAspect
+    );
     if (aspectDiagIds.size === 0) return 0;
 
     const diffs = unionFiltered(
       leftHints.differingCVEs,
       rightHints.differingCVEs,
-      (id) => aspectDiagIds.has(String(id))
+      (id) => aspectDiagIds.has(String(id ?? "").trim())
     );
 
     return diffs.size;
@@ -279,6 +363,8 @@ const Compare: React.FC<CompareProps> = (props) => {
     rightHints,
     scores1,
     scores2,
+    relational1,
+    relational2,
     activeAspect,
     aspectVersion,
     getAspectDiagIdSet,
@@ -288,13 +374,19 @@ const Compare: React.FC<CompareProps> = (props) => {
   const cveUniqueCount = useMemo(() => {
     if (!activeAspect) return 0;
 
-    const aspectDiagIds = getAspectDiagIdSet(scores1, scores2, activeAspect);
+    const aspectDiagIds = getAspectDiagIdSet(
+      scores1,
+      scores2,
+      relational1,
+      relational2,
+      activeAspect
+    );
     if (aspectDiagIds.size === 0) return 0;
 
     const uniques = unionFiltered(
       leftHints.missingCVEs,
       rightHints.missingCVEs,
-      (id) => aspectDiagIds.has(String(id))
+      (id) => aspectDiagIds.has(String(id ?? "").trim())
     );
 
     return uniques.size;
@@ -303,6 +395,8 @@ const Compare: React.FC<CompareProps> = (props) => {
     rightHints,
     scores1,
     scores2,
+    relational1,
+    relational2,
     activeAspect,
     aspectVersion,
     getAspectDiagIdSet,
@@ -327,6 +421,23 @@ const Compare: React.FC<CompareProps> = (props) => {
   );
 
   const activeTab = sharedStore.get(securityTabAtom); // "PF" or "VULN_OR_DIAG"
+
+  const pfLabel =
+    typeof activeAspect === "string" &&
+    /security/i.test(activeAspect) &&
+    cweDiffCount + cweUniqueCount > 0 &&
+    true
+      ? "CWEs"
+      : "Product Factors";
+
+  const isPackageVulnMode =
+    // if the aspect has any CVE/GHSA ids scoped to it, treat as package vulnerabilities
+    cveDiffCount + cveUniqueCount > 0;
+
+  const diagLabel = isPackageVulnMode
+    ? "package vulnerabilities"
+    : "Diagnostic Findings";
+
   const effectiveDiffFilter =
     activeTab === "VULN_OR_DIAG" ? cveFilter : cweFilter;
 
@@ -375,68 +486,70 @@ const Compare: React.FC<CompareProps> = (props) => {
         </div>
 
         {/* legend/filters */}
-        <div className="page-legend">
-          <div className="legend-row">
-            <span
-              className={`legend-chip legend-chip--diff ${
-                cweFilter === "differing" ? "is-active" : ""
-              }`}
-              onClick={() => activate("CWE", "differing")}
-            >
-              🚩 Differing CWE items{" "}
-              <span className="legend-count">{cweDiffCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--unique ${
-                cweFilter === "unique" ? "is-active" : ""
-              }`}
-              onClick={() => activate("CWE", "unique")}
-            >
-              ‼️ Unique CWE items{" "}
-              <span className="legend-count">{cweUniqueCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--diff ${
-                cveFilter === "differing" ? "is-active" : ""
-              }`}
-              onClick={() => activate("CVE", "differing")}
-            >
-              🚩 Differing package vulnerabilities{" "}
-              <span className="legend-count">{cveDiffCount}</span>
-            </span>
-            <span
-              className={`legend-chip legend-chip--unique ${
-                cveFilter === "unique" ? "is-active" : ""
-              }`}
-              onClick={() => activate("CVE", "unique")}
-            >
-              ‼️ Unique package vulnerabilities{" "}
-              <span className="legend-count">{cveUniqueCount}</span>
-            </span>
-            <span
-              className="legend-reset"
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                setCweFilter("all");
-                setCveFilter("all");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+        {activeAspect && (
+          <div className="page-legend">
+            <div className="legend-row">
+              <span
+                className={`legend-chip legend-chip--diff ${
+                  cweFilter === "differing" ? "is-active" : ""
+                }`}
+                onClick={() => activate("CWE", "differing")}
+              >
+                🚩 Differing {pfLabel}{" "}
+                <span className="legend-count">{cweDiffCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--unique ${
+                  cweFilter === "unique" ? "is-active" : ""
+                }`}
+                onClick={() => activate("CWE", "unique")}
+              >
+                ‼️ Unique {pfLabel}{" "}
+                <span className="legend-count">{cweUniqueCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--diff ${
+                  cveFilter === "differing" ? "is-active" : ""
+                }`}
+                onClick={() => activate("CVE", "differing")}
+              >
+                🚩 Differing {diagLabel}{" "}
+                <span className="legend-count">{cveDiffCount}</span>
+              </span>
+              <span
+                className={`legend-chip legend-chip--unique ${
+                  cveFilter === "unique" ? "is-active" : ""
+                }`}
+                onClick={() => activate("CVE", "unique")}
+              >
+                ‼️ Unique {diagLabel}{" "}
+                <span className="legend-count">{cveUniqueCount}</span>
+              </span>
+              <span
+                className="legend-reset"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
                   setCweFilter("all");
                   setCveFilter("all");
-                }
-              }}
-              title="Show all"
-            >
-              Reset
-            </span>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    setCweFilter("all");
+                    setCveFilter("all");
+                  }
+                }}
+                title="Show all"
+              >
+                Reset
+              </span>
+            </div>
+            <div className="legend-caption">
+              🚩: present in both files but fields differ. ‼️: present in only
+              one file.
+            </div>
           </div>
-          <div className="legend-caption">
-            🚩: present in both files but fields differ. ‼️: present in only one
-            file.
-          </div>
-        </div>
+        )}
 
         <ScrollSync>
           <SplitPane

@@ -168,7 +168,8 @@
 }
 
 .st-chip:hover {
-  background: #eee;
+  background: black;
+  color: white;
 }
 
 .st-chip:active {
@@ -200,18 +201,20 @@
 /* Filters row */
 .st-filters {
   display: flex;
-  gap: 10px;
   align-items: flex-end;
+  gap: 8px;
+  margin-left: 18px;
+  padding-left: 0;
+  padding-bottom: 12px;
   flex-wrap: wrap;
-  margin: 6px 0 10px 0;
-  padding-left: 22px;
-  padding-bottom: 15px;
+  max-width: calc(100% - 18px);
+  box-sizing: border-box;
 }
 
 .st-filter {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: nowrap;
 }
 
 .st-filter-label {
@@ -239,7 +242,7 @@
 }
 
 .st-filters {
-  --st-filter-w: 200px;
+  --st-filter-w: 180px;
   --st-filter-h: 32px;
 }
 
@@ -259,7 +262,8 @@
 }
 
 .st-filter-reset:hover {
-  background: #eee;
+  background: black;
+  color: white;
 }
 
 .diff-arrow-left {
@@ -346,4 +350,15 @@
 .assoc-hover {
   text-decoration: underline dotted;
   cursor: help;
+}
+
+.hover-underline {
+  cursor: help;
+  text-decoration: underline dotted;
+}
+
+@media (max-width: 900px) {
+  .st-filters {
+    flex-wrap: wrap;
+  }
 }

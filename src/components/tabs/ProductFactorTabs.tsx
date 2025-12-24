@@ -1,60 +1,24 @@
 // ProductFactorTabs.tsx
-// Renders PF/CWE cards (with score filters) + a second tab for vulns/diagnostics.
-// Measures dropdown is delegated to MeasuresDropdown.
-// Vuln/diagnostic tab is delegated to FindingsTab.
+// Uses FindingsTab and MeasuresDropdown.
 
 import React, { useMemo, useState } from "react";
 import { Box } from "@mui/material";
-import MuiTabs, { TabItem } from "./Tabs";
-import "../../styles/SecurityTabs.css";
-
+import MuiTabs, { TabItem } from "../tabs/Tabs";
 import { RelationalExtract } from "../../Utilities/DataParser";
+import "../../styles/SecurityTabs.css";
 import { DiffHints } from "../../Utilities/fileDiff";
 
-import ProductFactorMeasuresDropdown from "./MeasuresDropdown";
-import ProductFactorFindingsTab from "./FindingsTab";
+import FindingTab from "../tabs/FindingsTab";
+import MeasuresDropdown from "../tabs/MeasuresDropdown";
 
 type ScoresType = any;
 type PF = any;
+type Measure = any;
 
 type SecTabName = "PF" | "VULN_OR_DIAG";
-type Bucket = "all" | "critical" | "severe" | "moderate";
-type FlagKind = "diff" | "unique" | null;
 
-type Props = {
-  aspectName: string;
-  scores: ScoresType;
-  relational?: RelationalExtract;
-
-  controlledTab?: SecTabName;
-  onTabChange?: (v: SecTabName) => void;
-
-  controlledMeasures?: string | null;
-  onMeausreChange?: (key: string | null) => void;
-
-  controlledBucket?: Bucket;
-  onBucketChange?: (v: Bucket) => void;
-
-  controlledExpandedPlots?: Record<string, boolean>;
-  onTogglePlot?: (key: string) => void;
-
-  // Vuln tab controls (sync across panes)
-  controlledPkgFilter?: string;
-  onPkgFilterChange?: (v: string) => void;
-
-  controlledFixedFilter?: "all" | "fixed" | "notfixed";
-  onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
-
-  // NEW: CWE lookup filter (sync across panes)
-  controlledCweFilter?: string;
-  onCweFilterChange?: (v: string) => void;
-
-  diffHints?: DiffHints;
-  diffFilter?: "all" | "differing" | "unique";
-};
-
-// ------- helpers -------
-const bucketFor = (score: number): Exclude<Bucket, "all"> =>
+// ------- helpers (unchanged) -------
+const bucketFor = (score: number): "critical" | "severe" | "moderate" =>
   score < 0.6 ? "critical" : score < 0.8 ? "severe" : "moderate";
 
 type SeverityInfo = {
@@ -63,7 +27,6 @@ type SeverityInfo = {
   label: string;
   icon: string;
 };
-
 const getSeverityInfo = (score: number): SeverityInfo =>
   score < 0.6
     ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
@@ -83,9 +46,9 @@ const getSeverityInfo = (score: number): SeverityInfo =>
 
 const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
 
-// De-dupe measures within a PF
+// de-dupe measures within PF
 const measureKey = (m: any) =>
-  (m?.id ?? m?.name ?? "").toString().trim().toLowerCase();
+  (m?.id ?? String(m?.name ?? "")).toString().trim().toLowerCase();
 
 const dedupeMeasuresForPF = <T extends { id?: string; name?: string }>(
   list: T[]
@@ -102,45 +65,14 @@ const dedupeMeasuresForPF = <T extends { id?: string; name?: string }>(
   return out;
 };
 
-// Relational fallback: PF -> measures
-const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
-  if (Array.isArray(pf?.measures) && pf.measures.length) return pf.measures;
-  if (!relational) return [];
-
-  const ids = new Set<string>(
-    [String(pf?.id ?? ""), String(pf?.name ?? "")].filter(Boolean) as string[]
-  );
-
-  const edges = relational.pfMeasures.filter((e) => ids.has(e.pfId));
-  const list = edges
-    .map((edge) => {
-      const m = relational.measures.find((mm) => mm.id === edge.measureId);
-      return m
-        ? {
-            id: m.id,
-            name: m.name,
-            description: m.description,
-            score: m.value ?? 0,
-            thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
-            weight: edge.weight ?? 0,
-            children: [],
-          }
-        : null;
-    })
-    .filter(Boolean) as any[];
-
-  return dedupeMeasuresForPF(list);
-};
-
-// diff/unique flags
-const pfKey = (pfName: string) => String(pfName ?? "");
+type FlagKind = "diff" | "unique" | null;
 
 const flagForPF = (name: string, hints?: DiffHints): FlagKind =>
   !hints
     ? null
-    : hints.missingPFs?.has(pfKey(name))
+    : hints.missingPFs?.has(name)
     ? "unique"
-    : hints.differingPFs?.has(pfKey(name))
+    : hints.differingPFs?.has(name)
     ? "diff"
     : null;
 
@@ -156,14 +88,12 @@ const flagForPFIncludingMeasures = (
 
   let hasDiff = false;
   let hasUnique = false;
-
   for (const m of measures ?? []) {
     const key = mkey(pfName, m.name);
     if (hints.differingMeasures?.has(key)) hasDiff = true;
     if (hints.missingMeasures?.has(key)) hasUnique = true;
-    if (hasDiff) break; // 🚩 outranks ‼️
+    if (hasDiff) break;
   }
-
   return hasDiff ? "diff" : hasUnique ? "unique" : null;
 };
 
@@ -202,35 +132,91 @@ const Delta: React.FC<{
   );
 };
 
+// ---- relational fallback helpers ----
+const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
+  if (Array.isArray(pf?.measures) && pf.measures.length) return pf.measures;
+  if (!relational) return [];
+
+  const ids = new Set<string>(
+    [String(pf?.id ?? ""), String(pf?.name ?? "")].filter(Boolean) as string[]
+  );
+  const edges = relational.pfMeasures.filter((e) => ids.has(e.pfId));
+
+  const list = edges
+    .map((edge) => {
+      const m = relational.measures.find((mm) => mm.id === edge.measureId);
+      return m
+        ? {
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            score: m.value ?? 0,
+            thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
+            weight: edge.weight ?? 0,
+            children: [],
+          }
+        : null;
+    })
+    .filter(Boolean) as any[];
+
+  return dedupeMeasuresForPF(list);
+};
+
+const firstThresholdsLen = (measures: any[]): number => {
+  for (const m of measures ?? []) {
+    const th: any = (m as any)?.thresholds ?? (m as any)?.threshold;
+    if (Array.isArray(th) && th.length) return th.length;
+  }
+  return 0;
+};
+
+// ---------- props ----------
+type Props = {
+  aspectName: string;
+  scores: ScoresType;
+  relational?: RelationalExtract;
+
+  controlledTab?: SecTabName;
+  onTabChange?: (v: SecTabName) => void;
+
+  controlledMeasures?: string | null;
+  onMeausreChange?: (key: string | null) => void;
+
+  controlledBucket?: "all" | "critical" | "severe" | "moderate";
+  onBucketChange?: (v: "all" | "critical" | "severe" | "moderate") => void;
+
+  controlledPkgFilter?: string;
+  onPkgFilterChange?: (v: string) => void;
+
+  controlledFixedFilter?: "all" | "fixed" | "notfixed";
+  onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
+
+  controlledExpandedPlots?: Record<string, boolean>;
+  onTogglePlot?: (key: string) => void;
+
+  diffHints?: DiffHints;
+  diffFilter?: "all" | "differing" | "unique";
+};
+
 const ProductFactorTabs: React.FC<Props> = ({
   aspectName,
   scores,
   relational,
-
   controlledTab,
   onTabChange,
-
   controlledMeasures,
   onMeausreChange,
-
   controlledBucket,
   onBucketChange,
-
-  controlledExpandedPlots,
-  onTogglePlot,
-
   controlledPkgFilter,
   onPkgFilterChange,
   controlledFixedFilter,
   onFixedFilterChange,
-
-  controlledCweFilter,
-  onCweFilterChange,
-
+  controlledExpandedPlots,
+  onTogglePlot,
   diffHints,
   diffFilter,
 }) => {
-  // PFs for aspect
   const aspectPFs = useMemo<PF[]>(() => {
     const byAspect = (scores?.productFactorsByAspect ?? {}) as Record<
       string,
@@ -242,67 +228,41 @@ const ProductFactorTabs: React.FC<Props> = ({
     return list;
   }, [scores, aspectName]);
 
-  // Determine whether this aspect has any CVE/GHSA findings (to label the 2nd tab).
-  // Mirrors FindingsTab’s scoping: a finding counts only if it maps to a PF in this aspect via diagnostic -> measure -> PF edges.
-  const hasPackageVulnsInAspect = useMemo(() => {
-    if (!relational) return true; // fallback to legacy label when relational is unavailable
-
-    const aspectPfIds = new Set<string>();
-    (aspectPFs ?? []).forEach((pf: any) => {
-      if (pf?.id) aspectPfIds.add(String(pf.id));
-      if (pf?.name) aspectPfIds.add(String(pf.name));
+  const aspectPfIdSet = useMemo(() => {
+    const set = new Set<string>();
+    aspectPFs.forEach((pf: any) => {
+      if (pf?.id) set.add(String(pf.id));
+      if (pf?.name) set.add(String(pf.name));
     });
+    return set;
+  }, [aspectPFs]);
 
-    const diagToMeasures = new Map<string, string[]>();
-    (relational.measureDiagnostics ?? []).forEach((e) => {
-      const arr = diagToMeasures.get(e.diagnosticId) ?? [];
-      arr.push(e.measureId);
-      diagToMeasures.set(e.diagnosticId, arr);
-    });
+  // controlled/uncontrolled tab selection
+  const [localTab, setLocalTab] = useState<SecTabName>("PF");
+  const tabName: SecTabName = controlledTab ?? localTab;
 
-    const measureToPFs = new Map<string, string[]>();
-    (relational.pfMeasures ?? []).forEach((e) => {
-      const arr = measureToPFs.get(e.measureId) ?? [];
-      arr.push(e.pfId);
-      measureToPFs.set(e.measureId, arr);
-    });
-
-    for (const f of relational.findings ?? []) {
-      const id = String(f?.id ?? "").trim();
-      if (!/^(?:CVE|GHSA)-/i.test(id)) continue;
-
-      const diagId = String(f?.diagnosticId ?? "");
-      const measureIds = diagToMeasures.get(diagId) ?? [];
-      for (const mid of measureIds) {
-        const pfIds = measureToPFs.get(mid) ?? [];
-        if (pfIds.some((pfId) => aspectPfIds.has(String(pfId)))) return true;
-      }
-    }
-
-    return false;
-  }, [relational, aspectPFs]);
-
-  // ----- PF expand state (controlled/uncontrolled) -----
+  // expanded PF selection (controlled/uncontrolled)
   const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
   const expandedKey = controlledMeasures ?? expandedLocal;
+
   const setExpandedKey = (key: string | null) => {
     if (controlledMeasures === undefined) setExpandedLocal(key);
     onMeausreChange?.(key);
   };
 
-  // ----- Plot expand state (controlled/uncontrolled) -----
+  // plot expansion state (controlled/uncontrolled)
   const [expandedPlotsLocal, setExpandedPlotsLocal] = useState<
     Record<string, boolean>
   >({});
   const expandedPlots = controlledExpandedPlots ?? expandedPlotsLocal;
-  const togglePlot = (key: string) => {
+
+  const togglePlotLocal = (key: string) => {
     if (onTogglePlot) onTogglePlot(key);
     else setExpandedPlotsLocal((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const diffFilterVal = diffFilter ?? "all";
 
-  // Sort PFs
   const sortedPFs = useMemo(() => {
     const arr = [...aspectPFs];
     if (!diffHints)
@@ -317,7 +277,6 @@ const ProductFactorTabs: React.FC<Props> = ({
     return [...common, ...unique];
   }, [aspectPFs, diffHints]);
 
-  // Counts for score chips
   const counts = useMemo(
     () => ({
       critical: sortedPFs.filter(
@@ -334,16 +293,48 @@ const ProductFactorTabs: React.FC<Props> = ({
     [sortedPFs]
   );
 
-  // Score chip filter (controlled/uncontrolled)
+  type Bucket = "all" | "critical" | "severe" | "moderate";
   const [bucketLocal, setBucketLocal] = useState<Bucket>("all");
   const bucket = controlledBucket ?? bucketLocal;
+
   const onChipClick = (next: Exclude<Bucket, "all">) => {
     const val: Bucket = bucket === next ? "all" : next;
     if (controlledBucket === undefined) setBucketLocal(val);
     onBucketChange?.(val);
   };
 
-  // Precompute measures per PF
+  const filteredPFs = useMemo(() => {
+    const base =
+      bucket === "all"
+        ? sortedPFs
+        : sortedPFs.filter((pf: PF) => bucketFor(pf.value) === bucket);
+
+    if (!diffHints || diffFilterVal === "all") return base;
+
+    if (diffFilterVal === "differing") {
+      return base.filter((pf: PF) => {
+        const measures = measuresForPF(pf, relational);
+        return (
+          diffHints.differingPFs.has(pf.name) ||
+          measures.some((m) =>
+            diffHints.differingMeasures?.has(mkey(pf.name, m.name))
+          )
+        );
+      });
+    }
+
+    return base.filter((pf: PF) => {
+      const measures = measuresForPF(pf, relational);
+      return (
+        diffHints.missingPFs?.has(pf.name) ||
+        measures.some((m) =>
+          diffHints.missingMeasures?.has(mkey(pf.name, m.name))
+        )
+      );
+    });
+  }, [sortedPFs, bucket, diffHints, diffFilterVal, relational]);
+
+  // measures computed per PF (sorting preserved)
   const measuresByPF = useMemo(() => {
     const map = new Map<string, any[]>();
     (aspectPFs ?? []).forEach((pf: any) => {
@@ -373,45 +364,12 @@ const ProductFactorTabs: React.FC<Props> = ({
     return map;
   }, [aspectPFs, relational, diffHints]);
 
-  // Visible measures paging
+  // paging state (preserved)
   const INITIAL_MEASURES = 30;
   const PAGE_MEASURES = 50;
   const [visibleByPF, setVisibleByPF] = useState<Record<string, number>>({});
 
-  // Filter PFs by score bucket and diff/unique mode
-  const filteredPFs = useMemo(() => {
-    const base =
-      bucket === "all"
-        ? sortedPFs
-        : sortedPFs.filter((pf: PF) => bucketFor(pf.value) === bucket);
-
-    if (!diffHints || diffFilterVal === "all") return base;
-
-    if (diffFilterVal === "differing") {
-      return base.filter((pf: PF) => {
-        const measures = measuresByPF.get(pf.name) ?? [];
-        return (
-          diffHints.differingPFs?.has(pf.name) ||
-          measures.some((m) =>
-            diffHints.differingMeasures?.has(mkey(pf.name, m.name))
-          )
-        );
-      });
-    }
-
-    // unique
-    return base.filter((pf: PF) => {
-      const measures = measuresByPF.get(pf.name) ?? [];
-      return (
-        diffHints.missingPFs?.has(pf.name) ||
-        measures.some((m) =>
-          diffHints.missingMeasures?.has(mkey(pf.name, m.name))
-        )
-      );
-    });
-  }, [sortedPFs, bucket, diffHints, diffFilterVal, measuresByPF]);
-
-  // PF tab labeling
+  // PF tab labels
   const hasCWE = (aspectPFs ?? []).some(
     (pf: any) => typeof pf?.name === "string" && /cwe/i.test(pf.name)
   );
@@ -420,7 +378,38 @@ const ProductFactorTabs: React.FC<Props> = ({
     ? `# of CWEs: ${sortedPFs.length ?? 0}`
     : `# of product factors: ${sortedPFs.length ?? 0}`;
 
-  // ----- Build tabs -----
+  // compute Findings tab label (unchanged logic)
+  const hasPackageVulns = useMemo(() => {
+    if (!relational) return false;
+
+    const diagToMeasures = new Map<string, string[]>();
+    relational.measureDiagnostics.forEach((e) => {
+      const arr = diagToMeasures.get(e.diagnosticId) ?? [];
+      arr.push(e.measureId);
+      diagToMeasures.set(e.diagnosticId, arr);
+    });
+
+    const measureToPFs = new Map<string, string[]>();
+    relational.pfMeasures.forEach((e) => {
+      const arr = measureToPFs.get(e.measureId) ?? [];
+      arr.push(e.pfId);
+      measureToPFs.set(e.measureId, arr);
+    });
+
+    for (const f of relational.findings ?? []) {
+      const id = String(f.id ?? "").trim();
+      if (!id) continue;
+      if (!/^(?:CVE|GHSA)-/i.test(id)) continue;
+
+      const midList = diagToMeasures.get(f.diagnosticId) ?? [];
+      for (const mid of midList) {
+        const pfs = measureToPFs.get(mid) ?? [];
+        if (pfs.some((pfId) => aspectPfIdSet.has(pfId))) return true;
+      }
+    }
+    return false;
+  }, [relational, aspectPfIdSet]);
+
   const tabs: TabItem[] = [];
 
   tabs.push({
@@ -438,6 +427,7 @@ const ProductFactorTabs: React.FC<Props> = ({
             <span /> 🔴 score &lt; 0.6{" "}
             <span className="st-chip-count">{counts.critical}</span>
           </button>
+
           <button
             className={`st-chip ${bucket === "severe" ? "is-active" : ""}`}
             onClick={() => onChipClick("severe")}
@@ -446,6 +436,7 @@ const ProductFactorTabs: React.FC<Props> = ({
             <span /> 🟡 score 0.6–0.8{" "}
             <span className="st-chip-count">{counts.severe}</span>
           </button>
+
           <button
             className={`st-chip ${bucket === "moderate" ? "is-active" : ""}`}
             onClick={() => onChipClick("moderate")}
@@ -454,6 +445,7 @@ const ProductFactorTabs: React.FC<Props> = ({
             <span /> 🟢 score ≥ 0.8{" "}
             <span className="st-chip-count">{counts.moderate}</span>
           </button>
+
           <button
             className={`st-chip st-chip--all ${
               bucket === "all" ? "is-active" : ""
@@ -479,9 +471,12 @@ const ProductFactorTabs: React.FC<Props> = ({
             allMeasures,
             diffHints
           );
+          const pfDiff = diffHints?.pfFieldDiffs.get(pf.name);
+
           const visibleCount =
             visibleByPF[pf.name] ??
             Math.min(INITIAL_MEASURES, allMeasures.length);
+          const hasMore = isExpanded && visibleCount < allMeasures.length;
 
           const toggleExpand = () => {
             setExpandedKey(isExpanded ? null : pf.name);
@@ -493,13 +488,15 @@ const ProductFactorTabs: React.FC<Props> = ({
             }
           };
 
-          const pfDiff = diffHints?.pfFieldDiffs.get(pf.name);
-
-          const hereBench =
-            typeof pf?.benchmarkSize === "number" ? pf.benchmarkSize : null;
-          const peerBenchRaw = diffHints?.pfPeerBenchmarkSize?.get(pf.name);
-          const peerBench =
-            typeof peerBenchRaw === "number" ? peerBenchRaw : null;
+          const onShowMore = () => {
+            setVisibleByPF((v) => ({
+              ...v,
+              [pf.name]: Math.min(
+                (v[pf.name] ?? INITIAL_MEASURES) + PAGE_MEASURES,
+                allMeasures.length
+              ),
+            }));
+          };
 
           return (
             <Box
@@ -542,32 +539,54 @@ const ProductFactorTabs: React.FC<Props> = ({
                   </li>
                 )}
 
-                <ProductFactorMeasuresDropdown
-                  pfName={pf.name}
-                  measures={allMeasures}
-                  isExpanded={isExpanded}
-                  onToggleExpand={toggleExpand}
-                  visibleCount={visibleCount}
-                  onShowMore={() =>
-                    setVisibleByPF((v) => ({
-                      ...v,
-                      [pf.name]: Math.min(
-                        (v[pf.name] ?? INITIAL_MEASURES) + PAGE_MEASURES,
-                        allMeasures.length
-                      ),
-                    }))
-                  }
-                  diffFilter={diffFilterVal}
-                  diffHints={diffHints}
-                  expandedPlots={expandedPlots}
-                  onTogglePlot={togglePlot}
-                  pfBenchmarkSize={hereBench}
-                  pfPeerBenchmarkSize={peerBench}
-                  pfBenchmarkSizeIsDiff={
-                    !!pfDiff?.benchmarkSize &&
-                    !diffHints?.missingPFs?.has(pf.name)
-                  }
-                />
+                <li>
+                  <strong>Benchmark size: </strong>
+                  {(() => {
+                    const hereBench =
+                      typeof pf?.benchmarkSize === "number"
+                        ? pf.benchmarkSize
+                        : firstThresholdsLen(allMeasures);
+
+                    const peerRaw = diffHints?.pfPeerBenchmarkSize?.get(
+                      pf.name
+                    );
+                    const peerBench =
+                      typeof peerRaw === "number" ? peerRaw : null;
+
+                    return (
+                      <>
+                        <span
+                          className={
+                            !diffHints?.missingPFs?.has(pf.name) &&
+                            pfDiff?.benchmarkSize
+                              ? "diff-field"
+                              : ""
+                          }
+                        >
+                          {hereBench}
+                        </span>
+                        <Delta here={hereBench} peer={peerBench} places={0} />
+                      </>
+                    );
+                  })()}
+                </li>
+
+                {/* delegate inner logic to MeasuresDropdown */}
+                <li>
+                  <MeasuresDropdown
+                    pfName={pf.name}
+                    measures={allMeasures as Measure[]}
+                    isExpanded={isExpanded}
+                    onToggleExpanded={toggleExpand}
+                    diffHints={diffHints}
+                    diffFilter={diffFilterVal}
+                    expandedPlots={expandedPlots}
+                    onTogglePlot={togglePlotLocal}
+                    visibleCount={visibleCount}
+                    onShowMore={onShowMore}
+                    hasMore={hasMore}
+                  />
+                </li>
               </ul>
             </Box>
           );
@@ -576,29 +595,23 @@ const ProductFactorTabs: React.FC<Props> = ({
     ),
   });
 
-  // Tab 2: vulnerabilities/diagnostics
   tabs.push({
-    label: hasPackageVulnsInAspect ? "Package Vulnerabilities" : "Diagnostics",
+    label: hasPackageVulns ? "Package Vulnerabilities" : "Diagnostics",
     content: (
-      <ProductFactorFindingsTab
+      <FindingTab
         aspectName={aspectName}
-        scores={scores}
         relational={relational}
+        aspectPFs={aspectPFs}
+        aspectPfIdSet={aspectPfIdSet}
         diffHints={diffHints}
         diffFilter={diffFilter}
         controlledPkgFilter={controlledPkgFilter}
         onPkgFilterChange={onPkgFilterChange}
         controlledFixedFilter={controlledFixedFilter}
         onFixedFilterChange={onFixedFilterChange}
-        controlledCweFilter={controlledCweFilter}
-        onCweFilterChange={onCweFilterChange}
       />
     ),
   });
-
-  // controlled/uncontrolled tab selection
-  const [localTab, setLocalTab] = useState<SecTabName>("PF");
-  const tabName: SecTabName = controlledTab ?? localTab;
 
   const nameToIndex = (name: SecTabName) => (name === "PF" ? 0 : 1);
   const indexToName = (i: number): SecTabName =>

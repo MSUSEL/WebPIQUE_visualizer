@@ -1,24 +1,17 @@
 // MeasuresDropdown.tsx
-import React from "react";
+// Contains ALL "Measures" section UI + logic (expand/collapse, score/weight/plots),
+// while preserving the exact <li> order within measure details.
+
+import React, { useMemo, useState } from "react";
 import { Collapse } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import "../../styles/SecurityTabs.css";
-
 import ProbabilityDensity from "../plotting/ProbabilityDensity";
 import ProbabilityCDF from "../plotting/ProbabilityCDF";
 import { DiffHints } from "../../Utilities/fileDiff";
 
-type FlagKind = "diff" | "unique" | null;
-
-type SeverityInfo = {
-  color: string;
-  border: string;
-  label: string;
-  icon: string;
-};
-
-const getSeverityInfo = (score: number): SeverityInfo =>
+// ---------- helpers (kept consistent with ProductFactorTabs) ----------
+const getSeverityInfo = (score: number) =>
   score < 0.6
     ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
     : score < 0.8
@@ -35,13 +28,9 @@ const getSeverityInfo = (score: number): SeverityInfo =>
         icon: "🟢",
       };
 
-const normMeasureName = (s: any) =>
-  String(s ?? "")
-    .trim()
-    .replace(/\s*Measure\s*$/i, "") // strip trailing “Measure”
-    .replace(/\s+/g, " ");
-
 const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
+
+type FlagKind = "diff" | "unique" | null;
 
 const flagForMeasure = (
   pfName: string,
@@ -92,241 +81,232 @@ const Delta: React.FC<{
   );
 };
 
-const firstThresholdsLen = (measures: any[]): number => {
-  for (const m of measures ?? []) {
-    const th: any = (m as any)?.thresholds ?? (m as any)?.threshold;
-    if (Array.isArray(th) && th.length) return th.length;
-  }
-  return 0;
+// ---------- types ----------
+type Measure = {
+  id?: string;
+  name: string;
+  description?: string;
+  score: number;
+  weight?: number;
+  thresholds?: number[];
+  threshold?: number[];
 };
 
-export type MeasuresDropdownProps = {
+// ---------- props ----------
+type Props = {
   pfName: string;
-  measures: any[];
+  measures: Measure[];
 
+  // expand/collapse is controlled from ProductFactorTabs
   isExpanded: boolean;
-  onToggleExpand: () => void;
+  onToggleExpanded: () => void;
 
-  visibleCount: number;
-  onShowMore: () => void;
-
-  diffFilter: "all" | "differing" | "unique";
+  // diff/unique + diffFilter behavior
   diffHints?: DiffHints;
+  diffFilter?: "all" | "differing" | "unique";
 
+  // plot expansion (controlled/uncontrolled pattern preserved)
   expandedPlots: Record<string, boolean>;
   onTogglePlot: (key: string) => void;
 
-  pfBenchmarkSize?: number | null;
-  pfPeerBenchmarkSize?: number | null;
-  pfBenchmarkSizeIsDiff?: boolean;
+  // paging for measures list
+  visibleCount: number;
+  onShowMore: () => void;
+  hasMore: boolean;
+
+  // these are used only to preserve the exact per-measure logic
+  initialRenderKey?: string; // optional for testing/telemetry; not required
 };
 
-const MeasuresDropdown: React.FC<MeasuresDropdownProps> = ({
+const MeasuresDropdown: React.FC<Props> = ({
   pfName,
   measures,
   isExpanded,
-  onToggleExpand,
-  visibleCount,
-  onShowMore,
-  diffFilter,
+  onToggleExpanded,
   diffHints,
+  diffFilter = "all",
   expandedPlots,
   onTogglePlot,
-  pfBenchmarkSize,
-  pfPeerBenchmarkSize,
-  pfBenchmarkSizeIsDiff,
+  visibleCount,
+  onShowMore,
+  hasMore,
 }) => {
-  const showMore = isExpanded && visibleCount < (measures?.length ?? 0);
-
-  const benchHere =
-    typeof pfBenchmarkSize === "number"
-      ? pfBenchmarkSize
-      : firstThresholdsLen(measures);
+  // pre-slice here so we do not rearrange <li> items; we only omit items by returning null
+  const renderedMeasures = useMemo(
+    () => measures.slice(0, visibleCount),
+    [measures, visibleCount]
+  );
 
   return (
-    <li>
-      <div style={{ marginTop: 6, marginBottom: 2 }}>
-        <strong>Benchmark size: </strong>
-        <span className={pfBenchmarkSizeIsDiff ? "diff-field" : ""}>
-          {benchHere}
+    <>
+      <div className="measure-toggle" onClick={onToggleExpanded}>
+        <span className="measure-toggle-label">
+          <strong>Measures</strong> (n = {measures.length})<strong>:</strong>
         </span>
-        <Delta here={benchHere} peer={pfPeerBenchmarkSize ?? null} places={0} />
-      </div>
-
-      <div className="measure-toggle" onClick={onToggleExpand}>
-        <strong>Measures</strong> (n = {measures.length})<strong>:</strong>
         {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
       </div>
 
       {isExpanded && measures.length > 0 && (
         <div className="measure-list">
           <ul>
-            {measures
-              .slice(0, visibleCount)
-              .map((measure: any, idx: number) => {
-                const key = mkey(pfName, measure.name);
-                const mDiff = diffHints?.measureFieldDiffs.get(key);
-                const isMissing = diffHints?.missingMeasures?.has(key);
+            {renderedMeasures.map((measure: Measure, idx: number) => {
+              const key = mkey(pfName, measure.name);
+              const mDiff = diffHints?.measureFieldDiffs.get(key);
+              const isMissing = diffHints?.missingMeasures?.has(key);
 
-                if (
-                  diffFilter === "differing" &&
-                  !diffHints?.differingMeasures?.has(key)
-                )
-                  return null;
-                if (diffFilter === "unique" && !isMissing) return null;
+              if (
+                diffFilter === "differing" &&
+                !diffHints?.differingMeasures?.has(key)
+              )
+                return null;
+              if (diffFilter === "unique" && !isMissing) return null;
 
-                const thresholds = (measure.thresholds ??
-                  measure.threshold ??
-                  []) as number[];
-                const mSev = getSeverityInfo(Number(measure.score ?? 0));
-                const plotKey = key;
+              const thresholds = (measure.thresholds ??
+                measure.threshold ??
+                []) as number[];
+              const mSev = getSeverityInfo(measure.score);
+              const id = key;
 
-                return (
-                  <li
-                    key={`${key}-${idx}`}
-                    className="measure-item card--with-badge"
-                    style={{
-                      border: `2px ${mSev.border} ${mSev.color}`,
-                      backgroundColor: "#fff",
-                    }}
-                  >
-                    <DiffBadge
-                      kind={flagForMeasure(pfName, measure.name, diffHints)}
-                    />
-                    <div className="severity-badge">
-                      <span className="icon">{mSev.icon}</span>
-                      <span className="label">{mSev.label}</span>
-                    </div>
-                    <strong>
-                      {String(measure.name ?? "").replace(" Measure", "")}:
-                    </strong>{" "}
-                    {measure.description}
-                    <ul>
-                      <li>
-                        <strong>
-                          Score:{" "}
-                          <span
-                            className={
-                              mDiff?.score && !isMissing ? "diff-field" : ""
-                            }
-                          >
-                            {Number(measure.score ?? 0).toFixed(4)} out of 1.
-                          </span>
-                        </strong>
-                        <Delta
-                          here={
-                            typeof measure?.score === "number"
-                              ? measure.score
-                              : null
+              return (
+                <li
+                  key={idx}
+                  className="measure-item card--with-badge"
+                  style={{
+                    border: `2px ${mSev.border} ${mSev.color}`,
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <DiffBadge
+                    kind={flagForMeasure(pfName, measure.name, diffHints)}
+                  />
+                  <div className="severity-badge">
+                    <span className="icon">{mSev.icon}</span>
+                    <span className="label">{mSev.label}</span>
+                  </div>
+                  <strong>{measure.name.replace(" Measure", "")}:</strong>{" "}
+                  {measure.description}
+                  {/* DO NOT rearrange or change these <li> items */}
+                  <ul>
+                    <li>
+                      <strong>
+                        Score:{" "}
+                        <span
+                          className={
+                            mDiff?.score && !isMissing ? "diff-field" : ""
                           }
-                          peer={diffHints?.measurePeerValues?.get(key) ?? null}
-                        />
-                      </li>
-
-                      <li>
-                        <strong>Interpreted Score: </strong>
-                        <span>
-                          {(Number(measure.score ?? 0) * 100).toFixed(2)}%
-                          better than the benchmark set.
+                        >
+                          {measure.score.toFixed(4)} out of 1.
                         </span>
-                      </li>
+                      </strong>
+                      <Delta
+                        here={
+                          typeof measure?.score === "number"
+                            ? measure.score
+                            : null
+                        }
+                        peer={diffHints?.measurePeerValues?.get(key) ?? null}
+                      />
+                    </li>
 
-                      <li>
-                        <strong>Weight:</strong> The measure contributed a{" "}
-                        <strong>
-                          <span
-                            className={
-                              mDiff?.weight && !isMissing ? "diff-field" : ""
-                            }
-                          >
-                            {Number(measure.weight ?? 0).toFixed(4)}
-                          </span>
-                        </strong>{" "}
-                        to the final product factor score.
-                        <Delta
-                          here={
-                            typeof measure?.weight === "number"
-                              ? measure.weight
-                              : null
+                    <li>
+                      <strong>Interpreted Score: </strong>
+                      <span>
+                        {(measure.score * 100).toFixed(2)}% better than the
+                        benchmark set.
+                      </span>
+                    </li>
+
+                    <li>
+                      Weight: The measure contributed a weight of{" "}
+                      <strong>
+                        <span
+                          className={
+                            mDiff?.weight && !isMissing ? "diff-field" : ""
                           }
-                          peer={diffHints?.measurePeerWeights?.get(key) ?? null}
-                        />
-                      </li>
+                        >
+                          {(measure.weight ?? 0).toFixed(4)}
+                        </span>
+                      </strong>{" "}
+                      to the final product factor score.
+                      <Delta
+                        here={
+                          typeof measure?.weight === "number"
+                            ? measure.weight
+                            : null
+                        }
+                        peer={diffHints?.measurePeerWeights?.get(key) ?? null}
+                      />
+                    </li>
 
-                      <li>
-                        <div style={{ marginTop: 6 }}>
-                          <span
-                            className="density-link"
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => onTogglePlot(plotKey)}
-                            onKeyDown={(e) =>
-                              e.key === "Enter" ? onTogglePlot(plotKey) : null
-                            }
-                            aria-expanded={!!expandedPlots[plotKey]}
-                            aria-controls={`density-${plotKey}`}
-                            style={{
-                              textDecoration: "underline",
-                              cursor: "pointer",
-                              marginRight: 16,
-                            }}
-                          >
-                            {expandedPlots[plotKey]
-                              ? "Hide Plots"
-                              : "Show Plots"}
-                          </span>
+                    <li>
+                      <div style={{ marginTop: 6 }}>
+                        <span
+                          className="density-link"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onTogglePlot(id)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" ? onTogglePlot(id) : null
+                          }
+                          aria-expanded={!!expandedPlots[id]}
+                          aria-controls={`density-${id}`}
+                          style={{
+                            textDecoration: "underline",
+                            cursor: "pointer",
+                            marginRight: 16,
+                          }}
+                        >
+                          {expandedPlots[id] ? "Hide Plots" : "Show Plots"}
+                        </span>
+                      </div>
+
+                      <Collapse
+                        in={!!expandedPlots[id]}
+                        timeout={0}
+                        unmountOnExit
+                      >
+                        <div className="densityPlot" id={`density-${id}`}>
+                          <ProbabilityDensity
+                            thresholds={thresholds}
+                            score={measure.score ?? 0}
+                            cweName={measure.name}
+                          />
                         </div>
 
-                        <Collapse
-                          in={!!expandedPlots[plotKey]}
-                          timeout={0}
-                          unmountOnExit
-                        >
-                          <div
-                            className="densityPlot"
-                            id={`density-${plotKey}`}
-                          >
-                            <ProbabilityDensity
-                              thresholds={thresholds}
-                              score={Number(measure.score ?? 0)}
-                              cweName={String(measure.name ?? "")}
-                            />
-                          </div>
+                        <div className="densityPlot" id={`cdf-${id}`}>
+                          <ProbabilityCDF
+                            thresholds={thresholds}
+                            percentile={measure.score ?? 0}
+                            cweName={measure.name}
+                          />
+                        </div>
 
-                          <div className="densityPlot" id={`cdf-${plotKey}`}>
-                            <ProbabilityCDF
-                              thresholds={thresholds}
-                              percentile={Number(measure.score ?? 0)}
-                              cweName={String(measure.name ?? "")}
-                            />
-                          </div>
-
-                          <hr />
-                          <div>
-                            <strong>Top plot:</strong> Density of benchmark set
-                            with a horizontal line marking the area under the
-                            density curve that matches the measure score.{" "}
-                            <strong>Bottom plot:</strong> ECDF plot showing how
-                            much better the measure score is than the benchmark.
-                          </div>
-                        </Collapse>
-                      </li>
-                    </ul>
-                  </li>
-                );
-              })}
+                        <hr />
+                        <div>
+                          <strong>Top plot:</strong> Density of benchmark set
+                          with a horizontal line marking the area under the
+                          density curve that matches the measure score.{" "}
+                          <strong>Bottom plot:</strong> ECDF plot showing how
+                          much better the measure score is than the benchmark.
+                        </div>
+                      </Collapse>
+                    </li>
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
 
-          {showMore && (
+          {hasMore && (
             <div style={{ marginTop: 8 }}>
               <button className="st-chip" onClick={onShowMore}>
-                Show {measures.length - visibleCount} more
+                Show {Math.max(0, measures.length - visibleCount)} more
               </button>
             </div>
           )}
         </div>
       )}
-    </li>
+    </>
   );
 };
 
