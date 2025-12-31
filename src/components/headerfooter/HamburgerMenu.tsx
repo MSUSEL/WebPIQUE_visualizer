@@ -12,6 +12,7 @@ const MENU_WIDTH = 270;
 // keys for passing data between pages
 const SINGLE_PAYLOAD_KEY = "wp_single_payload";
 const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
+const COMPARE_PAYLOAD_SESSION_KEY = "wp_compare_payload_session";
 
 const HamburgerMenu: React.FC = () => {
   const [isOpen, setOpen] = useState(false);
@@ -43,6 +44,16 @@ const HamburgerMenu: React.FC = () => {
     window.location.assign(path);
   };
 
+  const softNavigate = (path: string, state?: Record<string, unknown>) => {
+    setOpen(false);
+    setShowCompareSubmenu(false);
+    setShowLogin(false);
+    setLeftJson(null);
+    setRightJson(null);
+
+    navigate(path, { state });
+  };
+
   // --- helper: store payload + navigate (for visualizer / compare) ---
   const goToSingleVisualizer = (payload: UploadPayload) => {
     try {
@@ -57,6 +68,15 @@ const HamburgerMenu: React.FC = () => {
     file1: UploadPayload;
     file2: UploadPayload;
   }) => {
+    (globalThis as any).__wpComparePayload = payload;
+    try {
+      sessionStorage.setItem(
+        COMPARE_PAYLOAD_SESSION_KEY,
+        JSON.stringify(payload)
+      );
+    } catch {
+      // ignore
+    }
     try {
       localStorage.setItem(COMPARE_PAYLOAD_KEY, JSON.stringify(payload));
     } catch {

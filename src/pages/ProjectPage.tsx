@@ -25,6 +25,7 @@ const ACTIVE_PROJECT_KEY = "wp_active_project_id";
 export default function ProjectView() {
   // ---------- core project state ----------
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [filesByProject, setFilesByProject] = useState<
     Record<string, ProjectFileScore[]>
   >({});
@@ -83,17 +84,20 @@ export default function ProjectView() {
       setProjects([]);
       setFilesByProject({});
       setActiveProjectId(null);
+    } finally {
+      setProjectsLoaded(true);
     }
   }, []);
 
   // ---------- persist projects list ----------
   useEffect(() => {
+    if (!projectsLoaded) return;
     try {
       localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
     } catch {
       // ignore quota/serialization errors
     }
-  }, [projects]);
+  }, [projects, projectsLoaded]);
 
   // ---------- persist files for each project ----------
   useEffect(() => {
@@ -139,10 +143,27 @@ export default function ProjectView() {
     const proj: Project = { id, name };
     const first12 = files.slice(0, 12);
 
-    setProjects((prev) => [...prev, proj]);
+    setProjects((prev) => {
+      const next = [...prev, proj];
+      try {
+        localStorage.setItem(PROJECTS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
     setFilesByProject((prev) => ({ ...prev, [id]: first12 }));
     setActiveProjectId(id);
     setCreateOpen(false);
+
+    try {
+      localStorage.setItem(
+        `${PROJECT_FILES_PREFIX}${id}`,
+        JSON.stringify(first12)
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
   function handleRemoveProject(id: string) {

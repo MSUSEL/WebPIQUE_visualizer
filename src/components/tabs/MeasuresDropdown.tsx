@@ -2,7 +2,7 @@
 // Contains ALL "Measures" section UI + logic (expand/collapse, score/weight/plots),
 // while preserving the exact <li> order within measure details.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Collapse } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -10,22 +10,51 @@ import ProbabilityDensity from "../plotting/ProbabilityDensity";
 import ProbabilityCDF from "../plotting/ProbabilityCDF";
 import { DiffHints } from "../../Utilities/fileDiff";
 
+type ScoreBucket = "critical" | "severe" | "moderate";
+
+type ScoreThresholds = {
+  criticalMax: number;
+  severeMax: number;
+};
+
+type SeverityInfo = {
+  color: string;
+  border: string;
+  label: string;
+  kind: ScoreBucket;
+};
+
+const formatThreshold = (val: number) => {
+  const rounded = Number(val.toFixed(2));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+};
+
 // ---------- helpers (kept consistent with ProductFactorTabs) ----------
-const getSeverityInfo = (score: number) =>
-  score < 0.6
-    ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
-    : score < 0.8
+const getSeverityInfo = (
+  score: number,
+  thresholds: ScoreThresholds
+): SeverityInfo =>
+  score < thresholds.criticalMax
     ? {
+      color: "#c5052fff",
+      border: "solid",
+      label: `Score < ${formatThreshold(thresholds.criticalMax)}`,
+      kind: "critical" as const,
+    }
+    : score < thresholds.severeMax
+      ? {
         color: "rgb(240,228,066)",
         border: "dashed",
-        label: "Score 0.6–0.8",
-        icon: "🟡",
+        label: `Score ${formatThreshold(
+          thresholds.criticalMax
+        )}-${formatThreshold(thresholds.severeMax)}`,
+        kind: "severe" as const,
       }
-    : {
+      : {
         color: "rgb(000,158,115)",
         border: "dotted",
-        label: "Score ≥ 0.8",
-        icon: "🟢",
+        label: `Score >= ${formatThreshold(thresholds.severeMax)}`,
+        kind: "moderate" as const,
       };
 
 const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
@@ -42,8 +71,8 @@ const flagForMeasure = (
   return hints.missingMeasures?.has(key)
     ? "unique"
     : hints.differingMeasures?.has(key)
-    ? "diff"
-    : null;
+      ? "diff"
+      : null;
 };
 
 const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
@@ -104,6 +133,7 @@ type Props = {
   // diff/unique + diffFilter behavior
   diffHints?: DiffHints;
   diffFilter?: "all" | "differing" | "unique";
+  scoreThresholds: ScoreThresholds;
 
   // plot expansion (controlled/uncontrolled pattern preserved)
   expandedPlots: Record<string, boolean>;
@@ -125,6 +155,7 @@ const MeasuresDropdown: React.FC<Props> = ({
   onToggleExpanded,
   diffHints,
   diffFilter = "all",
+  scoreThresholds,
   expandedPlots,
   onTogglePlot,
   visibleCount,
@@ -164,7 +195,7 @@ const MeasuresDropdown: React.FC<Props> = ({
               const thresholds = (measure.thresholds ??
                 measure.threshold ??
                 []) as number[];
-              const mSev = getSeverityInfo(measure.score);
+              const mSev = getSeverityInfo(measure.score, scoreThresholds);
               const id = key;
 
               return (
@@ -180,15 +211,20 @@ const MeasuresDropdown: React.FC<Props> = ({
                     kind={flagForMeasure(pfName, measure.name, diffHints)}
                   />
                   <div className="severity-badge">
-                    <span className="icon">{mSev.icon}</span>
+                    <span
+                      className={`severity-dot severity-dot--${mSev.kind}`}
+                      aria-hidden="true"
+                    />
                     <span className="label">{mSev.label}</span>
                   </div>
-                  <strong>{measure.name.replace(" Measure", "")}:</strong>{" "}
-                  {measure.description}
+                  <div>
+                    <strong>{measure.name.replace(" Measure", "")}:</strong>{" "}
+                    {measure.description}
+                  </div>
                   {/* DO NOT rearrange or change these <li> items */}
                   <ul>
                     <li>
-                      <strong>
+                      <strong className="score-marker">
                         Score:{" "}
                         <span
                           className={

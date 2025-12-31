@@ -3,6 +3,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Box } from "@mui/material";
+import SettingsIcon from "@mui/icons-material/Settings";
 import MuiTabs, { TabItem } from "../tabs/Tabs";
 import { RelationalExtract } from "../../Utilities/DataParser";
 import "../../styles/SecurityTabs.css";
@@ -16,32 +17,61 @@ type PF = any;
 type Measure = any;
 
 type SecTabName = "PF" | "VULN_OR_DIAG";
+type ScoreBucket = "critical" | "severe" | "moderate";
+type Bucket = "all" | ScoreBucket;
+
+type ScoreThresholds = {
+  criticalMax: number;
+  severeMax: number;
+};
 
 // ------- helpers (unchanged) -------
-const bucketFor = (score: number): "critical" | "severe" | "moderate" =>
-  score < 0.6 ? "critical" : score < 0.8 ? "severe" : "moderate";
+const clamp = (val: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, val));
+
+const formatThreshold = (val: number) => {
+  const rounded = Number(val.toFixed(2));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+};
+
+const bucketFor = (score: number, thresholds: ScoreThresholds): ScoreBucket =>
+  score < thresholds.criticalMax
+    ? "critical"
+    : score < thresholds.severeMax
+      ? "severe"
+      : "moderate";
 
 type SeverityInfo = {
   color: string;
   border: string;
   label: string;
-  icon: string;
+  kind: ScoreBucket;
 };
-const getSeverityInfo = (score: number): SeverityInfo =>
-  score < 0.6
-    ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
-    : score < 0.8
+const getSeverityInfo = (
+  score: number,
+  thresholds: ScoreThresholds
+): SeverityInfo =>
+  score < thresholds.criticalMax
     ? {
+      color: "#c5052fff",
+      border: "solid",
+      label: `Score < ${formatThreshold(thresholds.criticalMax)}`,
+      kind: "critical",
+    }
+    : score < thresholds.severeMax
+      ? {
         color: "rgb(240,228,066)",
         border: "dashed",
-        label: "Score 0.6–0.8",
-        icon: "🟡",
+        label: `Score ${formatThreshold(
+          thresholds.criticalMax
+        )}-${formatThreshold(thresholds.severeMax)}`,
+        kind: "severe",
       }
-    : {
+      : {
         color: "rgb(000,158,115)",
         border: "dotted",
-        label: "Score ≥ 0.8",
-        icon: "🟢",
+        label: `Score >= ${formatThreshold(thresholds.severeMax)}`,
+        kind: "moderate",
       };
 
 const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
@@ -65,16 +95,79 @@ const dedupeMeasuresForPF = <T extends { id?: string; name?: string }>(
   return out;
 };
 
+// de-dupe PFs within an aspect (keep a union of PF ids/names and measures)
+const pfKey = (pf: any) =>
+  String(pf?.name ?? pf?.id ?? "").toString().trim().toLowerCase();
+
+const dedupePFs = <
+  T extends {
+    id?: string;
+    name?: string;
+    measures?: any[];
+    description?: string;
+    value?: number;
+  }
+>(
+  list: T[]
+): (T & { __ids?: string[] })[] => {
+  const map = new Map<string, T & { __ids?: string[] }>();
+  for (const pf of list ?? []) {
+    const key = pfKey(pf);
+    if (!key) continue;
+
+    const existing = map.get(key);
+    const ids = [
+      String(pf?.id ?? "").trim(),
+      String(pf?.name ?? "").trim(),
+    ].filter(Boolean);
+
+    if (!existing) {
+      map.set(key, { ...pf, __ids: Array.from(new Set(ids)) });
+      continue;
+    }
+
+    const nextIds = new Set([...(existing.__ids ?? []), ...ids]);
+    existing.__ids = Array.from(nextIds);
+
+    if (!existing.name && pf.name) existing.name = pf.name;
+    if (!existing.description && (pf as any)?.description)
+      (existing as any).description = (pf as any).description;
+
+    if (typeof existing.value !== "number" && typeof (pf as any)?.value === "number")
+      (existing as any).value = (pf as any).value;
+    else if (
+      typeof existing.value === "number" &&
+      typeof (pf as any)?.value === "number"
+    )
+      (existing as any).value = Math.min(existing.value, (pf as any).value);
+
+    const existingMeasures = Array.isArray((existing as any).measures)
+      ? (existing as any).measures
+      : [];
+    const nextMeasures = Array.isArray((pf as any).measures)
+      ? (pf as any).measures
+      : [];
+    if (nextMeasures.length) {
+      (existing as any).measures = dedupeMeasuresForPF([
+        ...existingMeasures,
+        ...nextMeasures,
+      ]);
+    }
+  }
+
+  return Array.from(map.values());
+};
+
 type FlagKind = "diff" | "unique" | null;
 
 const flagForPF = (name: string, hints?: DiffHints): FlagKind =>
   !hints
     ? null
     : hints.missingPFs?.has(name)
-    ? "unique"
-    : hints.differingPFs?.has(name)
-    ? "diff"
-    : null;
+      ? "unique"
+      : hints.differingPFs?.has(name)
+        ? "diff"
+        : null;
 
 const flagForPFIncludingMeasures = (
   pfName: string,
@@ -138,7 +231,13 @@ const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
   if (!relational) return [];
 
   const ids = new Set<string>(
-    [String(pf?.id ?? ""), String(pf?.name ?? "")].filter(Boolean) as string[]
+    [
+      String(pf?.id ?? ""),
+      String(pf?.name ?? ""),
+      ...(((pf as any)?.__ids ?? []) as string[]),
+    ]
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean) as string[]
   );
   const edges = relational.pfMeasures.filter((e) => ids.has(e.pfId));
 
@@ -147,14 +246,14 @@ const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
       const m = relational.measures.find((mm) => mm.id === edge.measureId);
       return m
         ? {
-            id: m.id,
-            name: m.name,
-            description: m.description,
-            score: m.value ?? 0,
-            thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
-            weight: edge.weight ?? 0,
-            children: [],
-          }
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          score: m.value ?? 0,
+          thresholds: Array.isArray(m.thresholds) ? m.thresholds : [],
+          weight: edge.weight ?? 0,
+          children: [],
+        }
         : null;
     })
     .filter(Boolean) as any[];
@@ -224,8 +323,8 @@ const ProductFactorTabs: React.FC<Props> = ({
     >;
     const list = (byAspect?.[aspectName] ?? []) as PF[];
     if (list.length === 0 && /security/i.test(aspectName || ""))
-      return (scores?.cweProductFactors ?? []) as PF[];
-    return list;
+      return dedupePFs((scores?.cweProductFactors ?? []) as PF[]);
+    return dedupePFs(list);
   }, [scores, aspectName]);
 
   const aspectPfIdSet = useMemo(() => {
@@ -233,6 +332,9 @@ const ProductFactorTabs: React.FC<Props> = ({
     aspectPFs.forEach((pf: any) => {
       if (pf?.id) set.add(String(pf.id));
       if (pf?.name) set.add(String(pf.name));
+      (pf?.__ids ?? []).forEach((id: string) => {
+        if (id) set.add(String(id));
+      });
     });
     return set;
   }, [aspectPFs]);
@@ -263,6 +365,39 @@ const ProductFactorTabs: React.FC<Props> = ({
 
   const diffFilterVal = diffFilter ?? "all";
 
+  const [scoreThresholds, setScoreThresholds] = useState<ScoreThresholds>({
+    criticalMax: 0.6,
+    severeMax: 0.8,
+  });
+  const [showThresholdSettings, setShowThresholdSettings] = useState(false);
+
+  const updateThreshold = (key: keyof ScoreThresholds, rawValue: number) => {
+    if (!Number.isFinite(rawValue)) return;
+    setScoreThresholds((prev) => {
+      const next = {
+        ...prev,
+        [key]: clamp(rawValue, 0, 1),
+      };
+
+      if (next.criticalMax >= next.severeMax) {
+        if (key === "criticalMax") {
+          next.criticalMax = clamp(next.severeMax - 0.01, 0, 0.99);
+        } else {
+          next.severeMax = clamp(next.criticalMax + 0.01, 0.01, 1);
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const resetThresholds = () => {
+    setScoreThresholds({
+      criticalMax: 0.6,
+      severeMax: 0.8,
+    });
+  };
+
   const sortedPFs = useMemo(() => {
     const arr = [...aspectPFs];
     if (!diffHints)
@@ -277,23 +412,20 @@ const ProductFactorTabs: React.FC<Props> = ({
     return [...common, ...unique];
   }, [aspectPFs, diffHints]);
 
-  const counts = useMemo(
-    () => ({
-      critical: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value < 0.6
-      ).length,
-      severe: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value >= 0.6 && pf.value < 0.8
-      ).length,
-      moderate: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value >= 0.8
-      ).length,
+  const counts = useMemo(() => {
+    const tally = {
+      critical: 0,
+      severe: 0,
+      moderate: 0,
       all: sortedPFs.length,
-    }),
-    [sortedPFs]
-  );
+    };
+    sortedPFs.forEach((pf: PF) => {
+      if (pf?.value == null) return;
+      tally[bucketFor(pf.value, scoreThresholds)] += 1;
+    });
+    return tally;
+  }, [sortedPFs, scoreThresholds]);
 
-  type Bucket = "all" | "critical" | "severe" | "moderate";
   const [bucketLocal, setBucketLocal] = useState<Bucket>("all");
   const bucket = controlledBucket ?? bucketLocal;
 
@@ -307,7 +439,9 @@ const ProductFactorTabs: React.FC<Props> = ({
     const base =
       bucket === "all"
         ? sortedPFs
-        : sortedPFs.filter((pf: PF) => bucketFor(pf.value) === bucket);
+        : sortedPFs.filter(
+          (pf: PF) => bucketFor(pf.value, scoreThresholds) === bucket
+        );
 
     if (!diffHints || diffFilterVal === "all") return base;
 
@@ -332,7 +466,7 @@ const ProductFactorTabs: React.FC<Props> = ({
         )
       );
     });
-  }, [sortedPFs, bucket, diffHints, diffFilterVal, relational]);
+  }, [sortedPFs, bucket, diffHints, diffFilterVal, relational, scoreThresholds]);
 
   // measures computed per PF (sorting preserved)
   const measuresByPF = useMemo(() => {
@@ -424,7 +558,8 @@ const ProductFactorTabs: React.FC<Props> = ({
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
-            <span /> 🔴 score &lt; 0.6{" "}
+            <span className="st-chip-dot st-chip-dot--critical" />
+            Score &lt; {formatThreshold(scoreThresholds.criticalMax)}{" "}
             <span className="st-chip-count">{counts.critical}</span>
           </button>
 
@@ -433,7 +568,9 @@ const ProductFactorTabs: React.FC<Props> = ({
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
-            <span /> 🟡 score 0.6–0.8{" "}
+            <span className="st-chip-dot st-chip-dot--severe" />
+            Score {formatThreshold(scoreThresholds.criticalMax)}-
+            {formatThreshold(scoreThresholds.severeMax)}{" "}
             <span className="st-chip-count">{counts.severe}</span>
           </button>
 
@@ -442,14 +579,14 @@ const ProductFactorTabs: React.FC<Props> = ({
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
-            <span /> 🟢 score ≥ 0.8{" "}
+            <span className="st-chip-dot st-chip-dot--moderate" />
+            Score &gt;= {formatThreshold(scoreThresholds.severeMax)}{" "}
             <span className="st-chip-count">{counts.moderate}</span>
           </button>
 
           <button
-            className={`st-chip st-chip--all ${
-              bucket === "all" ? "is-active" : ""
-            }`}
+            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+              }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
               onBucketChange?.("all");
@@ -459,10 +596,65 @@ const ProductFactorTabs: React.FC<Props> = ({
           >
             All<span className="st-chip-count">{counts.all}</span>
           </button>
+          <button
+            type="button"
+            className={`st-chip st-chip--settings ${showThresholdSettings ? "is-active" : ""
+              }`}
+            onClick={() => setShowThresholdSettings((prev) => !prev)}
+            aria-pressed={showThresholdSettings}
+          >
+            <SettingsIcon className="st-settings-icon" /> Settings
+          </button>
         </div>
 
+        {showThresholdSettings && (
+          <div className="st-score-settings" aria-label="Score thresholds">
+            <label className="st-score-settings-field">
+              <span className="st-score-settings-label">
+                <span className="severity-dot severity-dot--critical" />
+                Critical max
+              </span>
+              <input
+                className="st-score-settings-input"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={scoreThresholds.criticalMax}
+                onChange={(e) =>
+                  updateThreshold("criticalMax", Number(e.target.value))
+                }
+              />
+            </label>
+            <label className="st-score-settings-field">
+              <span className="st-score-settings-label">
+                <span className="severity-dot severity-dot--severe" />
+                Severe max
+              </span>
+              <input
+                className="st-score-settings-input"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={scoreThresholds.severeMax}
+                onChange={(e) =>
+                  updateThreshold("severeMax", Number(e.target.value))
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="st-score-settings-reset"
+              onClick={resetThresholds}
+            >
+              Reset defaults
+            </button>
+          </div>
+        )}
+
         {filteredPFs.map((pf: PF) => {
-          const sev = getSeverityInfo(pf.value);
+          const sev = getSeverityInfo(pf.value, scoreThresholds);
           const isExpanded = expandedKey === pf.name;
           const allMeasures = measuresByPF.get(pf.name) ?? [];
 
@@ -504,8 +696,11 @@ const ProductFactorTabs: React.FC<Props> = ({
               className="pf-card card--with-badge"
               style={{ border: `2px ${sev.border} ${sev.color}` }}
             >
-              <div>
-                <span className="icon">{sev.icon}</span>
+              <div className="severity-badge">
+                <span
+                  className={`severity-dot severity-dot--${sev.kind}`}
+                  aria-hidden="true"
+                />
                 <span className="label">{sev.label}</span>
               </div>
 
@@ -516,11 +711,13 @@ const ProductFactorTabs: React.FC<Props> = ({
 
               <ul className="pf-list">
                 <li>
-                  <strong>Score:</strong>{" "}
+                  <strong className="score-marker">
+                    Score:
+                  </strong>{" "}
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
-                      diffHints?.pfFieldDiffs.get(pf.name)?.value
+                        diffHints?.pfFieldDiffs.get(pf.name)?.value
                         ? "diff-field"
                         : ""
                     }
@@ -558,7 +755,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                         <span
                           className={
                             !diffHints?.missingPFs?.has(pf.name) &&
-                            pfDiff?.benchmarkSize
+                              pfDiff?.benchmarkSize
                               ? "diff-field"
                               : ""
                           }
@@ -580,6 +777,7 @@ const ProductFactorTabs: React.FC<Props> = ({
                     onToggleExpanded={toggleExpand}
                     diffHints={diffHints}
                     diffFilter={diffFilterVal}
+                    scoreThresholds={scoreThresholds}
                     expandedPlots={expandedPlots}
                     onTogglePlot={togglePlotLocal}
                     visibleCount={visibleCount}
@@ -596,7 +794,7 @@ const ProductFactorTabs: React.FC<Props> = ({
   });
 
   tabs.push({
-    label: hasPackageVulns ? "Package Vulnerabilities" : "Diagnostics",
+    label: hasPackageVulns ? "Package Vulnerabilities" : "Diagnostic Findings",
     content: (
       <FindingTab
         aspectName={aspectName}

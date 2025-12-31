@@ -19,12 +19,12 @@ const ProbabilityCDF: React.FC<Props> = ({
   bandwidth,
 }) => {
   const svgRef = React.useRef<SVGSVGElement | null>(null);
+  const width = 560;
+  const height = 260;
 
   React.useEffect(() => {
     if (!svgRef.current || !thresholds || thresholds.length === 0) return;
 
-    const width = 560;
-    const height = 260;
     const margin = { top: 60, right: 28, bottom: 40, left: 56 };
 
     const N = thresholds.length;
@@ -193,7 +193,11 @@ const ProbabilityCDF: React.FC<Props> = ({
 
   return (
     <Box>
-      <svg ref={svgRef} width={560} height={260} />
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+      />
     </Box>
   );
 };

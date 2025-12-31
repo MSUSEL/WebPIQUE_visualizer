@@ -31,8 +31,8 @@ type Props = {
   controlledMeasure?: string | null;
   onMeasureChange?: (key: string | null) => void;
 
-  controlledSecurityTab?: "CWE" | "CVE" | "Lines of Code";
-  onSecurityTabChange?: (v: "CWE" | "CVE" | "Lines of Code") => void;
+  controlledSecurityTab?: "CWE" | "CVE";
+  onSecurityTabChange?: (v: "CWE" | "CVE") => void;
 
   controlledCWEBucket?: "all" | "critical" | "severe" | "moderate";
   onCWEBucketChange?: (v: "all" | "critical" | "severe" | "moderate") => void;
@@ -56,11 +56,10 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   const location = useLocation();
 
   // 1) props.jsonData (supports embedded usage & Compare)
-  // 2) router state from /visualizer navigation
-  // 3) localStorage payload from hard navigation
+  // 2) localStorage payload from hard navigation / menu upload
+  // 3) router state from /visualizer navigation
   let jsonDataInput =
-    (props.jsonData && (props.jsonData.data ?? props.jsonData)) ??
-    (location.state as any)?.jsonData;
+    (props.jsonData && (props.jsonData.data ?? props.jsonData)) ?? undefined;
 
   if (!jsonDataInput) {
     try {
@@ -72,6 +71,10 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
     } catch (err) {
       console.error("Error reading single-file payload from localStorage", err);
     }
+  }
+
+  if (!jsonDataInput) {
+    jsonDataInput = (location.state as any)?.jsonData;
   }
 
   if (!jsonDataInput) {
@@ -117,10 +120,10 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   const selectedFixed = props.controlledFixedFilter ?? fixedFilter;
   const selectedPlots = props.controlledExpandedPlots ?? openPlots;
 
-  const mapIn = (t?: "CWE" | "CVE" | "Lines of Code"): SecTabName | undefined =>
-    t === "CWE" ? "PF" : t === "CVE" ? "VULN_OR_DIAG" : t;
-  const mapOut = (t: SecTabName): "CWE" | "CVE" | "Lines of Code" =>
-    t === "PF" ? "CWE" : t === "VULN_OR_DIAG" ? "CVE" : "Lines of Code";
+  const mapIn = (t?: "CWE" | "CVE"): SecTabName | undefined =>
+    t === "CWE" ? "PF" : t === "CVE" ? "VULN_OR_DIAG" : undefined;
+  const mapOut = (t: SecTabName): "CWE" | "CVE" =>
+    t === "PF" ? "CWE" : "CVE";
 
   const selectedTab = mapIn(props.controlledSecurityTab) ?? secTab;
 

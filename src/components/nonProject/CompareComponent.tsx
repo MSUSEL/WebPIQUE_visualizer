@@ -29,6 +29,7 @@ type CompareProps = {
 
 // key used by HamburgerMenu hard navigation
 const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
+const COMPARE_PAYLOAD_SESSION_KEY = "wp_compare_payload_session";
 
 const Compare: React.FC<CompareProps> = (props) => {
   const { state } = useLocation() as {
@@ -40,6 +41,30 @@ const Compare: React.FC<CompareProps> = (props) => {
   // 3) fallback to localStorage payload (hard navigation)
   let file1: UploadPayload | undefined = props.file1 ?? state?.file1;
   let file2: UploadPayload | undefined = props.file2 ?? state?.file2;
+
+  if (!file1 || !file2) {
+    const cached = (globalThis as any).__wpComparePayload as
+      | { file1?: UploadPayload; file2?: UploadPayload }
+      | undefined;
+    if (cached?.file1) file1 = cached.file1;
+    if (cached?.file2) file2 = cached.file2;
+  }
+
+  if (!file1 || !file2) {
+    try {
+      const sessionRaw = sessionStorage.getItem(COMPARE_PAYLOAD_SESSION_KEY);
+      if (sessionRaw) {
+        const parsed = JSON.parse(sessionRaw) as {
+          file1?: UploadPayload;
+          file2?: UploadPayload;
+        };
+        if (!file1 && parsed.file1) file1 = parsed.file1;
+        if (!file2 && parsed.file2) file2 = parsed.file2;
+      }
+    } catch (err) {
+      console.error("Error reading compare payload from sessionStorage", err);
+    }
+  }
 
   if (!file1 || !file2) {
     try {
@@ -435,7 +460,7 @@ const Compare: React.FC<CompareProps> = (props) => {
     cveDiffCount + cveUniqueCount > 0;
 
   const diagLabel = isPackageVulnMode
-    ? "package vulnerabilities"
+    ? "Package Vulnerabilities"
     : "Diagnostic Findings";
 
   const effectiveDiffFilter =

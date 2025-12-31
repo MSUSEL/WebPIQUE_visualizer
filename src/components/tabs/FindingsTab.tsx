@@ -1,5 +1,5 @@
 // FindingTab.tsx
-// Contains ALL logic/UI for the "Package Vulnerabilities" OR "Diagnostics" tab,
+// Contains ALL logic/UI for the "Package Vulnerabilities" OR "Diagnostic Findings" tab,
 // preserving the same rules and behaviors from the original ProductFactorTabs.tsx.
 
 import React, { useMemo, useState } from "react";
@@ -35,6 +35,28 @@ const normalizeFixed = (v: any): "Fixed" | "Not Fixed" | "" => {
   if (s === "true" || s === "fixed") return "Fixed";
   if (s === "false" || s === "not fixed") return "Not Fixed";
   return "";
+};
+
+const parseDiagnosticName = (raw: string) => {
+  const name = String(raw ?? "").trim();
+  if (!name) return { baseName: "", tool: "" };
+  const match = /^(.*)\s+Diagnostic\s+(.+)$/i.exec(name);
+  if (match) {
+    return { baseName: match[1].trim() || name, tool: match[2].trim() };
+  }
+  return { baseName: name, tool: "" };
+};
+
+const formatToolList = (tools: Iterable<string>) => {
+  const out = Array.from(
+    new Set(
+      Array.from(tools ?? [])
+        .map((t) => String(t ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  out.sort((a, b) => a.localeCompare(b));
+  return out.join(", ");
 };
 
 // diff/unique badges
@@ -86,7 +108,8 @@ type DiagCard = {
   id: string;
   name: string;
   description?: string;
-  toolName?: string;
+  tools: string[];
+  toolScores: { tool: string; score: number }[];
   value?: number;
   measures: string[];
   productFactors: string[];
@@ -362,8 +385,13 @@ const FindingTab: React.FC<Props> = ({
 
     const pfNameById = new Map<string, string>();
     aspectPFs.forEach((pf: any) => {
+      const name = String(pf?.name ?? "");
       const id = String(pf?.id ?? pf?.name ?? "");
-      if (id) pfNameById.set(id, String(pf?.name ?? id));
+      if (id) pfNameById.set(id, name || id);
+      (pf?.__ids ?? []).forEach((pid: string) => {
+        const key = String(pid ?? "");
+        if (key) pfNameById.set(key, name || key);
+      });
     });
 
     const diagHasFindings = new Set<string>();
@@ -371,12 +399,23 @@ const FindingTab: React.FC<Props> = ({
       diagHasFindings.add(f.diagnosticId)
     );
 
-    const cards: DiagCard[] = [];
-    const seen = new Set<string>();
+    const cardsByName = new Map<
+      string,
+      {
+        card: DiagCard;
+        toolSet: Set<string>;
+        toolScoreMap: Map<string, number | undefined>;
+        measureSet: Set<string>;
+        pfSet: Set<string>;
+      }
+    >();
 
     for (const [diagId, measureIdsSet] of diagToMeasures.entries()) {
       const diagRow = diagsById.get(diagId);
-      const diagName = String(diagRow?.name ?? diagId);
+      const rawName = String(diagRow?.name ?? diagId).trim();
+      const parsed = parseDiagnosticName(rawName);
+      const diagName = parsed.baseName;
+      if (!diagName) continue;
 
       if (isVulnId(diagId) || isVulnId(diagName)) continue; // CVE/GHSA handled elsewhere
       if (diagHasFindings.has(diagId)) continue;
@@ -402,19 +441,62 @@ const FindingTab: React.FC<Props> = ({
       }
 
       if (pfNames.size === 0) continue;
-      if (seen.has(diagId)) continue;
-      seen.add(diagId);
 
-      cards.push({
-        id: diagId,
-        name: diagName,
-        description: diagRow?.description,
-        toolName: diagRow?.toolName,
-        value: diagRow?.value,
-        measures: Array.from(mNames).sort(),
-        productFactors: Array.from(pfNames).sort(),
-      });
+      const key = diagName.toLowerCase();
+      const toolLabel =
+        String(diagRow?.toolName ?? "").trim() ||
+        parsed.tool ||
+        "";
+
+      let entry = cardsByName.get(key);
+      if (!entry) {
+        entry = {
+          card: {
+            id: diagName,
+            name: diagName,
+            description: diagRow?.description,
+            value: diagRow?.value,
+            tools: [],
+            toolScores: [],
+            measures: [],
+            productFactors: [],
+          },
+          toolSet: new Set<string>(),
+          toolScoreMap: new Map<string, number | undefined>(),
+          measureSet: new Set<string>(),
+          pfSet: new Set<string>(),
+        };
+        cardsByName.set(key, entry);
+      }
+
+      if (toolLabel) {
+        entry.toolSet.add(toolLabel);
+        entry.toolScoreMap.set(
+          toolLabel,
+          typeof diagRow?.value === "number" ? diagRow.value : undefined
+        );
+      }
+      pfNames.forEach((pf) => entry!.pfSet.add(pf));
+      mNames.forEach((m) => entry!.measureSet.add(m));
+
+      if (!entry.card.description && diagRow?.description)
+        entry.card.description = diagRow.description;
+      if (typeof entry.card.value !== "number" && typeof diagRow?.value === "number")
+        entry.card.value = diagRow.value;
     }
+
+    const cards = Array.from(cardsByName.values()).map((v) => {
+      v.card.tools = Array.from(v.toolSet).sort((a, b) => a.localeCompare(b));
+      v.card.toolScores = Array.from(v.toolScoreMap.entries())
+        .filter((entry): entry is [string, number] => {
+          const score = entry[1];
+          return typeof score === "number" && Number.isFinite(score);
+        })
+        .map(([tool, score]) => ({ tool, score }));
+      v.card.measures = Array.from(v.measureSet).sort((a, b) => a.localeCompare(b));
+      v.card.productFactors = Array.from(v.pfSet).sort((a, b) => a.localeCompare(b));
+      return v.card;
+    });
 
     if (diffHints) {
       cards.sort((a, b) => a.name.localeCompare(b.name));
@@ -426,10 +508,10 @@ const FindingTab: React.FC<Props> = ({
   const hasPackageVulns = groupedCves.length > 0;
   const secondTabLabel = hasPackageVulns
     ? "Package Vulnerabilities"
-    : "Diagnostics";
+    : "Diagnostic Findings";
   const secondHeader = hasPackageVulns
     ? `# of package vulnerabilities: ${groupedCves.length}`
-    : `# of findings: ${nonCveDiagnostics.length}`;
+    : `# of diagnostic findings: ${nonCveDiagnostics.length}`;
 
   // ---------- Render ----------
   if (hasPackageVulns) {
@@ -530,9 +612,9 @@ const FindingTab: React.FC<Props> = ({
             const byTool = g.byTool ?? [];
             const cveDiff = diffHints?.cveFieldDiffs?.get(g.id);
 
-            const toolsStr = (g.byTool ?? []).length
-              ? Array.from(new Set(g.byTool.map((t: any) => t.tool))).join(", ")
-              : "—";
+            const toolsStr = formatToolList(
+              (g.byTool ?? []).map((t: any) => t.tool)
+            );
 
             const fixedStr =
               normalizeFixed(g.fixed ?? "").trim() || "Not fixed";
@@ -659,9 +741,9 @@ const FindingTab: React.FC<Props> = ({
                   })()}
 
                   <li>
-                    <strong>Finding Identified From: </strong>{" "}
+                    <strong>Findings from Tool(s): </strong>{" "}
                     <span className={cveDiff?.byTool ? "diff-field" : ""}>
-                      {toolsStr}
+                      {toolsStr || "—"}
                     </span>
                   </li>
                 </ul>
@@ -699,11 +781,8 @@ const FindingTab: React.FC<Props> = ({
               <h4 className="cve-title">{d.name}</h4>
               <ul className="cve-list">
                 <li>
-                  <strong>Tool:</strong> {d.toolName || "—"}
-                </li>
-                <li>
-                  <strong>Score Reported by Tool:</strong>{" "}
-                  {typeof d.value === "number" ? d.value.toFixed(4) : "—"}
+                  <strong>Findings from Tool(s):</strong>{" "}
+                  {formatToolList(d.tools) || "—"}
                 </li>
                 <li>
                   <strong>Associated Product factor(s):</strong>{" "}
@@ -775,6 +854,12 @@ const FindingTab: React.FC<Props> = ({
                   </li>
                 )}
               </ul>
+              {d.toolScores.length > 0 && (
+                <div className="cve-chart-wrap">
+                  <div className="cve-chart-caption">Score by tool</div>
+                  <CVEScoreMiniChart byTool={d.toolScores} />
+                </div>
+              )}
             </Box>
           ))
         )}

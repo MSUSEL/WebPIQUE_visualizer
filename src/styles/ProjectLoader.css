@@ -43,16 +43,19 @@
 
 /* Each row: keep contents packed together */
 .file-row {
-  display: inline-flex; /* shrink to content instead of filling column */
+  display: inline-flex;
+  /* shrink to content instead of filling column */
   align-items: center;
   justify-content: flex-start !important;
-  gap: 4px; /* space between checkbox, name, icons */
+  gap: 4px;
+  /* space between checkbox, name, icons */
 }
 
 /* Make sure the name does NOT stretch, so icons sit close to it */
 .file-row .file-name {
   flex: 0 0 auto !important;
-  max-width: 18rem; /* optional: clamp very long names */
+  max-width: 18rem;
+  /* optional: clamp very long names */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
