@@ -1,8 +1,7 @@
 import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import Hamburger from "hamburger-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import FileUpload from "../headerfooter/FileUpload";
-import "../../styles/HamburgerMenuStyle.css";
 
 type UploadPayload = { filename: string; data: any };
 
@@ -23,8 +22,10 @@ const HamburgerMenu: React.FC = () => {
 
   const [submenuTop, setSubmenuTop] = useState<number>(MENU_TOP);
   const navigate = useNavigate(); // still available if you need it elsewhere
+  const location = useLocation();
 
   // anchor: measure the top of the "Compare" and "Login" rows inside the menu
+  const menuRef = useRef<HTMLDivElement>(null);
   const compareRowRef = useRef<HTMLDivElement>(null);
   const loginRowRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +62,11 @@ const HamburgerMenu: React.FC = () => {
     } catch {
       // ignore
     }
-    hardNavigate("/visualizer");
+    if (location.pathname === "/visualizer") {
+      softNavigate("/visualizer", { jsonData: payload.data });
+    } else {
+      hardNavigate("/visualizer");
+    }
   };
 
   const goToCompareVisualizer = (payload: {
@@ -82,7 +87,11 @@ const HamburgerMenu: React.FC = () => {
     } catch {
       // ignore
     }
-    hardNavigate("/compare");
+    softNavigate("/compare", {
+      file1: payload.file1,
+      file2: payload.file2,
+      ts: Date.now(),
+    });
   };
 
   const handleCompare = () => {
@@ -94,14 +103,17 @@ const HamburgerMenu: React.FC = () => {
   };
 
   // reset all submenu state on close
-  const handleToggle = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setShowCompareSubmenu(false);
-      setShowLogin(false);
-      setLeftJson(null);
-      setRightJson(null);
-    }
+  const handleToggle = (next: React.SetStateAction<boolean>) => {
+    setOpen((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      if (!resolved) {
+        setShowCompareSubmenu(false);
+        setShowLogin(false);
+        setLeftJson(null);
+        setRightJson(null);
+      }
+      return resolved;
+    });
   };
 
   // keep submenu aligned with the active row
@@ -110,8 +122,8 @@ const HamburgerMenu: React.FC = () => {
     const target = showCompareSubmenu
       ? compareRowRef.current
       : showLogin
-      ? loginRowRef.current
-      : null;
+        ? loginRowRef.current
+        : null;
     if (target) setSubmenuTop(MENU_TOP + target.offsetTop);
   }, [isOpen, showCompareSubmenu, showLogin]);
 
@@ -123,23 +135,37 @@ const HamburgerMenu: React.FC = () => {
     }
   }, [isOpen, showLogin]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (menuRef.current?.contains(target)) return;
+      handleToggle(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [isOpen]);
+
   const canSubmit =
     !authLoading && username.trim().length > 0 && password.trim().length >= 6;
 
   return (
-    <div className="menu-container">
-      <div className="hamburger-container">
-        <Hamburger toggled={isOpen} toggle={setOpen} size={22} />
+    <div className="relative z-[3000]" ref={menuRef}>
+      <div className="z-[1001] ml-[10px] flex h-full items-center justify-start">
+        <Hamburger toggled={isOpen} toggle={handleToggle} size={22} />
       </div>
 
       {isOpen && (
-        <div className="menu">
-          <h2 className="menu-title">WebPIQUE Visualizer Menu</h2>
-          <hr />
+        <div className="absolute left-0 top-[40px] z-[3100] w-[270px] rounded-[7px] border-2 border-[lightgrey] bg-white p-[15px] text-black shadow">
+          <h2 className="mb-2 text-[18px] font-bold text-black">
+            WebPIQUE Visualizer Menu
+          </h2>
+          <hr className="my-2 border-0 border-t-2 border-[#ccc]" />
 
           {/* Home – full navigation */}
           <div
-            className="menu-item"
+            className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
               hardNavigate("/");
             }}
@@ -165,21 +191,22 @@ const HamburgerMenu: React.FC = () => {
           {/* Compare submenu toggle */}
           <div
             ref={compareRowRef}
-            className={`menu-item ${showCompareSubmenu ? "active" : ""}`}
+            className={`flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2] ${showCompareSubmenu ? "bg-[#e8f0fe] font-semibold" : ""
+              }`}
             onClick={() => {
               setShowCompareSubmenu((v) => !v);
               setShowLogin(false);
             }}
           >
             <span>Compare</span>
-            <span className="chevron" aria-hidden>
+            <span className="ml-2 inline-block text-[14px] leading-none" aria-hidden>
               &gt;
             </span>
           </div>
 
           {/* Project – full navigation */}
           <div
-            className="menu-item"
+            className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
               hardNavigate("/projects");
             }}
@@ -192,30 +219,33 @@ const HamburgerMenu: React.FC = () => {
       {/* compare submenu */}
       {isOpen && showCompareSubmenu && (
         <div
-          className="submenu locked"
+          className="absolute z-[3200] -ml-[2px] flex w-[280px] flex-col gap-2 rounded-[7px] border-2 border-[lightgrey] bg-white p-[15px] text-black shadow"
           style={{
             top: submenuTop,
             left: MENU_WIDTH,
           }}
         >
-          <h3 className="submenu-title">Select Files to Compare</h3>
-          <hr />
-          <div className="file-input">
-            <label>Left Side:</label>
+          <h3 className="-mb-[3px] text-[18px] font-bold text-black">
+            Select Files to Compare
+          </h3>
+          <hr className="my-2 border-0 border-t-2 border-[#ccc]" />
+          <div className="mb-3 flex flex-col text-[15px]">
+            <label className="mb-2 font-medium">Left Side:</label>
             <FileUpload
               variant="compact"
               onJsonLoaded={(payload: UploadPayload) => setLeftJson(payload)}
             />
           </div>
-          <div className="file-input">
-            <label>Right Side:</label>
+          <div className="mb-3 flex flex-col text-[15px]">
+            <label className="mb-2 font-medium">Right Side:</label>
             <FileUpload
               variant="compact"
               onJsonLoaded={(payload: UploadPayload) => setRightJson(payload)}
             />
           </div>
           <button
-            className="compare-button"
+            className={`mt-1 w-3/5 self-center rounded-[10px] border-2 border-black px-2.5 py-2 text-[15px] text-black shadow-sm disabled:cursor-not-allowed disabled:border-[lightgrey] disabled:bg-white disabled:text-[lightgrey] ${leftJson && rightJson ? "bg-[#f2f2f2]" : ""
+              }`}
             onClick={handleCompare}
             disabled={!leftJson || !rightJson}
           >

@@ -14,12 +14,18 @@ const App = () => {
   const isViewerRoute = location.pathname === "/viewer";
 
   return (
-    <div className="app-container">
+    <div className="flex min-h-screen flex-col">
       {/* Global header (with hamburger) on every page EXCEPT /viewer */}
       {!isViewerRoute && <Header />}
 
       {/* Main content wrapper */}
-      <div className={!isViewerRoute ? "main-content" : ""}>
+      <div
+        className={
+          !isViewerRoute
+            ? "flex flex-1 flex-col items-stretch px-0 pt-[110px]"
+            : ""
+        }
+      >
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/visualizer" element={<SingleFilePage />} />

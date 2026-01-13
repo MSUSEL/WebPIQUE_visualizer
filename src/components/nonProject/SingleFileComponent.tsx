@@ -23,6 +23,8 @@ type Props = {
   jsonData?: any;
   diffHints?: DiffHints;
   diffFilter?: "all" | "differing" | "unique";
+  compareMode?: boolean;
+  embedded?: boolean;
 
   // back-compatable controlled props...if omitted, atoms control the UI.
   controlledAspect?: string | null;
@@ -56,10 +58,15 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   const location = useLocation();
 
   // 1) props.jsonData (supports embedded usage & Compare)
-  // 2) localStorage payload from hard navigation / menu upload
-  // 3) router state from /visualizer navigation
+  // 2) router state from /visualizer navigation
+  // 3) localStorage payload from hard navigation / menu upload
+  // 4) global payload fallback
   let jsonDataInput =
     (props.jsonData && (props.jsonData.data ?? props.jsonData)) ?? undefined;
+
+  if (!jsonDataInput) {
+    jsonDataInput = (location.state as any)?.jsonData;
+  }
 
   if (!jsonDataInput) {
     try {
@@ -74,14 +81,21 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   }
 
   if (!jsonDataInput) {
-    jsonDataInput = (location.state as any)?.jsonData;
+    const cached = (globalThis as any).__wpSinglePayload as
+      | { data?: any }
+      | undefined;
+    if (cached?.data) jsonDataInput = cached.data;
   }
 
   if (!jsonDataInput) {
+    const emptyRootClass = props.embedded
+      ? "flex h-full flex-col"
+      : "flex flex-1 min-h-0 flex-col";
+    const emptyMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
     return (
-      <div className="app-container">
-        <main className="main-content">
-          <p style={{ textAlign: "center", marginTop: "2rem" }}>
+      <div className={emptyRootClass}>
+        <main className={emptyMainClass}>
+          <p className="mt-8 text-center">
             <strong>
               No file loaded. Use the menu to upload a PIQUE JSON file.
             </strong>
@@ -188,13 +202,21 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
     [props.onTogglePlot, selectedPlots, setOpenPlots]
   );
 
+  const rootClass = props.embedded
+    ? "flex h-full flex-col"
+    : "flex flex-1 min-h-0 flex-col";
+  const mainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+
   return (
-    <div className="app-container">
-      <main className="main-content">
+    <div className={rootClass}>
+      <main className={mainClass}>
         <ScoreGauges
           scores={scores}
           onAspectClick={handleAspectClick}
           selectedAspect={selectedAspect}
+          className={
+            props.compareMode && props.embedded ? "-mt-[55px]" : undefined
+          }
         />
 
         {selectedAspect ? (
@@ -218,7 +240,7 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
             onTogglePlot={handleTogglePlot}
           />
         ) : (
-          <p style={{ textAlign: "center", marginTop: "2rem" }}>
+          <p className="mt-8 text-center">
             <strong>
               Click on a Quality Aspect above to view more information.
             </strong>

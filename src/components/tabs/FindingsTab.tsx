@@ -68,14 +68,14 @@ const flagForCVE = (id: string, hints?: DiffHints): FlagKind => {
   return hints.missingCVEs?.has(key)
     ? "unique"
     : hints.differingCVEs?.has(key)
-    ? "diff"
-    : null;
+      ? "diff"
+      : null;
 };
 
 const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
   !kind ? null : (
     <span
-      className={`diff-flag diff-flag--${kind}`}
+      className="absolute left-[-2.5rem] top-2 text-[1.5rem] leading-none drop-shadow-[0_0_1px_rgba(0,0,0,0.25)]"
       title={
         kind === "diff" ? "Differs from the other file" : "Only in this file"
       }
@@ -86,6 +86,47 @@ const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
       {kind === "diff" ? "🚩" : "‼️"}
     </span>
   );
+
+const DiffBadgeInline: React.FC<{ kind: FlagKind }> = ({ kind }) =>
+  !kind ? null : (
+    <span
+      className="ml-1 inline-block text-[1.1rem] leading-none drop-shadow-[0_0_1px_rgba(0,0,0,0.25)]"
+      title={
+        kind === "diff" ? "Differs from the other file" : "Only in this file"
+      }
+      aria-label={
+        kind === "diff" ? "Differs from the other file" : "Only in this file"
+      }
+    >
+      {kind === "diff" ? "dYsc" : "Г?мЛ,?"}
+    </span>
+  );
+
+const flagForDiagIds = (ids: string[], hints?: DiffHints): FlagKind => {
+  if (!hints || ids.length === 0) return null;
+  if (ids.some((id) => hints.missingCVEs?.has(id))) return "unique";
+  if (ids.some((id) => hints.differingCVEs?.has(id))) return "diff";
+  return null;
+};
+
+const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
+
+const flagForDiagMeasure = (
+  pfNames: string[],
+  measureName: string,
+  hints?: DiffHints
+): FlagKind => {
+  if (!hints) return null;
+  let hasDiff = false;
+  let hasUnique = false;
+  for (const pfName of pfNames) {
+    const key = mkey(pfName, measureName);
+    if (hints.differingMeasures?.has(key)) hasDiff = true;
+    if (hints.missingMeasures?.has(key)) hasUnique = true;
+    if (hasDiff) break;
+  }
+  return hasDiff ? "diff" : hasUnique ? "unique" : null;
+};
 
 // ---------- types ----------
 type GroupedCVE = {
@@ -107,6 +148,7 @@ type GroupedCVE = {
 type DiagCard = {
   id: string;
   name: string;
+  diagIds: string[];
   description?: string;
   tools: string[];
   toolScores: { tool: string; score: number }[];
@@ -159,15 +201,24 @@ const FindingTab: React.FC<Props> = ({
   const cweFilter = cweLocal;
   const [cweInput, setCweInput] = useState("");
 
-  const cveMatches = (payload: { vulnSource?: string; fixed?: any }) => {
-    const pkgPass =
-      pkgFilter === "ALL" || (payload?.vulnSource ?? "").trim() === pkgFilter;
-    const fixedNorm = normalizeFixed(payload?.fixed);
-    const fixedPass =
-      fixedFilter === "all" ||
-      (fixedFilter === "fixed" && fixedNorm === "Fixed") ||
-      (fixedFilter === "notfixed" && fixedNorm !== "Fixed");
-    return pkgPass && fixedPass;
+  const matchesPkg = (vulnSource?: string, filter = pkgFilter) =>
+    filter === "ALL" || (vulnSource ?? "").trim() === filter;
+
+  const matchesFixed = (fixed: any, filter = fixedFilter) => {
+    const fixedNorm = normalizeFixed(fixed);
+    return (
+      filter === "all" ||
+      (filter === "fixed" && fixedNorm === "Fixed") ||
+      (filter === "notfixed" && fixedNorm !== "Fixed")
+    );
+  };
+
+  const matchesCwe = (g: GroupedCVE, filter = cweFilter) => {
+    if (filter === "ALL") return true;
+    const labels = [...(g.cwePillars ?? []), ...(g.cweMeasures ?? [])]
+      .map(cleanAssocLabel)
+      .filter(Boolean);
+    return labels.includes(filter);
   };
 
   const pkgFilterOptions = createFilterOptions<string>({
@@ -176,8 +227,17 @@ const FindingTab: React.FC<Props> = ({
     ignoreAccents: true,
     trim: true,
   });
+  const filterInputSx = {
+    "& .MuiInputBase-root": {
+      height: 32,
+      fontSize: "14px",
+    },
+    "& .MuiInputBase-input": {
+      padding: "0 8px",
+    },
+  };
 
-  const groupedCves = useMemo<GroupedCVE[]>(() => {
+  const baseGroupedCves = useMemo<GroupedCVE[]>(() => {
     const groupedById = new Map<string, GroupedCVE>();
     if (!relational) return [];
 
@@ -270,26 +330,31 @@ const FindingTab: React.FC<Props> = ({
       }
     }
 
-    return Array.from(groupedById.values()).filter((g) => {
-      const basePass = cveMatches({ vulnSource: g.vulnSource, fixed: g.fixed });
-      if (!basePass) return false;
+    return Array.from(groupedById.values());
+  }, [relational, aspectPfIdSet]);
 
-      if (cweFilter === "ALL") return true;
-      const labels = [...(g.cwePillars ?? []), ...(g.cweMeasures ?? [])]
-        .map(cleanAssocLabel)
-        .filter(Boolean);
-      return labels.includes(cweFilter);
-    });
-  }, [relational, aspectPfIdSet, pkgFilter, fixedFilter, cweFilter]);
+  const groupedCves = useMemo<GroupedCVE[]>(
+    () =>
+      baseGroupedCves.filter(
+        (g) =>
+          matchesPkg(g.vulnSource) &&
+          matchesFixed(g.fixed) &&
+          matchesCwe(g)
+      ),
+    [baseGroupedCves, pkgFilter, fixedFilter, cweFilter]
+  );
 
   const packageOptions = useMemo(() => {
     const set = new Set<string>();
-    groupedCves.forEach((g) => {
+    baseGroupedCves.forEach((g) => {
+      if (!matchesFixed(g.fixed, fixedFilter)) return;
+      if (!matchesCwe(g, cweFilter)) return;
       const name = (g?.vulnSource ?? "").trim();
       if (name) set.add(name);
     });
+    if (pkgFilter !== "ALL") set.add(pkgFilter);
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [groupedCves]);
+  }, [baseGroupedCves, fixedFilter, cweFilter, pkgFilter]);
 
   const allPkgOptions = useMemo(
     () => ["ALL", ...packageOptions],
@@ -298,7 +363,9 @@ const FindingTab: React.FC<Props> = ({
 
   const cweOptions = useMemo(() => {
     const set = new Set<string>();
-    groupedCves.forEach((g) => {
+    baseGroupedCves.forEach((g) => {
+      if (!matchesPkg(g.vulnSource, pkgFilter)) return;
+      if (!matchesFixed(g.fixed, fixedFilter)) return;
       (g.cwePillars ?? []).forEach((nm) => {
         const lab = cleanAssocLabel(nm);
         if (lab) set.add(lab);
@@ -309,7 +376,41 @@ const FindingTab: React.FC<Props> = ({
       });
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [groupedCves]);
+  }, [baseGroupedCves, pkgFilter, fixedFilter]);
+
+  const availableFixedFilters = useMemo(() => {
+    let hasFixed = false;
+    let hasNotFixed = false;
+    baseGroupedCves.forEach((g) => {
+      if (!matchesPkg(g.vulnSource, pkgFilter)) return;
+      if (!matchesCwe(g, cweFilter)) return;
+      if (normalizeFixed(g.fixed) === "Fixed") hasFixed = true;
+      else hasNotFixed = true;
+    });
+    return { hasFixed, hasNotFixed };
+  }, [baseGroupedCves, pkgFilter, cweFilter]);
+
+  React.useEffect(() => {
+    if (cweFilter === "ALL") return;
+    if (cweOptions.includes(cweFilter)) return;
+    setCweLocal("ALL");
+    setCweInput("");
+  }, [cweFilter, cweOptions]);
+
+  React.useEffect(() => {
+    if (fixedFilter === "all") return;
+    const ok =
+      (fixedFilter === "fixed" && availableFixedFilters.hasFixed) ||
+      (fixedFilter === "notfixed" && availableFixedFilters.hasNotFixed);
+    if (ok) return;
+    if (controlledFixedFilter === undefined) setFixedLocal("all");
+    onFixedFilterChange?.("all");
+  }, [
+    fixedFilter,
+    availableFixedFilters,
+    controlledFixedFilter,
+    onFixedFilterChange,
+  ]);
 
   // Associated PF and measure hover descriptions
   const pfDescByLabel = useMemo(() => {
@@ -454,6 +555,7 @@ const FindingTab: React.FC<Props> = ({
           card: {
             id: diagName,
             name: diagName,
+            diagIds: [],
             description: diagRow?.description,
             value: diagRow?.value,
             tools: [],
@@ -476,6 +578,7 @@ const FindingTab: React.FC<Props> = ({
           typeof diagRow?.value === "number" ? diagRow.value : undefined
         );
       }
+      entry.card.diagIds.push(diagId);
       pfNames.forEach((pf) => entry!.pfSet.add(pf));
       mNames.forEach((m) => entry!.measureSet.add(m));
 
@@ -486,6 +589,7 @@ const FindingTab: React.FC<Props> = ({
     }
 
     const cards = Array.from(cardsByName.values()).map((v) => {
+      v.card.diagIds = Array.from(new Set(v.card.diagIds));
       v.card.tools = Array.from(v.toolSet).sort((a, b) => a.localeCompare(b));
       v.card.toolScores = Array.from(v.toolScoreMap.entries())
         .filter((entry): entry is [string, number] => {
@@ -498,14 +602,24 @@ const FindingTab: React.FC<Props> = ({
       return v.card;
     });
 
+    const applyDiagDiff = (card: DiagCard) => {
+      if (!diffHints) return true;
+      const mode = diffFilter ?? "all";
+      if (mode === "all") return true;
+      const hasDiff = card.diagIds.some((id) => diffHints.differingCVEs?.has(id));
+      const hasUnique = card.diagIds.some((id) => diffHints.missingCVEs?.has(id));
+      return mode === "differing" ? hasDiff : hasUnique;
+    };
+
+    const filtered = cards.filter(applyDiagDiff);
     if (diffHints) {
-      cards.sort((a, b) => a.name.localeCompare(b.name));
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
     }
-    return cards;
-  }, [relational, aspectPFs, aspectPfIdSet, diffHints]);
+    return filtered;
+  }, [relational, aspectPFs, aspectPfIdSet, diffHints, diffFilter]);
 
   // ---------- Tab label/header logic (same behavior) ----------
-  const hasPackageVulns = groupedCves.length > 0;
+  const hasPackageVulns = baseGroupedCves.length > 0;
   const secondTabLabel = hasPackageVulns
     ? "Package Vulnerabilities"
     : "Diagnostic Findings";
@@ -516,14 +630,13 @@ const FindingTab: React.FC<Props> = ({
   // ---------- Render ----------
   if (hasPackageVulns) {
     return (
-      <Box className="st-root">
-        <h3 className="st-h3">{secondHeader}</h3>
-        <hr className="st-divider st-divider--narrow" />
+      <Box className="px-4 py-2 text-[15px]">
+        <h3 className="mb-2 font-semibold text-[26px]">{secondHeader}</h3>
 
         {/* Filters ONLY when there are CVEs */}
-        <div className="st-filters">
-          <label className="st-filter">
-            <span className="st-filter-label">Vulnerable Package</span>
+        <div className="ml-[18px] flex max-w-[calc(100%-18px)] flex-wrap items-end gap-2 pb-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[15px] text-[#555]">Vulnerable Package</span>
             <Autocomplete
               options={allPkgOptions}
               value={pkgFilter ?? "ALL"}
@@ -539,21 +652,22 @@ const FindingTab: React.FC<Props> = ({
               clearOnBlur={false}
               autoSelect
               openOnFocus
+              sx={{ width: 180 }}
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  placeholder="Search packages…"
+                  placeholder="Search packages..."
                   size="small"
-                  className="st-filter-select"
+                  sx={filterInputSx}
                 />
               )}
             />
           </label>
 
-          <label className="st-filter">
-            <span className="st-filter-label">Fixed status</span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[15px] text-[#555]">Fixed status</span>
             <select
-              className="st-filter-select"
+              className="h-[32px] w-[180px] rounded-md border border-[#ccc] px-2 text-[14px]"
               value={fixedFilter}
               onChange={(e) => {
                 const v = e.target.value as "all" | "fixed" | "notfixed";
@@ -562,13 +676,20 @@ const FindingTab: React.FC<Props> = ({
               }}
             >
               <option value="all">All</option>
-              <option value="fixed">Fixed</option>
-              <option value="notfixed">Not fixed</option>
+              <option value="fixed" disabled={!availableFixedFilters.hasFixed}>
+                Fixed
+              </option>
+              <option
+                value="notfixed"
+                disabled={!availableFixedFilters.hasNotFixed}
+              >
+                Not fixed
+              </option>
             </select>
           </label>
 
-          <label className="st-filter">
-            <span className="st-filter-label">CWE lookup</span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[15px] text-[#555]">CWE lookup</span>
             <Autocomplete
               options={allCweOptions}
               value={cweFilter}
@@ -579,19 +700,20 @@ const FindingTab: React.FC<Props> = ({
               filterOptions={cweFilterOptions}
               clearOnBlur={false}
               openOnFocus
+              sx={{ width: 180 }}
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  placeholder="Search CWEs…"
+                  placeholder="Search CWEs..."
                   size="small"
-                  className="st-filter-select"
+                  sx={filterInputSx}
                 />
               )}
             />
           </label>
 
           <button
-            className="st-filter-reset"
+            className="h-[32px] rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 text-[14px] hover:bg-black hover:text-white"
             onClick={() => {
               if (controlledPkgFilter === undefined) setPkgLocal("ALL");
               if (controlledFixedFilter === undefined) setFixedLocal("all");
@@ -620,43 +742,63 @@ const FindingTab: React.FC<Props> = ({
               normalizeFixed(g.fixed ?? "").trim() || "Not fixed";
 
             return (
-              <Box
-                key={g.id}
-                className="cve-card card--with-badge"
-                style={{ position: "relative", marginLeft: "24px" }}
-              >
+              <Box key={g.id} className="relative mt-2 ml-[24px] rounded-lg border border-[grey] p-3 text-[16px]">
                 <DiffBadge kind={flagForCVE(g.id, diffHints)} />
-                <h4 className="cve-title">{g.id}</h4>
+                <h4 className="m-0 text-[22px]"><strong>{g.id}</strong></h4>
                 <strong>Related vulnerability ID:</strong> {g.alias || "None"}
-                <ul className="cve-list">
+                <ul className="m-0 list-disc pl-5 pr-20">
                   <li>
                     <strong>Package name:</strong>{" "}
-                    <span className={cveDiff?.pkg ? "diff-field" : ""}>
-                      {g.vulnSource || "—"}
+                    <span
+                      className={
+                        cveDiff?.pkg
+                          ? "rounded-[2px] bg-[#e49797] px-0.5"
+                          : ""
+                      }
+                    >
+                      {g.vulnSource || "--"}
                     </span>
                   </li>
                   <li>
                     <strong>Vulnerable Package Version:</strong>{" "}
-                    <span className={cveDiff?.vulnVer ? "diff-field" : ""}>
-                      {g.vulnSourceVersion || "—"}
+                    <span
+                      className={
+                        cveDiff?.vulnVer
+                          ? "rounded-[2px] bg-[#e49797] px-0.5"
+                          : ""
+                      }
+                    >
+                      {g.vulnSourceVersion || "--"}
                     </span>
                   </li>
                   <li>
                     <strong>Fixed Status:</strong>{" "}
-                    <span className={cveDiff?.fixed ? "diff-field" : ""}>
+                    <span
+                      className={
+                        cveDiff?.fixed
+                          ? "rounded-[2px] bg-[#e49797] px-0.5"
+                          : ""
+                      }
+                    >
                       {fixedStr}
                     </span>
                   </li>
                   {g.fixedVersion && (
                     <li>
                       <strong>Fixed Package Version(s):</strong>{" "}
-                      <span className={cveDiff?.fixedVer ? "diff-field" : ""}>
+                      <span
+                        className={
+                          cveDiff?.fixedVer
+                            ? "rounded-[2px] bg-[#e49797] px-0.5"
+                            : ""
+                        }
+                      >
                         {g.fixedVersion}
                       </span>
                     </li>
                   )}
                   <li>
-                    <strong>Description:</strong> {g.description || "—"}
+                    <strong>Description:</strong> {g.description || "--"}
                   </li>
                   {(() => {
                     const pillars = g.cwePillars ?? [];
@@ -684,7 +826,7 @@ const FindingTab: React.FC<Props> = ({
                                     },
                                   }}
                                 >
-                                  <span className="hover-underline">
+                                  <span className="cursor-help underline decoration-dotted">
                                     {label}
                                   </span>
                                 </Tooltip>
@@ -725,7 +867,7 @@ const FindingTab: React.FC<Props> = ({
                                     },
                                   }}
                                 >
-                                  <span className="hover-underline">
+                                  <span className="cursor-help underline decoration-dotted">
                                     {label}
                                   </span>
                                 </Tooltip>
@@ -742,15 +884,23 @@ const FindingTab: React.FC<Props> = ({
 
                   <li>
                     <strong>Findings from Tool(s): </strong>{" "}
-                    <span className={cveDiff?.byTool ? "diff-field" : ""}>
-                      {toolsStr || "—"}
+                    <span
+                      className={
+                        cveDiff?.byTool
+                          ? "rounded-[2px] bg-[#e49797] px-0.5"
+                          : ""
+                      }
+                    >
+                      {toolsStr || "--"}
                     </span>
                   </li>
+                  <li>
+                    <div className="mt-2">
+                      <strong>CVE Score(s) by Tool:</strong>
+                      <CVEScoreMiniChart byTool={byTool} />
+                    </div>
+                  </li>
                 </ul>
-                <div className="cve-chart-wrap">
-                  <div className="cve-chart-caption">CVE Score</div>
-                  <CVEScoreMiniChart byTool={byTool} />
-                </div>
               </Box>
             );
           })}
@@ -761,28 +911,26 @@ const FindingTab: React.FC<Props> = ({
 
   // Diagnostics view (no CVEs)
   return (
-    <Box className="st-root">
-      <h3 className="st-h3">{secondHeader}</h3>
-      <hr className="st-divider st-divider--narrow" />
+    <Box className="px-4 py-2 text-[15px]">
+      <h3 className="mb-2 font-semibold text-[26px]">{secondHeader}</h3>
 
       <Box>
         {nonCveDiagnostics.length === 0 ? (
-          <div style={{ opacity: 0.7 }}>
+          <div className="opacity-70">
             No diagnostics available for this aspect.
           </div>
         ) : (
           nonCveDiagnostics.map((d) => (
             <Box
               key={d.id}
-              className="cve-card card--with-badge"
-              style={{ position: "relative", marginLeft: "24px" }}
+              className="relative mt-2 ml-[24px] rounded-lg border border-[grey] p-3 text-[16px]"
             >
-              {/* diagnostics don't have explicit diff/unique tracking; add later if you extend DiffHints */}
-              <h4 className="cve-title">{d.name}</h4>
-              <ul className="cve-list">
+              <DiffBadge kind={flagForDiagIds(d.diagIds, diffHints)} />
+              <h4 className="m-0 text-[22px]"><strong>{d.name}</strong></h4>
+              <ul className="m-0 list-disc pl-5 pr-20">
                 <li>
                   <strong>Findings from Tool(s):</strong>{" "}
-                  {formatToolList(d.tools) || "—"}
+                  {formatToolList(d.tools) || "--"}
                 </li>
                 <li>
                   <strong>Associated Product factor(s):</strong>{" "}
@@ -805,7 +953,9 @@ const FindingTab: React.FC<Props> = ({
                               },
                             }}
                           >
-                            <span className="hover-underline">{label}</span>
+                            <span className="cursor-help underline decoration-dotted">
+                              {label}
+                            </span>
                           </Tooltip>
                         ) : (
                           label
@@ -821,6 +971,7 @@ const FindingTab: React.FC<Props> = ({
                   {d.measures.map((m, idx) => {
                     const label = cleanAssocLabel(m);
                     const desc = measureDescByLabel.get(label);
+                    const flag = flagForDiagMeasure(d.productFactors, m, diffHints);
                     return (
                       <span key={idx}>
                         {desc ? (
@@ -837,11 +988,14 @@ const FindingTab: React.FC<Props> = ({
                               },
                             }}
                           >
-                            <span className="hover-underline">{label}</span>
+                            <span className="cursor-help underline decoration-dotted">
+                              {label}
+                            </span>
                           </Tooltip>
                         ) : (
                           label
                         )}
+                        <DiffBadgeInline kind={flag} />
                         {idx < d.measures.length - 1 ? ", " : ""}
                       </span>
                     );
@@ -853,13 +1007,15 @@ const FindingTab: React.FC<Props> = ({
                     <strong>Description:</strong> {d.description}
                   </li>
                 )}
+                <li>
+                  {d.toolScores.length > 0 && (
+                    <div className="mt-2">
+                      <strong>Score(s) by Tool:</strong>
+                      <CVEScoreMiniChart byTool={d.toolScores} />
+                    </div>
+                  )}
+                </li>
               </ul>
-              {d.toolScores.length > 0 && (
-                <div className="cve-chart-wrap">
-                  <div className="cve-chart-caption">Score by tool</div>
-                  <CVEScoreMiniChart byTool={d.toolScores} />
-                </div>
-              )}
             </Box>
           ))
         )}

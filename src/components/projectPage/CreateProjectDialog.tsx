@@ -198,59 +198,22 @@ export default function CreateProjectDialog({
   if (!open) return null;
 
   // --- styles kept inline to avoid external CSS collisions ---
-  const maskStyle: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000,
-  };
-  const panelStyle: React.CSSProperties = {
-    background: "#fff",
-    borderRadius: 10,
-    padding: 20,
-    width: 560,
-    maxWidth: "92vw",
-    boxShadow: "0 12px 32px rgba(0,0,0,.2)",
-  };
-  const headerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  };
-  const dropZoneStyle: React.CSSProperties = {
-    marginTop: 8,
-    border: "2px dashed #c7c7c7",
-    height: 90,
-    borderRadius: 10,
-    padding: 26,
-    textAlign: "center" as const,
-    userSelect: "none" as const,
-  };
-
   const content = (
-    <div className="wpq-modal-mask" style={maskStyle} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-[rgba(0,0,0,0.35)]"
+      onClick={onClose}
+    >
       <div
-        className="wpq-modal-panel"
-        style={panelStyle}
+        className="w-[560px] max-w-[92vw] rounded-[10px] bg-white p-5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={headerStyle}>
-          <h3 style={{ margin: 0 }}>Create Project</h3>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="m-0">Create Project</h3>
           <button
             aria-label="Close"
             onClick={onClose}
-            style={{
-              border: "none",
-              background: "transparent",
-              fontSize: 18,
-              cursor: "pointer",
-              lineHeight: 1,
-            }}
+            className="cursor-pointer text-[18px] leading-none"
             title="Close"
           >
             ✕
@@ -258,8 +221,8 @@ export default function CreateProjectDialog({
         </div>
 
         {/* Name input */}
-        <label style={{ display: "block", marginBottom: 12 }}>
-          <div style={{ fontSize: 12, marginBottom: 6, opacity: 0.8 }}>
+        <label className="mb-3 block">
+          <div className="mb-1.5 text-[12px] opacity-80">
             Project name
           </div>
           <input
@@ -267,13 +230,7 @@ export default function CreateProjectDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Project 1"
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              outline: "none",
-            }}
+            className="w-full rounded-lg border border-[#ddd] px-2.5 py-2 outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -285,21 +242,14 @@ export default function CreateProjectDialog({
 
         {/* File controls */}
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="flex items-center gap-3">
             <button
-              className="btn"
+              className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3 py-2"
               onClick={() => inputRef.current?.click()}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: "#f7f7f7",
-                cursor: "pointer",
-              }}
             >
               Browse files
             </button>
-            <div style={{ opacity: 0.75, fontSize: 12 }}>{fileCountLabel}</div>
+            <div className="text-[12px] opacity-75">{fileCountLabel}</div>
           </div>
 
           <input
@@ -312,7 +262,7 @@ export default function CreateProjectDialog({
           />
 
           <div
-            style={dropZoneStyle}
+            className="mt-2 h-[90px] select-none rounded-[10px] border-2 border-dashed border-[#c7c7c7] p-[26px] text-center"
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
@@ -327,26 +277,12 @@ export default function CreateProjectDialog({
 
           {/* Loading bar */}
           {loading && (
-            <div style={{ marginTop: 12 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12,
-                  opacity: 0.8,
-                }}
-              >
+            <div className="mt-3">
+              <div className="flex justify-between text-[12px] opacity-80">
                 <span>Files loading</span>
                 <span>{Math.round(progress * 100)}%</span>
               </div>
-              <div
-                style={{
-                  height: 8,
-                  borderRadius: 999,
-                  background: "#eee",
-                  overflow: "hidden",
-                }}
-              >
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#eee]">
                 <div
                   style={{
                     width: `${Math.max(2, progress * 100)}%`, // keep a small sliver visible at 0%
@@ -361,24 +297,15 @@ export default function CreateProjectDialog({
 
           {/* Selected files list */}
           {files.length > 0 && (
-            <ul style={{ marginTop: 12, paddingLeft: 18 }}>
+            <ul className="mt-3 list-disc pl-[18px]">
               {files.map((f) => (
-                <li
-                  key={f.id}
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <span style={{ flex: 1 }}>{f.fileName}</span>
+                <li key={f.id} className="flex items-center gap-2">
+                  <span className="flex-1">{f.fileName}</span>
                   <button
                     onClick={() => removeFile(f.id)}
                     aria-label={`Remove ${f.fileName}`}
                     title="Remove"
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      cursor: "pointer",
-                      fontSize: 16,
-                      lineHeight: 1,
-                    }}
+                    className="cursor-pointer text-[16px] leading-none"
                   >
                     ✕
                   </button>
@@ -389,39 +316,21 @@ export default function CreateProjectDialog({
         </div>
 
         {/* Actions */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            marginTop: 16,
-          }}
-        >
+        <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: "#f7f7f7",
-              cursor: "pointer",
-            }}
+            className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3.5 py-2"
           >
             Cancel
           </button>
           <button
             onClick={handleContinue}
             disabled={!name.trim() || files.length === 0}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #0d6efd",
-              background:
-                !name.trim() || files.length === 0 ? "#9bbcf9" : "#0d6efd",
-              color: "#fff",
-              cursor:
-                !name.trim() || files.length === 0 ? "not-allowed" : "pointer",
-            }}
+            className={`rounded-lg border px-3.5 py-2 text-white ${
+              !name.trim() || files.length === 0
+                ? "cursor-not-allowed border-[#0d6efd] bg-[#9bbcf9]"
+                : "cursor-pointer border-[#0d6efd] bg-[#0d6efd]"
+            }`}
             title={
               !name.trim()
                 ? "Enter a project name"

@@ -23,7 +23,7 @@ const MuiTabs: React.FC<MuiTabsProps> = ({ tabs, value, onChange }) => {
   };
 
   if (!tabs || tabs.length === 0) {
-    return <div style={{ padding: "1rem" }}>No content to display.</div>;
+    return <div className="p-4">No content to display.</div>;
   }
 
   return (

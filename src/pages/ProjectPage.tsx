@@ -1,18 +1,19 @@
 // project page
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProjectSidebar, {
   Project,
 } from "../components/projectPage/ProjectSidebar";
 import ProjectFileLoad, {
+  MAX_FILES,
+  ProjectFileLoadHandle,
   ProjectFileScore,
   ViewMode,
 } from "../components/projectPage/ProjectFileLoad";
 import TQIQAPlot from "../components/plotting/TQIQAPlot";
 import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 import ModalPopout from "../components/projectPage/ModalPopout";
-
-import "../styles/Pages.css";
-import "../styles/ProjectViewStyle.css";
+import SingleFileComponent from "../components/nonProject/SingleFileComponent";
+import CompareComponent from "../components/nonProject/CompareComponent";
 
 // helper for compressed file load (wrapper we pass through)
 type UploadPayload = { filename: string; data: any };
@@ -39,7 +40,7 @@ export default function ProjectView() {
   // modal for visualized single or compare files, popout window
   const [isModalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ViewMode>("single");
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const fileLoadRef = useRef<ProjectFileLoadHandle | null>(null);
 
   // viewer payloads (from loader)
   const [singlePayload, setSinglePayload] = useState<
@@ -131,10 +132,12 @@ export default function ProjectView() {
     setSelectedIds([]);
   }, [activeProjectId]);
 
+
   const activeFiles = useMemo(
     () => (activeProjectId ? filesByProject[activeProjectId] ?? [] : []),
     [activeProjectId, filesByProject]
   );
+  const canAddMore = activeFiles.length < MAX_FILES;
 
   // ---------- project operations ----------
 
@@ -214,9 +217,8 @@ export default function ProjectView() {
 
   // ---------- render ----------
   return (
-    <div className="project-page app-container">
-      <div className="project-layout">
-        <ProjectSidebar
+    <div className="flex flex-1 min-h-0">
+      <ProjectSidebar
           projects={projects}
           activeProjectId={activeProjectId}
           filesByProject={Object.fromEntries(
@@ -229,32 +231,33 @@ export default function ProjectView() {
           onSelectProject={setActiveProjectId}
           onRemoveProject={handleRemoveProject}
           onRenameProject={handleRenameProject}
-        />
+      />
 
-        <CreateProjectDialog
+      <CreateProjectDialog
           open={createOpen}
           onClose={() => setCreateOpen(false)}
           onCreate={(name, files) => handleCreateProject(name, files)}
           defaultName={`Project ${projects.length + 1}`}
-        />
+      />
 
-        <main className="project-main">
-          {activeProjectId ? (
-            <div className="split-root">
+      <main className="flex min-h-0 flex-1 items-start justify-start p-6">
+        {activeProjectId ? (
+          <div className="min-h-[420px] h-full w-full">
               {/* top section: plot + file list */}
-              <div className="project-two-col">
-                <section className="project-plot">
-                  <header className="st-section-hdr">
+              <div className="grid min-h-0 w-full grid-cols-1 gap-4">
+                <section className="min-w-0">
+                  <header className="mb-2 text-[20px]">
                     <h2>
-                      TQI &amp; Quality Aspect Score Tracker for{" "}
-                      {projects.find((p) => p.id === activeProjectId)?.name}
+                      <strong>TQI &amp; Quality Aspect Score Tracker for{" "}
+                        {projects.find((p) => p.id === activeProjectId)?.name}</strong>
                     </h2>
                   </header>
                   <TQIQAPlot files={activeFiles} selectedIds={selectedIds} />
                 </section>
 
-                <section className="project-files">
+                <section className="min-w-0">
                   <ProjectFileLoad
+                    ref={fileLoadRef}
                     projectId={activeProjectId}
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
@@ -279,10 +282,18 @@ export default function ProjectView() {
                     }}
                   />
 
-                  {/* Visualize button lives under the file box */}
-                  <div className="visualize-btn-row">
+                  {/* Add File + Visualize buttons live under the file box */}
+                  <div className="mt-3 flex items-center justify-end gap-3">
                     <button
-                      className="visualize-btn"
+                      type="button"
+                      className="rounded-[10px] border border-[#9bbcf9] bg-[#2679f5] px-3.5 py-2 font-semibold text-[#f3e8e8] disabled:cursor-not-allowed disabled:border-[#727679] disabled:bg-[#8a8c8d] disabled:text-[#afafaf]"
+                      disabled={!canAddMore}
+                      onClick={() => fileLoadRef.current?.openAddFile()}
+                    >
+                      + Add File(s)
+                    </button>
+                    <button
+                      className="rounded-[10px] border border-[#9bbcf9] bg-[#2679f5] px-3.5 py-2 font-semibold text-[#f3e8e8] disabled:cursor-not-allowed disabled:border-[#727679] disabled:bg-[#8a8c8d] disabled:text-[#afafaf]"
                       disabled={
                         (viewMode === "single" && selectedIds.length !== 1) ||
                         (viewMode === "compare" && selectedIds.length !== 2)
@@ -298,49 +309,33 @@ export default function ProjectView() {
                 </section>
               </div>
             </div>
-          ) : (
-            <div className="start_message">
-              <p>
-                <strong>
-                  Create a project and add files to visualize TQI and Quality
-                  Aspect trends over time. <br />
-                  Click the + icon in the project list sidebar to get started.
-                </strong>
-              </p>
-            </div>
-          )}
+        ) : (
+          <div className="mx-auto my-[70px] text-center text-[20px]">
+            <p>
+              <strong>
+                To create a project and add files to visualize TQI and Quality
+                Aspect trends over time, <br />
+                click the + icon in the project list sidebar.
+              </strong>
+            </p>
+          </div>
+        )}
 
-          {isModalOpen && (
-            <ModalPopout onClose={() => setModalOpen(false)}>
-              <iframe
-                ref={iframeRef}
-                title="Visualizer"
-                className="viewer-iframe"
-                src="/viewer"
-                onLoad={() => {
-                  const msg =
-                    modalMode === "single"
-                      ? {
-                          type: "viewer-payload",
-                          mode: "single",
-                          file: singlePayload,
-                        }
-                      : {
-                          type: "viewer-payload",
-                          mode: "compare",
-                          file1: comparePayload?.file1,
-                          file2: comparePayload?.file2,
-                        };
-                  iframeRef.current?.contentWindow?.postMessage(
-                    msg,
-                    window.location.origin
-                  );
-                }}
+        {isModalOpen && (
+          <ModalPopout onClose={() => setModalOpen(false)}>
+            {modalMode === "single" ? (
+              <SingleFileComponent jsonData={singlePayload} embedded />
+            ) : (
+              <CompareComponent
+                file1={comparePayload?.file1}
+                file2={comparePayload?.file2}
+                embedded
+                initialSizes={[50, 50]}
               />
-            </ModalPopout>
-          )}
-        </main>
-      </div>
+            )}
+          </ModalPopout>
+        )}
+      </main>
     </div>
   );
 }

@@ -125,7 +125,7 @@ const CVEScoreMiniChart: React.FC<Props> = ({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div className="flex items-center">
       <svg
         width={chartWidth}
         height={height}
@@ -152,20 +152,12 @@ const CVEScoreMiniChart: React.FC<Props> = ({
       </svg>
 
       {/* legend */}
-      <div style={{ marginLeft: "10px", fontSize: "10px" }}>
+      <div className="ml-2.5 text-[10px]">
         {legendItems.map((item) => (
-          <div
-            key={item.label}
-            style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
-          >
+          <div key={item.label} className="mb-1 flex items-center">
             <div
-              style={{
-                width: 10,
-                height: 10,
-                backgroundColor: item.color,
-                marginRight: 5,
-                borderRadius: "50%", // round legend marker
-              }}
+              className="mr-1.5 h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: item.color }}
             />
             {item.label}
           </div>

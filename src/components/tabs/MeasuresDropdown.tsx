@@ -78,7 +78,7 @@ const flagForMeasure = (
 const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
   !kind ? null : (
     <span
-      className={`diff-flag diff-flag--${kind}`}
+      className="absolute left-[-3.5rem] top-2 text-[1.5rem] leading-none drop-shadow-[0_0_1px_rgba(0,0,0,0.25)]"
       title={
         kind === "diff" ? "Differs from the other file" : "Only in this file"
       }
@@ -101,7 +101,8 @@ const Delta: React.FC<{
   const up = delta > 0;
   return (
     <span
-      className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"}`}
+      className={`ml-2 whitespace-nowrap font-semibold ${up ? "text-[#188038]" : "text-[#d93025]"
+        }`}
       title={up ? "Higher than other file" : "Lower than other file"}
       aria-label={up ? "Higher than other file" : "Lower than other file"}
     >
@@ -170,15 +171,15 @@ const MeasuresDropdown: React.FC<Props> = ({
 
   return (
     <>
-      <div className="measure-toggle" onClick={onToggleExpanded}>
-        <span className="measure-toggle-label">
+      <div className="inline-flex cursor-pointer items-center select-none" onClick={onToggleExpanded}>
+        <span className="mr-2">
           <strong>Measures</strong> (n = {measures.length})<strong>:</strong>
         </span>
         {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
       </div>
 
       {isExpanded && measures.length > 0 && (
-        <div className="measure-list">
+        <div className="px-3 py-2.5">
           <ul>
             {renderedMeasures.map((measure: Measure, idx: number) => {
               const key = mkey(pfName, measure.name);
@@ -201,18 +202,22 @@ const MeasuresDropdown: React.FC<Props> = ({
               return (
                 <li
                   key={idx}
-                  className="measure-item card--with-badge"
+                  className="relative my-2 ml-7 rounded-md bg-white p-2.5 shadow-[0_1.5px_4px_rgba(0,0,0,0.12),0_0.5px_1px_rgba(0,0,0,0.06)]"
                   style={{
                     border: `2px ${mSev.border} ${mSev.color}`,
-                    backgroundColor: "#fff",
                   }}
                 >
                   <DiffBadge
                     kind={flagForMeasure(pfName, measure.name, diffHints)}
                   />
-                  <div className="severity-badge">
+                  <div className="inline-flex items-center gap-2">
                     <span
-                      className={`severity-dot severity-dot--${mSev.kind}`}
+                      className={`inline-block h-3 w-3 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)] ${mSev.kind === "critical"
+                        ? "bg-[#c5052f]"
+                        : mSev.kind === "severe"
+                          ? "bg-[rgb(240,228,66)]"
+                          : "bg-[rgb(0,158,115)]"
+                        }`}
                       aria-hidden="true"
                     />
                     <span className="label">{mSev.label}</span>
@@ -224,11 +229,13 @@ const MeasuresDropdown: React.FC<Props> = ({
                   {/* DO NOT rearrange or change these <li> items */}
                   <ul>
                     <li>
-                      <strong className="score-marker">
+                      <strong className="inline-flex items-center gap-1.5">
                         Score:{" "}
                         <span
                           className={
-                            mDiff?.score && !isMissing ? "diff-field" : ""
+                            mDiff?.score && !isMissing
+                              ? "rounded-[2px] bg-[#e49797] px-0.5"
+                              : ""
                           }
                         >
                           {measure.score.toFixed(4)} out of 1.
@@ -253,11 +260,13 @@ const MeasuresDropdown: React.FC<Props> = ({
                     </li>
 
                     <li>
-                      Weight: The measure contributed a weight of{" "}
+                      <strong>Weight: </strong> The measure contributed a weight of{" "}
                       <strong>
                         <span
                           className={
-                            mDiff?.weight && !isMissing ? "diff-field" : ""
+                            mDiff?.weight && !isMissing
+                              ? "rounded-[2px] bg-[#e49797] px-0.5"
+                              : ""
                           }
                         >
                           {(measure.weight ?? 0).toFixed(4)}
@@ -275,9 +284,9 @@ const MeasuresDropdown: React.FC<Props> = ({
                     </li>
 
                     <li>
-                      <div style={{ marginTop: 6 }}>
+                      <div className="mt-1.5">
                         <span
-                          className="density-link"
+                          className="mr-4 cursor-pointer text-[#2f6fab] underline hover:opacity-80"
                           role="button"
                           tabIndex={0}
                           onClick={() => onTogglePlot(id)}
@@ -286,11 +295,6 @@ const MeasuresDropdown: React.FC<Props> = ({
                           }
                           aria-expanded={!!expandedPlots[id]}
                           aria-controls={`density-${id}`}
-                          style={{
-                            textDecoration: "underline",
-                            cursor: "pointer",
-                            marginRight: 16,
-                          }}
                         >
                           {expandedPlots[id] ? "Hide Plots" : "Show Plots"}
                         </span>
@@ -301,20 +305,22 @@ const MeasuresDropdown: React.FC<Props> = ({
                         timeout={0}
                         unmountOnExit
                       >
-                        <div className="densityPlot" id={`density-${id}`}>
-                          <ProbabilityDensity
-                            thresholds={thresholds}
-                            score={measure.score ?? 0}
-                            cweName={measure.name}
-                          />
-                        </div>
+                        <div className="flex flex-wrap gap-4 pt-2">
+                          <div className="w-3/4 min-w-0 overflow-hidden" id={`density-${id}`}>
+                            <ProbabilityDensity
+                              thresholds={thresholds}
+                              score={measure.score ?? 0}
+                              cweName={measure.name}
+                            />
+                          </div>
 
-                        <div className="densityPlot" id={`cdf-${id}`}>
-                          <ProbabilityCDF
-                            thresholds={thresholds}
-                            percentile={measure.score ?? 0}
-                            cweName={measure.name}
-                          />
+                          <div className="w-3/4 min-w-0 overflow-hidden" id={`cdf-${id}`}>
+                            <ProbabilityCDF
+                              thresholds={thresholds}
+                              percentile={measure.score ?? 0}
+                              cweName={measure.name}
+                            />
+                          </div>
                         </div>
 
                         <hr />
@@ -334,8 +340,11 @@ const MeasuresDropdown: React.FC<Props> = ({
           </ul>
 
           {hasMore && (
-            <div style={{ marginTop: 8 }}>
-              <button className="st-chip" onClick={onShowMore}>
+            <div className="mt-2">
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px]"
+                onClick={onShowMore}
+              >
                 Show {Math.max(0, measures.length - visibleCount)} more
               </button>
             </div>

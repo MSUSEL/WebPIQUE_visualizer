@@ -1,12 +1,11 @@
 // ProductFactorTabs.tsx
 // Uses FindingsTab and MeasuresDropdown.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Box } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import MuiTabs, { TabItem } from "../tabs/Tabs";
 import { RelationalExtract } from "../../Utilities/DataParser";
-import "../../styles/SecurityTabs.css";
 import { DiffHints } from "../../Utilities/fileDiff";
 
 import FindingTab from "../tabs/FindingsTab";
@@ -190,10 +189,14 @@ const flagForPFIncludingMeasures = (
   return hasDiff ? "diff" : hasUnique ? "unique" : null;
 };
 
-const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
+const DiffBadge: React.FC<{ kind: FlagKind; className?: string }> = ({
+  kind,
+  className,
+}) =>
   !kind ? null : (
     <span
-      className={`diff-flag diff-flag--${kind}`}
+      className={`absolute left-[-2rem] top-2 text-[1.5rem] leading-none drop-shadow-[0_0_1px_rgba(0,0,0,0.25)] ${className ?? ""
+        }`}
       title={
         kind === "diff" ? "Differs from the other file" : "Only in this file"
       }
@@ -216,7 +219,8 @@ const Delta: React.FC<{
   const up = delta > 0;
   return (
     <span
-      className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"}`}
+      className={`ml-2 whitespace-nowrap font-semibold ${up ? "text-[#188038]" : "text-[#d93025]"
+        }`}
       title={up ? "Higher than other file" : "Lower than other file"}
       aria-label={up ? "Higher than other file" : "Lower than other file"}
     >
@@ -370,6 +374,13 @@ const ProductFactorTabs: React.FC<Props> = ({
     severeMax: 0.8,
   });
   const [showThresholdSettings, setShowThresholdSettings] = useState(false);
+  const [thresholdInputs, setThresholdInputs] = useState(() => ({
+    criticalMax: formatThreshold(0.6),
+    severeMax: formatThreshold(0.8),
+  }));
+  const [activeThresholdInput, setActiveThresholdInput] = useState<
+    keyof ScoreThresholds | null
+  >(null);
 
   const updateThreshold = (key: keyof ScoreThresholds, rawValue: number) => {
     if (!Number.isFinite(rawValue)) return;
@@ -389,6 +400,43 @@ const ProductFactorTabs: React.FC<Props> = ({
 
       return next;
     });
+  };
+
+  useEffect(() => {
+    if (activeThresholdInput !== "criticalMax") {
+      setThresholdInputs((prev) => ({
+        ...prev,
+        criticalMax: formatThreshold(scoreThresholds.criticalMax),
+      }));
+    }
+    if (activeThresholdInput !== "severeMax") {
+      setThresholdInputs((prev) => ({
+        ...prev,
+        severeMax: formatThreshold(scoreThresholds.severeMax),
+      }));
+    }
+  }, [scoreThresholds, activeThresholdInput]);
+
+  const onThresholdInputChange = (
+    key: keyof ScoreThresholds,
+    rawValue: string
+  ) => {
+    setThresholdInputs((prev) => ({ ...prev, [key]: rawValue }));
+    if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.")
+      return;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    updateThreshold(key, parsed);
+  };
+
+  const onThresholdInputBlur = (key: keyof ScoreThresholds) => {
+    setActiveThresholdInput(null);
+    const rawValue = thresholdInputs[key];
+    if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.")
+      return;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    updateThreshold(key, parsed);
   };
 
   const resetThresholds = () => {
@@ -549,43 +597,52 @@ const ProductFactorTabs: React.FC<Props> = ({
   tabs.push({
     label: pfTabLabel,
     content: (
-      <Box className="st-root">
-        <h3 className="st-h3">{pfHeader}</h3>
+      <Box className="px-4 py-2 text-[15px]">
+        <h3 className="mb-2 font-semibold text-[26px]">{pfHeader}</h3>
 
-        <div className="st-chips">
+        <div className="my-1.5 flex flex-wrap items-center gap-2.5">
           <button
-            className={`st-chip ${bucket === "critical" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "critical" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
-            <span className="st-chip-dot st-chip-dot--critical" />
+            <span className="h-3 w-3 rounded-full bg-[#c5052f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
             Score &lt; {formatThreshold(scoreThresholds.criticalMax)}{" "}
-            <span className="st-chip-count">{counts.critical}</span>
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.critical}
+            </span>
           </button>
 
           <button
-            className={`st-chip ${bucket === "severe" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "severe" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
-            <span className="st-chip-dot st-chip-dot--severe" />
+            <span className="h-3 w-3 rounded-full bg-[rgb(240,228,66)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
             Score {formatThreshold(scoreThresholds.criticalMax)}-
             {formatThreshold(scoreThresholds.severeMax)}{" "}
-            <span className="st-chip-count">{counts.severe}</span>
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.severe}
+            </span>
           </button>
 
           <button
-            className={`st-chip ${bucket === "moderate" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "moderate" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
-            <span className="st-chip-dot st-chip-dot--moderate" />
+            <span className="h-3 w-3 rounded-full bg-[rgb(0,158,115)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
             Score &gt;= {formatThreshold(scoreThresholds.severeMax)}{" "}
-            <span className="st-chip-count">{counts.moderate}</span>
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.moderate}
+            </span>
           </button>
 
           <button
-            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f0f0f0] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "all" ? "border-2 border-black bg-black text-white" : ""
               }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
@@ -594,58 +651,68 @@ const ProductFactorTabs: React.FC<Props> = ({
             aria-pressed={bucket === "all"}
             title="Clear filter"
           >
-            All<span className="st-chip-count">{counts.all}</span>
+            All
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.all}
+            </span>
           </button>
           <button
             type="button"
-            className={`st-chip st-chip--settings ${showThresholdSettings ? "is-active" : ""
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f0f0f0] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${showThresholdSettings ? "border-2 border-black bg-black text-white" : ""
               }`}
             onClick={() => setShowThresholdSettings((prev) => !prev)}
             aria-pressed={showThresholdSettings}
           >
-            <SettingsIcon className="st-settings-icon" /> Settings
+            <SettingsIcon className="mr-1 text-[6px] align-middle" /> Settings
           </button>
         </div>
 
         {showThresholdSettings && (
-          <div className="st-score-settings" aria-label="Score thresholds">
-            <label className="st-score-settings-field">
-              <span className="st-score-settings-label">
-                <span className="severity-dot severity-dot--critical" />
-                Critical max
+          <div
+            className="my-1.5 flex flex-wrap items-center gap-3"
+            aria-label="Score thresholds"
+          >
+            <label className="inline-flex items-center gap-2 text-[14px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-[#c5052f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]" />
+                Low score (red) value
               </span>
               <input
-                className="st-score-settings-input"
+                className="w-[90px] rounded-md border border-[#ccc] px-1.5 py-1 text-[14px]"
                 type="number"
                 min={0}
                 max={1}
                 step={0.01}
-                value={scoreThresholds.criticalMax}
+                value={thresholdInputs.criticalMax}
+                onFocus={() => setActiveThresholdInput("criticalMax")}
+                onBlur={() => onThresholdInputBlur("criticalMax")}
                 onChange={(e) =>
-                  updateThreshold("criticalMax", Number(e.target.value))
+                  onThresholdInputChange("criticalMax", e.target.value)
                 }
               />
             </label>
-            <label className="st-score-settings-field">
-              <span className="st-score-settings-label">
-                <span className="severity-dot severity-dot--severe" />
-                Severe max
+            <label className="inline-flex items-center gap-2 text-[14px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-[rgb(240,228,66)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]" />
+                Middle score (yellow) value
               </span>
               <input
-                className="st-score-settings-input"
+                className="w-[90px] rounded-md border border-[#ccc] px-1.5 py-1 text-[14px]"
                 type="number"
                 min={0}
                 max={1}
                 step={0.01}
-                value={scoreThresholds.severeMax}
+                value={thresholdInputs.severeMax}
+                onFocus={() => setActiveThresholdInput("severeMax")}
+                onBlur={() => onThresholdInputBlur("severeMax")}
                 onChange={(e) =>
-                  updateThreshold("severeMax", Number(e.target.value))
+                  onThresholdInputChange("severeMax", e.target.value)
                 }
               />
             </label>
             <button
               type="button"
-              className="st-score-settings-reset"
+              className="rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 py-1 text-[14px] hover:bg-black hover:text-white"
               onClick={resetThresholds}
             >
               Reset defaults
@@ -657,6 +724,12 @@ const ProductFactorTabs: React.FC<Props> = ({
           const sev = getSeverityInfo(pf.value, scoreThresholds);
           const isExpanded = expandedKey === pf.name;
           const allMeasures = measuresByPF.get(pf.name) ?? [];
+          const dotClass =
+            sev.kind === "critical"
+              ? "bg-[#c5052f]"
+              : sev.kind === "severe"
+                ? "bg-[rgb(240,228,66)]"
+                : "bg-[rgb(0,158,115)]";
 
           const pfBadge = flagForPFIncludingMeasures(
             pf.name,
@@ -693,32 +766,32 @@ const ProductFactorTabs: React.FC<Props> = ({
           return (
             <Box
               key={pf.name}
-              className="pf-card card--with-badge"
+              className="relative mb-4 ml-[18px] rounded-lg bg-white p-3"
               style={{ border: `2px ${sev.border} ${sev.color}` }}
             >
-              <div className="severity-badge">
+              <div className="inline-flex items-center gap-2">
                 <span
-                  className={`severity-dot severity-dot--${sev.kind}`}
+                  className={`inline-block h-3 w-3 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)] ${dotClass}`}
                   aria-hidden="true"
                 />
                 <span className="label">{sev.label}</span>
               </div>
 
-              <h4 className="pf-title">
-                {pf.name.replace("Product_Factor", "")}
+              <h4 className="mb-2 text-[24px]">
+                <strong>{pf.name.replace("Product_Factor", "")}</strong>
                 <DiffBadge kind={pfBadge} />
               </h4>
 
-              <ul className="pf-list">
+              <ul className="m-0 list-disc pl-5">
                 <li>
-                  <strong className="score-marker">
+                  <strong className="inline-flex items-center gap-1.5">
                     Score:
                   </strong>{" "}
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
                         diffHints?.pfFieldDiffs.get(pf.name)?.value
-                        ? "diff-field"
+                        ? "rounded-[2px] bg-[#e49797] px-0.5"
                         : ""
                     }
                   >
@@ -756,13 +829,15 @@ const ProductFactorTabs: React.FC<Props> = ({
                           className={
                             !diffHints?.missingPFs?.has(pf.name) &&
                               pfDiff?.benchmarkSize
-                              ? "diff-field"
+                              ? "rounded-[2px] bg-[#e49797] px-0.5"
                               : ""
                           }
                         >
                           {hereBench}
                         </span>
-                        <Delta here={hereBench} peer={peerBench} places={0} />
+                        {pfDiff?.benchmarkSize ? (
+                          <Delta here={hereBench} peer={peerBench} places={0} />
+                        ) : null}
                       </>
                     );
                   })()}

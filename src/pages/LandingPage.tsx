@@ -1,14 +1,11 @@
 //react class for landing page (page 1)
 import FileUpload from "../components/headerfooter/FileUpload";
-import "../styles/Pages.css";
 
 const LandingPage = () => {
   return (
-    <div className="app-container">
-      <main className="main-content">
-        <FileUpload />
-      </main>
-    </div>
+    <main className="flex flex-1 flex-col items-stretch px-0 pt-0">
+      <FileUpload />
+    </main>
   );
 };
 

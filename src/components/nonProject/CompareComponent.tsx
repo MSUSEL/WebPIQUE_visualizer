@@ -4,8 +4,6 @@ import { useLocation, Navigate } from "react-router-dom";
 import SplitPane, { Pane } from "split-pane-react";
 import { ScrollSync, ScrollSyncPane } from "react-scroll-sync";
 import { Switch, FormControlLabel } from "@mui/material";
-import "split-pane-react/esm/themes/default.css";
-import "../../styles/CompareStyle.css";
 
 import SingleFileComponent from "./SingleFileComponent";
 import { parsePIQUEJSON } from "../../Utilities/DataParser";
@@ -92,6 +90,20 @@ const Compare: React.FC<CompareProps> = (props) => {
   const file1Name = file1.filename ?? "File 1";
   const file2Name = file2.filename ?? "File 2";
 
+  const formatCompareFileName = (name: string, maxBase = 20) => {
+    const safe = String(name ?? "");
+    if (!safe) return safe;
+    const lower = safe.toLowerCase();
+    const hasJson = lower.endsWith(".json");
+    const base = hasJson ? safe.slice(0, -5) : safe;
+    if (base.length <= maxBase) return safe;
+    const trimmed = base.slice(0, maxBase);
+    return hasJson ? `${trimmed}...json` : `${trimmed}...`;
+  };
+
+  const displayFile1Name = formatCompareFileName(file1Name);
+  const displayFile2Name = formatCompareFileName(file2Name);
+
   // parse once per file (keep both scores + relational for CVE/diagnostic scoping)
   const parsed1 = useMemo(
     () => parsePIQUEJSON((file1 as any).data ?? file1),
@@ -113,12 +125,12 @@ const Compare: React.FC<CompareProps> = (props) => {
 
   // build diff hints (directional)
   const leftHints: DiffHints = useMemo(
-    () => buildDiffHints(scores1, scores2),
-    [scores1, scores2]
+    () => buildDiffHints(scores1, scores2, relational1, relational2),
+    [scores1, scores2, relational1, relational2]
   );
   const rightHints: DiffHints = useMemo(
-    () => buildDiffHints(scores2, scores1),
-    [scores1, scores2]
+    () => buildDiffHints(scores2, scores1, relational2, relational1),
+    [scores1, scores2, relational1, relational2]
   );
 
   // ---------- helpers for per-aspect counts ----------
@@ -468,33 +480,56 @@ const Compare: React.FC<CompareProps> = (props) => {
 
   const sashRender = (_i: number, active: boolean) => (
     <div
-      className={`sashRenderDots ${active ? "is-active" : ""}`}
+      className={`relative flex h-[80%] w-2 cursor-col-resize items-center justify-center rounded-full bg-[#75aedd] ${
+        active ? "bg-[#005a9e]" : "hover:bg-[#005a9e]"
+      }`}
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize panes"
     >
-      <span />
+      <span className="absolute left-1/2 top-[45%] h-1 w-1 -translate-x-1/2 rounded-full bg-white" />
+      <span className="absolute left-1/2 top-[47%] h-1 w-1 -translate-x-1/2 rounded-full bg-white" />
+      <span className="absolute left-1/2 top-[49%] h-1 w-1 -translate-x-1/2 rounded-full bg-white" />
     </div>
   );
 
+  const rootClass = props.embedded
+    ? "flex h-full flex-col"
+    : "flex min-h-[calc(100vh-185px)] flex-col";
+  const mainClass = props.embedded
+    ? "flex flex-1 min-h-0 flex-col items-stretch px-0"
+    : "mt-2 flex flex-1 min-h-0 flex-col items-stretch px-0";
+  const rootStyle = props.embedded
+    ? undefined
+    : { height: "calc(100vh - 185px)" };
+  const paneStyle = props.embedded
+    ? { height: "100%" }
+    : { height: "100%" };
+
   return (
-    <div className="compare-app-container">
+    <div className={rootClass} style={rootStyle}>
       <main
-        className="compare-main-content"
-        style={{ height: props.embedded ? "100%" : "calc(100vh - 140px)" }}
+        className={mainClass}
+        style={{ height: "100%" }}
       >
         <div
-          className="compare-filenames"
+          className="grid items-center overflow-hidden border-b border-[#e5e7eb] bg-white px-3 py-[15px] text-[18px] font-semibold"
           style={{
             gridTemplateColumns: `${sizes[0]}fr ${SASH_W}px ${sizes[1]}fr`,
           }}
         >
-          <div className="name-left">
-            <strong>File Name:</strong>&nbsp;{file1Name}
+          <div className="min-w-0 truncate text-center">
+            <strong>File Name:</strong>&nbsp;
+            <span title={file1Name} className="truncate">
+              {displayFile1Name}
+            </span>
           </div>
           <div aria-hidden="true" />
-          <div className="name-right">
-            <strong>File Name:</strong>&nbsp;{file2Name}
+          <div className="min-w-0 truncate text-center">
+            <strong>File Name:</strong>&nbsp;
+            <span title={file2Name} className="truncate">
+              {displayFile2Name}
+            </span>
             <FormControlLabel
               sx={{ ml: 1 }}
               control={
@@ -512,46 +547,62 @@ const Compare: React.FC<CompareProps> = (props) => {
 
         {/* legend/filters */}
         {activeAspect && (
-          <div className="page-legend">
-            <div className="legend-row">
+          <div className="mx-3 grid gap-1.5 bg-[rgb(230,227,227)] pb-1 text-center text-[16px]">
+            <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto max-[900px]:flex-wrap max-[900px]:overflow-visible">
               <span
-                className={`legend-chip legend-chip--diff ${
-                  cweFilter === "differing" ? "is-active" : ""
-                }`}
+                className={`inline-flex flex-none items-center whitespace-nowrap rounded-lg border border-[rgba(217,48,37,0.35)] bg-[rgba(217,48,37,0.08)] px-3 py-1.5 text-center ${
+                  cweFilter === "differing"
+                    ? "border-2 border-black bg-[lightgrey] text-black shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                    : "hover:border-black hover:bg-[lightgrey] hover:text-black"
+                } cursor-pointer select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#666] focus-visible:outline-offset-2`}
                 onClick={() => activate("CWE", "differing")}
               >
                 🚩 Differing {pfLabel}{" "}
-                <span className="legend-count">{cweDiffCount}</span>
+                <span className="ml-4 rounded-full border-2 border-[lightgrey] bg-[lightgrey] px-1.5">
+                  {cweDiffCount}
+                </span>
               </span>
               <span
-                className={`legend-chip legend-chip--unique ${
-                  cweFilter === "unique" ? "is-active" : ""
-                }`}
+                className={`inline-flex flex-none items-center whitespace-nowrap rounded-lg border border-[rgba(227,116,0,0.4)] bg-[rgba(227,116,0,0.1)] px-3 py-1.5 text-center ${
+                  cweFilter === "unique"
+                    ? "border-2 border-black bg-[lightgrey] text-black shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                    : "hover:border-black hover:bg-[lightgrey] hover:text-black"
+                } cursor-pointer select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#666] focus-visible:outline-offset-2`}
                 onClick={() => activate("CWE", "unique")}
               >
                 ‼️ Unique {pfLabel}{" "}
-                <span className="legend-count">{cweUniqueCount}</span>
+                <span className="ml-4 rounded-full border-2 border-[lightgrey] bg-[lightgrey] px-1.5">
+                  {cweUniqueCount}
+                </span>
               </span>
               <span
-                className={`legend-chip legend-chip--diff ${
-                  cveFilter === "differing" ? "is-active" : ""
-                }`}
+                className={`inline-flex flex-none items-center whitespace-nowrap rounded-lg border border-[rgba(217,48,37,0.35)] bg-[rgba(217,48,37,0.08)] px-3 py-1.5 text-center ${
+                  cveFilter === "differing"
+                    ? "border-2 border-black bg-[lightgrey] text-black shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                    : "hover:border-black hover:bg-[lightgrey] hover:text-black"
+                } cursor-pointer select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#666] focus-visible:outline-offset-2`}
                 onClick={() => activate("CVE", "differing")}
               >
                 🚩 Differing {diagLabel}{" "}
-                <span className="legend-count">{cveDiffCount}</span>
+                <span className="ml-4 rounded-full border-2 border-[lightgrey] bg-[lightgrey] px-1.5">
+                  {cveDiffCount}
+                </span>
               </span>
               <span
-                className={`legend-chip legend-chip--unique ${
-                  cveFilter === "unique" ? "is-active" : ""
-                }`}
+                className={`inline-flex flex-none items-center whitespace-nowrap rounded-lg border border-[rgba(227,116,0,0.4)] bg-[rgba(227,116,0,0.1)] px-3 py-1.5 text-center ${
+                  cveFilter === "unique"
+                    ? "border-2 border-black bg-[lightgrey] text-black shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                    : "hover:border-black hover:bg-[lightgrey] hover:text-black"
+                } cursor-pointer select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#666] focus-visible:outline-offset-2`}
                 onClick={() => activate("CVE", "unique")}
               >
                 ‼️ Unique {diagLabel}{" "}
-                <span className="legend-count">{cveUniqueCount}</span>
+                <span className="ml-4 rounded-full border-2 border-[lightgrey] bg-[lightgrey] px-1.5">
+                  {cveUniqueCount}
+                </span>
               </span>
               <span
-                className="legend-reset"
+                className="ml-2 cursor-pointer rounded-lg border border-[rgb(155,154,154)] px-2.5 py-1.5 text-center hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#666] focus-visible:outline-offset-2"
                 role="button"
                 tabIndex={0}
                 onClick={() => {
@@ -569,39 +620,46 @@ const Compare: React.FC<CompareProps> = (props) => {
                 Reset
               </span>
             </div>
-            <div className="legend-caption">
+            <div className="text-sm">
               🚩: present in both files but fields differ. ‼️: present in only
               one file.
             </div>
           </div>
         )}
 
-        <ScrollSync>
-          <SplitPane
-            split="vertical"
-            sizes={sizes}
-            onChange={setSizes}
-            sashRender={sashRender}
-          >
+        <div className="flex-1 min-h-0" style={paneStyle}>
+          <ScrollSync className="h-full" style={{ height: "100%" }}>
+            <div className="h-full">
+              <SplitPane
+                split="vertical"
+                sizes={sizes}
+                onChange={setSizes}
+                sashRender={sashRender}
+                className="h-full"
+              >
             {/* LEFT */}
             <Pane minSize={260}>
               <Provider store={sharedStore}>
                 {syncScroll ? (
                   <ScrollSyncPane>
-                    <div style={{ height: "100%", overflow: "auto" }}>
+                    <div className="h-full overflow-auto">
                       <SingleFileComponent
                         jsonData={file1}
                         diffHints={leftHints}
                         diffFilter={effectiveDiffFilter}
+                        compareMode
+                        embedded={props.embedded}
                       />
                     </div>
                   </ScrollSyncPane>
                 ) : (
-                  <div style={{ height: "100%", overflow: "auto" }}>
+                  <div className="h-full overflow-auto">
                     <SingleFileComponent
                       jsonData={file1}
                       diffHints={leftHints}
                       diffFilter={effectiveDiffFilter}
+                      compareMode
+                      embedded={props.embedded}
                     />
                   </div>
                 )}
@@ -613,27 +671,33 @@ const Compare: React.FC<CompareProps> = (props) => {
               <Provider store={sharedStore}>
                 {syncScroll ? (
                   <ScrollSyncPane>
-                    <div style={{ height: "100%", overflow: "auto" }}>
+                    <div className="h-full overflow-auto">
                       <SingleFileComponent
                         jsonData={file2}
                         diffHints={rightHints}
                         diffFilter={effectiveDiffFilter}
+                        compareMode
+                        embedded={props.embedded}
                       />
                     </div>
                   </ScrollSyncPane>
                 ) : (
-                  <div style={{ height: "100%", overflow: "auto" }}>
+                  <div className="h-full overflow-auto">
                     <SingleFileComponent
                       jsonData={file2}
                       diffHints={rightHints}
                       diffFilter={effectiveDiffFilter}
+                      compareMode
+                      embedded={props.embedded}
                     />
                   </div>
                 )}
               </Provider>
             </Pane>
-          </SplitPane>
-        </ScrollSync>
+              </SplitPane>
+            </div>
+          </ScrollSync>
+        </div>
       </main>
     </div>
   );

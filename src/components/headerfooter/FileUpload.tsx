@@ -2,7 +2,6 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import "../../styles/FileUpload.css";
 
 type Props = {
   onJsonLoaded?: (json: any) => void;
@@ -100,7 +99,7 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
   if (variant === "menuItem") {
     return (
       <div
-        className="menu-item"
+        className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
         role="button"
         tabIndex={0}
         onClick={() => open()}
@@ -116,14 +115,14 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
 
   if (variant === "compact") {
     return (
-      <div className="upload-compact">
+      <div className="flex items-center gap-2.5">
         <input {...getInputProps()} />
-        <span className="upload-label">File:</span>
+        <span className="opacity-80">File:</span>
 
         {!fileName ? (
           <button
             type="button"
-            className="upload-button"
+            className="rounded-[10px] border border-[grey] bg-[#f2f2f2] px-3 py-1.5 text-[14px]"
             onClick={() => open()}
           >
             Upload
@@ -131,10 +130,10 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
         ) : (
           // after selection: filename + "Change" (no Upload)
           <>
-            <span className="file-name">{fileName}</span>
+            <span className="max-w-[180px] truncate">{fileName}</span>
             <button
               type="button"
-              className="upload-button change-button"
+              className="ml-1 rounded-lg border border-[grey] bg-[#f2f2f2] px-3 py-1.5 text-[14px]"
               onClick={() => open()}
             >
               Change
@@ -148,21 +147,22 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
   return (
     <div
       {...getRootProps()}
-      className={`upload-container ${isDragActive ? "drag-active" : ""}`}
+      className={`relative z-[1] flex h-full w-full flex-1 items-center justify-center text-center transition-colors duration-200 ${isDragActive ? "bg-[#bebdbd]" : ""
+        }`}
     >
       <input {...getInputProps()} />
-      <div className="dropzone">
+      <div>
         {isDragActive ? (
-          <p>Drop the JSON file here...</p>
+          <p className="mb-2 text-[18px]">Drop the JSON file here...</p>
         ) : (
-          <p>
+          <p className="mb-2 text-[18px]">
             Drag JSON file here
             <br />
             or
             <br />
             <button
               type="button"
-              className="upload-button"
+              className="mt-4 rounded-[10px] border border-[grey] bg-[#f2f2f2] px-5 py-2 text-[16px]"
               onClick={() => open()}
             >
               Browse Files
@@ -171,9 +171,13 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
         )}
       </div>
       {status === "uploading" && (
-        <p className="status-msg">Uploading file...</p>
+        <p className="mt-4 text-center font-bold text-[#333]">
+          Uploading file...
+        </p>
       )}
-      {status === "parsing" && <p className="status-msg">Parsing file...</p>}
+      {status === "parsing" && (
+        <p className="mt-4 text-center font-bold text-[#333]">Parsing file...</p>
+      )}
     </div>
   );
 };
