@@ -1,4 +1,5 @@
 // utility to determine differences between WebPIQUE json outputs -- unique to WebPIQUE
+import type { RelationalExtract } from "./DataParser";
 export type DiffHints = {
   // membership / presence
   differingPFs: Set<string>;
@@ -53,7 +54,12 @@ const setOfTools = (arr: any[]) =>
 const eqSet = (a: Set<string>, b: Set<string>) =>
   a.size === b.size && [...a].every((x) => b.has(x));
 
-export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
+export function buildDiffHints(
+  leftScores: any,
+  rightScores: any,
+  leftRel?: RelationalExtract | null,
+  rightRel?: RelationalExtract | null
+): DiffHints {
   const hints: DiffHints = {
     differingPFs: new Set(),
     differingMeasures: new Set(),
@@ -70,43 +76,71 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
     measurePeerWeights: new Map(),
   };
 
-  const collectPFs = (scores: any): any[] => {
-    const out: any[] = [];
-    const seen = new Set<string>();
-
-    // 1) Prefer productFactorsByAspect if present
-    const byAspect = scores?.productFactorsByAspect as
-      | Record<string, any[]>
-      | undefined;
-
-    if (byAspect && typeof byAspect === "object") {
-      for (const list of Object.values(byAspect)) {
-        for (const pf of list ?? []) {
-          const name = pf?.name;
-          if (name && !seen.has(name)) {
-            seen.add(name);
-            out.push(pf);
-          }
-        }
-      }
-    }
-
-    // 2) Fallback / supplement: cweProductFactors (Security-only legacy path)
-    for (const pf of scores?.cweProductFactors ?? []) {
+  // pf and measure comparison
+  const flattenPFs = (scores: any): any[] => {
+    const out = new Map<string, any>();
+    const fromAspect = Object.values(
+      (scores?.productFactorsByAspect ?? {}) as Record<string, any[]>
+    ).flat();
+    const fromCwe = scores?.cweProductFactors ?? [];
+    const all = [...fromAspect, ...fromCwe];
+    for (const pf of all) {
       const name = pf?.name;
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        out.push(pf);
+      if (!name) continue;
+      const existing = out.get(name);
+      if (!existing) {
+        out.set(name, pf);
+        continue;
       }
+      const nextMeasures = Array.isArray(pf?.measures) ? pf.measures.length : 0;
+      const curMeasures = Array.isArray(existing?.measures)
+        ? existing.measures.length
+        : 0;
+      if (nextMeasures > curMeasures) out.set(name, pf);
     }
-
-    return out;
+    return Array.from(out.values());
   };
 
+  const lPFs: any[] = flattenPFs(leftScores);
+  const rPFs: any[] = flattenPFs(rightScores);
 
-  // pf and measure comparison
-  const lPFs: any[] = collectPFs(leftScores);
-  const rPFs: any[] = collectPFs(rightScores);
+  const measuresByIdL = new Map<string, any>(
+    (leftRel?.measures ?? []).map((m) => [String(m.id), m])
+  );
+  const measuresByIdR = new Map<string, any>(
+    (rightRel?.measures ?? []).map((m) => [String(m.id), m])
+  );
+  const pfIdByNameL = new Map<string, string>(
+    (leftRel?.productFactors ?? []).map((pf) => [String(pf.name), String(pf.id)])
+  );
+  const pfIdByNameR = new Map<string, string>(
+    (rightRel?.productFactors ?? []).map((pf) => [String(pf.name), String(pf.id)])
+  );
+
+  const measuresForPF = (
+    pfName: string,
+    pfObj: any,
+    rel?: RelationalExtract | null,
+    pfIdByName?: Map<string, string>,
+    measuresById?: Map<string, any>
+  ) => {
+    if (Array.isArray(pfObj?.measures) && pfObj.measures.length)
+      return pfObj.measures;
+    if (!rel) return [];
+    const pfId = pfIdByName?.get(pfName);
+    if (!pfId) return [];
+    return (rel.pfMeasures ?? [])
+      .filter((edge) => String(edge.pfId) === pfId)
+      .map((edge) => {
+        const m = measuresById?.get(String(edge.measureId));
+        return {
+          name: String(m?.name ?? edge.measureId ?? ""),
+          score: typeof m?.value === "number" ? m.value : null,
+          weight: typeof edge.weight === "number" ? edge.weight : null,
+        };
+      })
+      .filter((m) => m.name);
+  };
 
   const rByName = new Map<string, any>();
   for (const p of rPFs) if (p?.name) rByName.set(p.name, p);
@@ -118,7 +152,14 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
     const rpf = rByName.get(pfName);
     if (!rpf) {
       hints.missingPFs.add(pfName);
-      for (const lm of lpf?.measures ?? [])
+      const lMeasures = measuresForPF(
+        pfName,
+        lpf,
+        leftRel,
+        pfIdByNameL,
+        measuresByIdL
+      );
+      for (const lm of lMeasures)
         hints.missingMeasures.add(mkey(pfName, lm?.name ?? ""));
       continue;
     }
@@ -155,10 +196,24 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
 
     // measures, matched by name
     const rMeasuresByName = new Map<string, any>();
-    for (const rm of rpf?.measures ?? [])
+    const rMeasures = measuresForPF(
+      pfName,
+      rpf,
+      rightRel,
+      pfIdByNameR,
+      measuresByIdR
+    );
+    for (const rm of rMeasures)
       if (rm?.name) rMeasuresByName.set(rm.name, rm);
 
-    for (const lm of lpf?.measures ?? []) {
+    const lMeasures = measuresForPF(
+      pfName,
+      lpf,
+      leftRel,
+      pfIdByNameL,
+      measuresByIdL
+    );
+    for (const lm of lMeasures) {
       const mName = lm?.name;
       if (!mName) continue;
 
@@ -196,7 +251,6 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
   }
 
   // package vulnerability differences
-  // package vulnerability / diagnostics differences
   const collectCVEs = (scores: any) => {
     const map = new Map<
       string,
@@ -208,13 +262,10 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
         byTool: Set<string>;
       }
     >();
-
-    for (const pf of collectPFs(scores)) {
+    for (const pf of scores?.cweProductFactors ?? []) {
       for (const c of pf?.cves ?? []) {
-        const id =
-          c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
+        const id = c?.cveId ?? c?.id ?? c?.name ?? c?.CVE ?? c?.CVE_ID ?? null;
         if (!id) continue;
-
         map.set(id, {
           pkg: (c?.vulnSource ?? "").trim(),
           vulnVer: (c?.vulnSourceVersion ?? "").trim(),
@@ -224,10 +275,8 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
         });
       }
     }
-
     return map;
   };
-
 
   const L = collectCVEs(leftScores);
   const R = collectCVEs(rightScores);
@@ -257,6 +306,44 @@ export function buildDiffHints(leftScores: any, rightScores: any): DiffHints {
         ...(fverDiff ? { fixedVer: true } : {}),
         ...(toolDiff ? { byTool: true } : {}),
       });
+    }
+  }
+
+  // diagnostic differences (non-CVE)
+  const collectDiagnostics = (rel?: RelationalExtract | null) => {
+    const map = new Map<
+      string,
+      { name: string; toolName: string; value: number | null; description: string }
+    >();
+    for (const d of rel?.diagnostics ?? []) {
+      const id = String(d?.id ?? "").trim();
+      if (!id) continue;
+      map.set(id, {
+        name: String(d?.name ?? ""),
+        toolName: String(d?.toolName ?? ""),
+        value: typeof d?.value === "number" ? d.value : null,
+        description: String(d?.description ?? ""),
+      });
+    }
+    return map;
+  };
+
+  const DL = collectDiagnostics(leftRel);
+  const DR = collectDiagnostics(rightRel);
+  const diagIds = new Set<string>([...DL.keys(), ...DR.keys()]);
+  for (const id of diagIds) {
+    const A = DL.get(id);
+    const B = DR.get(id);
+    if (!A || !B) {
+      if (A) hints.missingCVEs.add(id);
+      continue;
+    }
+    const nameDiff = A.name !== B.name;
+    const toolDiff = A.toolName !== B.toolName;
+    const descDiff = A.description !== B.description;
+    const valDiff = !nearlyEq(A.value, B.value);
+    if (nameDiff || toolDiff || descDiff || valDiff) {
+      hints.differingCVEs.add(id);
     }
   }
 

@@ -1,15 +1,17 @@
-//component for hamburger menu and it's functionality
 import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import Hamburger from "hamburger-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import FileUpload from "../headerfooter/FileUpload";
-//import { login, signup } from "../../Utilities/Authorization";
-import "../../styles/HamburgerMenuStyle.css";
 
 type UploadPayload = { filename: string; data: any };
 
-const MENU_TOP = 40; // variable for better position control
-const MENU_WIDTH = 270; // variable for better position control
+const MENU_TOP = 40;
+const MENU_WIDTH = 270;
+
+// keys for passing data between pages
+const SINGLE_PAYLOAD_KEY = "wp_single_payload";
+const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
+const COMPARE_PAYLOAD_SESSION_KEY = "wp_compare_payload_session";
 
 const HamburgerMenu: React.FC = () => {
   const [isOpen, setOpen] = useState(false);
@@ -19,35 +21,99 @@ const HamburgerMenu: React.FC = () => {
   const [rightJson, setRightJson] = useState<UploadPayload | null>(null);
 
   const [submenuTop, setSubmenuTop] = useState<number>(MENU_TOP);
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // still available if you need it elsewhere
+  const location = useLocation();
 
   // anchor: measure the top of the "Compare" and "Login" rows inside the menu
+  const menuRef = useRef<HTMLDivElement>(null);
   const compareRowRef = useRef<HTMLDivElement>(null);
   const loginRowRef = useRef<HTMLDivElement>(null);
 
-  // authorization component handler
+  // authorization component handler (currently unused UI)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  const handleCompare = () => {
-    if (!leftJson || !rightJson) return;
-    // close menus before navigating
+  // --- helper: close menu + hard navigation ---
+  const hardNavigate = (path: string) => {
     setOpen(false);
     setShowCompareSubmenu(false);
     setShowLogin(false);
-    navigate("/compare", { state: { file1: leftJson, file2: rightJson } });
+    setLeftJson(null);
+    setRightJson(null);
+
+    window.location.assign(path);
+  };
+
+  const softNavigate = (path: string, state?: Record<string, unknown>) => {
+    setOpen(false);
+    setShowCompareSubmenu(false);
+    setShowLogin(false);
+    setLeftJson(null);
+    setRightJson(null);
+
+    navigate(path, { state });
+  };
+
+  // --- helper: store payload + navigate (for visualizer / compare) ---
+  const goToSingleVisualizer = (payload: UploadPayload) => {
+    try {
+      localStorage.setItem(SINGLE_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+    if (location.pathname === "/visualizer") {
+      softNavigate("/visualizer", { jsonData: payload.data });
+    } else {
+      hardNavigate("/visualizer");
+    }
+  };
+
+  const goToCompareVisualizer = (payload: {
+    file1: UploadPayload;
+    file2: UploadPayload;
+  }) => {
+    (globalThis as any).__wpComparePayload = payload;
+    try {
+      sessionStorage.setItem(
+        COMPARE_PAYLOAD_SESSION_KEY,
+        JSON.stringify(payload)
+      );
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.setItem(COMPARE_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+    softNavigate("/compare", {
+      file1: payload.file1,
+      file2: payload.file2,
+      ts: Date.now(),
+    });
+  };
+
+  const handleCompare = () => {
+    if (!leftJson || !rightJson) return;
+    setOpen(false);
+    setShowCompareSubmenu(false);
+    setShowLogin(false);
+    goToCompareVisualizer({ file1: leftJson, file2: rightJson });
   };
 
   // reset all submenu state on close
-  const handleToggle = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setShowCompareSubmenu(false);
-      setShowLogin(false);
-      setLeftJson(null);
-      setRightJson(null);
-    }
+  const handleToggle = (next: React.SetStateAction<boolean>) => {
+    setOpen((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      if (!resolved) {
+        setShowCompareSubmenu(false);
+        setShowLogin(false);
+        setLeftJson(null);
+        setRightJson(null);
+      }
+      return resolved;
+    });
   };
 
   // keep submenu aligned with the active row
@@ -56,8 +122,8 @@ const HamburgerMenu: React.FC = () => {
     const target = showCompareSubmenu
       ? compareRowRef.current
       : showLogin
-      ? loginRowRef.current
-      : null;
+        ? loginRowRef.current
+        : null;
     if (target) setSubmenuTop(MENU_TOP + target.offsetTop);
   }, [isOpen, showCompareSubmenu, showLogin]);
 
@@ -69,58 +135,45 @@ const HamburgerMenu: React.FC = () => {
     }
   }, [isOpen, showLogin]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (menuRef.current?.contains(target)) return;
+      handleToggle(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [isOpen]);
+
   const canSubmit =
-    !authLoading && username.trim().length > 0 && password.trim().length >= 6; // simple length check
-
-  /*  
-  async function handleAuthSubmit(e?: React.FormEvent) {
-    e?.preventDefault();
-    setAuthError(null);
-    if (!canSubmit) return;
-
-    try {
-      setAuthLoading(true);
-      const data =
-        authMode === "login"
-          ? await login(username.trim(), password)
-          : await signup(username.trim(), password);
-
-      setOpen(false);
-      setShowLogin(false);
-
-      // navigate to the project page
-      navigate("/projects");
-    } catch (err: any) {
-      setAuthError(err?.message ?? "Something went wrong.");
-    } finally {
-      setAuthLoading(false);
-    }
-  }
-    */
+    !authLoading && username.trim().length > 0 && password.trim().length >= 6;
 
   return (
-    <div className="menu-container">
-      <div className="hamburger-container">
-        <Hamburger toggled={isOpen} toggle={setOpen} size={22} />
+    <div className="relative z-[3000]" ref={menuRef}>
+      <div className="z-[1001] ml-[10px] flex h-full items-center justify-start">
+        <Hamburger toggled={isOpen} toggle={handleToggle} size={22} />
       </div>
 
       {isOpen && (
-        <div className="menu">
-          <h2 className="menu-title">WebPIQUE Visualizer Menu</h2>
-          <hr />
+        <div className="absolute left-0 top-[40px] z-[3100] w-[270px] rounded-[7px] border-2 border-[lightgrey] bg-white p-[15px] text-black shadow">
+          <h2 className="mb-2 text-[18px] font-bold text-black">
+            WebPIQUE Visualizer Menu
+          </h2>
+          <hr className="my-2 border-0 border-t-2 border-[#ccc]" />
 
+          {/* Home – full navigation */}
           <div
-            className="menu-item"
+            className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
-              setOpen(false); // close the hamburger
-              setShowCompareSubmenu(false);
-              navigate("/"); // go to LandingPage ("/")
+              hardNavigate("/");
             }}
           >
             <span>Home</span>
           </div>
 
-          {/* single-file upload */}
+          {/* Single-file upload: store payload + full navigation */}
           <div
             onClick={() => {
               setShowCompareSubmenu(false);
@@ -130,84 +183,69 @@ const HamburgerMenu: React.FC = () => {
               variant="menuItem"
               onJsonLoaded={({ filename, data }: UploadPayload) => {
                 handleToggle(false);
-                navigate("/visualizer", {
-                  state: { jsonData: data, filename },
-                }); // go to SingleFilePage
+                goToSingleVisualizer({ filename, data });
               }}
             />
           </div>
 
-          {/* compare submenu toggle, go to ComparePage */}
+          {/* Compare submenu toggle */}
           <div
             ref={compareRowRef}
-            className={`menu-item ${showCompareSubmenu ? "active" : ""}`}
+            className={`flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2] ${showCompareSubmenu ? "bg-[#e8f0fe] font-semibold" : ""
+              }`}
             onClick={() => {
               setShowCompareSubmenu((v) => !v);
               setShowLogin(false);
             }}
           >
             <span>Compare</span>
-            <span className="chevron" aria-hidden>
+            <span className="ml-2 inline-block text-[14px] leading-none" aria-hidden>
               &gt;
             </span>
           </div>
 
+          {/* Project – full navigation */}
           <div
-            className="menu-item"
+            className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
-              setOpen(false); // close the hamburger
-              setShowCompareSubmenu(false);
-              navigate("/projects"); // go to Project page
+              hardNavigate("/projects");
             }}
           >
             <span>Project</span>
           </div>
-
-          {/* Login 
-          <div
-            ref={loginRowRef}
-            className={`menu-item ${showLogin ? "active" : ""}`}
-            onClick={() => {
-              setShowLogin((v) => !v);
-              setShowCompareSubmenu(false);
-            }}
-          >
-            <span>Login</span>
-            <span className="chevron" aria-hidden>
-              &gt;
-            </span>
-          </div>
-          */}
         </div>
       )}
 
       {/* compare submenu */}
       {isOpen && showCompareSubmenu && (
         <div
-          className="submenu locked"
+          className="absolute z-[3200] -ml-[2px] flex w-[280px] flex-col gap-2 rounded-[7px] border-2 border-[lightgrey] bg-white p-[15px] text-black shadow"
           style={{
             top: submenuTop,
             left: MENU_WIDTH,
           }}
         >
-          <h3 className="submenu-title">Select Files to Compare</h3>
-          <hr />
-          <div className="file-input">
-            <label>Left Side:</label>
+          <h3 className="-mb-[3px] text-[18px] font-bold text-black">
+            Select Files to Compare
+          </h3>
+          <hr className="my-2 border-0 border-t-2 border-[#ccc]" />
+          <div className="mb-3 flex flex-col text-[15px]">
+            <label className="mb-2 font-medium">Left Side:</label>
             <FileUpload
               variant="compact"
               onJsonLoaded={(payload: UploadPayload) => setLeftJson(payload)}
             />
           </div>
-          <div className="file-input">
-            <label>Right Side:</label>
+          <div className="mb-3 flex flex-col text-[15px]">
+            <label className="mb-2 font-medium">Right Side:</label>
             <FileUpload
               variant="compact"
               onJsonLoaded={(payload: UploadPayload) => setRightJson(payload)}
             />
           </div>
           <button
-            className="compare-button"
+            className={`mt-1 w-3/5 self-center rounded-[10px] border-2 border-black px-2.5 py-2 text-[15px] text-black shadow-sm disabled:cursor-not-allowed disabled:border-[lightgrey] disabled:bg-white disabled:text-[lightgrey] ${leftJson && rightJson ? "bg-[#f2f2f2]" : ""
+              }`}
             onClick={handleCompare}
             disabled={!leftJson || !rightJson}
           >
@@ -215,79 +253,6 @@ const HamburgerMenu: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* login submenu 
-      {isOpen && showLogin && (
-        <div
-          className="submenu locked"
-          style={{ top: submenuTop, left: MENU_WIDTH }}
-        >
-          <h3 className="submenu-title">{authMode === "login" ? "Login" : "Create Account"}</h3>
-          <hr />
-
-          <form onSubmit={handleAuthSubmit}>
-            <div className="login-fields">
-              <label htmlFor="username">Username:</label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div className="login-fields">
-              <label htmlFor="password">Password:</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={authMode === "login" ? "current-password" : "new-password"}
-                placeholder="••••••••"
-              />
-            </div>
-
-            {authError && <div className="error-text">{authError}</div>}
-
-            <button
-              className="compare-button"
-              type="submit"
-              disabled={!canSubmit}
-            >
-              {authMode === "login" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
-
-          <div >
-            {authMode === "login" ? (
-              <>
-                <button
-                  type="button"
-                  className="linklike"
-                  disabled={authLoading}
-                  onClick={() => setAuthMode("signup")}
-                >
-                  Create an account
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="linklike"
-                  onClick={() => setAuthMode("login")}
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      */}
     </div>
   );
 };

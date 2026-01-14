@@ -1,6 +1,6 @@
 import { atomWithReset } from "jotai/utils";
 
-export type SecTabName = "PF" | "VULN_OR_DIAG" | "Lines of Code";
+export type SecTabName = "PF" | "VULN_OR_DIAG";
 
 /** High-level view state */
 export const aspectAtom = atomWithReset<string | null>(null);

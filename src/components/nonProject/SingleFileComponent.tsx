@@ -23,6 +23,8 @@ type Props = {
   jsonData?: any;
   diffHints?: DiffHints;
   diffFilter?: "all" | "differing" | "unique";
+  compareMode?: boolean;
+  embedded?: boolean;
 
   // back-compatable controlled props...if omitted, atoms control the UI.
   controlledAspect?: string | null;
@@ -31,8 +33,8 @@ type Props = {
   controlledMeasure?: string | null;
   onMeasureChange?: (key: string | null) => void;
 
-  controlledSecurityTab?: "CWE" | "CVE" | "Lines of Code";
-  onSecurityTabChange?: (v: "CWE" | "CVE" | "Lines of Code") => void;
+  controlledSecurityTab?: "CWE" | "CVE";
+  onSecurityTabChange?: (v: "CWE" | "CVE") => void;
 
   controlledCWEBucket?: "all" | "critical" | "severe" | "moderate";
   onCWEBucketChange?: (v: "all" | "critical" | "severe" | "moderate") => void;
@@ -49,11 +51,59 @@ type Props = {
   relational?: RelationalExtract;
 };
 
+// key used by HamburgerMenu hard navigation
+const SINGLE_PAYLOAD_KEY = "wp_single_payload";
+
 const SingleFileVisualizer: React.FC<Props> = (props) => {
   const location = useLocation();
-  const jsonDataInput =
-    (props.jsonData && (props.jsonData.data ?? props.jsonData)) ??
-    location.state?.jsonData;
+
+  // 1) props.jsonData (supports embedded usage & Compare)
+  // 2) router state from /visualizer navigation
+  // 3) localStorage payload from hard navigation / menu upload
+  // 4) global payload fallback
+  let jsonDataInput =
+    (props.jsonData && (props.jsonData.data ?? props.jsonData)) ?? undefined;
+
+  if (!jsonDataInput) {
+    jsonDataInput = (location.state as any)?.jsonData;
+  }
+
+  if (!jsonDataInput) {
+    try {
+      const raw = localStorage.getItem(SINGLE_PAYLOAD_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        jsonDataInput = parsed?.data ?? parsed;
+      }
+    } catch (err) {
+      console.error("Error reading single-file payload from localStorage", err);
+    }
+  }
+
+  if (!jsonDataInput) {
+    const cached = (globalThis as any).__wpSinglePayload as
+      | { data?: any }
+      | undefined;
+    if (cached?.data) jsonDataInput = cached.data;
+  }
+
+  if (!jsonDataInput) {
+    const emptyRootClass = props.embedded
+      ? "flex h-full flex-col"
+      : "flex flex-1 min-h-0 flex-col";
+    const emptyMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+    return (
+      <div className={emptyRootClass}>
+        <main className={emptyMainClass}>
+          <p className="mt-8 text-center">
+            <strong>
+              No file loaded. Use the menu to upload a PIQUE JSON file.
+            </strong>
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   // parse once per input
   const parsed = useMemo(() => parsePIQUEJSON(jsonDataInput), [jsonDataInput]);
@@ -84,10 +134,10 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   const selectedFixed = props.controlledFixedFilter ?? fixedFilter;
   const selectedPlots = props.controlledExpandedPlots ?? openPlots;
 
-  const mapIn = (t?: "CWE" | "CVE" | "Lines of Code"): SecTabName | undefined =>
-    t === "CWE" ? "PF" : t === "CVE" ? "VULN_OR_DIAG" : t;
-  const mapOut = (t: SecTabName): "CWE" | "CVE" | "Lines of Code" =>
-    t === "PF" ? "CWE" : t === "VULN_OR_DIAG" ? "CVE" : "Lines of Code";
+  const mapIn = (t?: "CWE" | "CVE"): SecTabName | undefined =>
+    t === "CWE" ? "PF" : t === "CVE" ? "VULN_OR_DIAG" : undefined;
+  const mapOut = (t: SecTabName): "CWE" | "CVE" =>
+    t === "PF" ? "CWE" : "CVE";
 
   const selectedTab = mapIn(props.controlledSecurityTab) ?? secTab;
 
@@ -152,13 +202,21 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
     [props.onTogglePlot, selectedPlots, setOpenPlots]
   );
 
+  const rootClass = props.embedded
+    ? "flex h-full flex-col"
+    : "flex flex-1 min-h-0 flex-col";
+  const mainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+
   return (
-    <div className="app-container">
-      <main className="main-content">
+    <div className={rootClass}>
+      <main className={mainClass}>
         <ScoreGauges
           scores={scores}
           onAspectClick={handleAspectClick}
           selectedAspect={selectedAspect}
+          className={
+            props.compareMode && props.embedded ? "-mt-[55px]" : undefined
+          }
         />
 
         {selectedAspect ? (
@@ -182,7 +240,7 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
             onTogglePlot={handleTogglePlot}
           />
         ) : (
-          <p style={{ textAlign: "center", marginTop: "2rem" }}>
+          <p className="mt-8 text-center">
             <strong>
               Click on a Quality Aspect above to view more information.
             </strong>

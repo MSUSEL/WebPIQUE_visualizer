@@ -12,7 +12,6 @@ import {
   ReferenceArea,
 } from "recharts";
 import type { ProjectFileScore } from "../projectPage/ProjectFileLoad";
-import "../../styles/TQIPlot.css";
 
 export default function TQIQAPlot({
   files,
@@ -44,12 +43,16 @@ export default function TQIQAPlot({
   }, [files]);
 
   const palette = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
+    "#1f77b4", // blue
+    "#ff7f0e", // orange
+    "#2ca02c", // green
+    "#d62728", // red
+    "#9467bd", // purple
+    "#8c564b", // brown
+    "#e377c2", // pink
+    "#7f7f7f", // grey
+    "#bcbd22", // yellow-green
+    "#17becf", // cyan
   ];
 
   const aspectKeys = useMemo(() => {
@@ -83,24 +86,14 @@ export default function TQIQAPlot({
     const when = new Date(row.dateMs).toLocaleString();
     return (
       <div
-        style={{
-          background: "#fff",
-          border: "1px solid #ddd",
-          borderRadius: 6,
-          padding: 10,
-          boxShadow: "0 4px 12px rgba(0,0,0,.08)",
-        }}
+        className="rounded-md border border-[#ddd] bg-white p-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
       >
-        <div style={{ fontWeight: 600, marginBottom: 2 }}>{row.fileName}</div>
-        <div style={{ opacity: 0.8, marginBottom: 6 }}>{when}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div className="mb-0.5 font-semibold">{row.fileName}</div>
+        <div className="mb-1.5 opacity-80">{when}</div>
+        <div className="flex items-center gap-1.5">
           <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              background: palette[0],
-            }}
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ background: palette[0] }}
           />
           <span>
             <strong>TQI</strong>: {fmt(row.TQI)}
@@ -110,15 +103,11 @@ export default function TQIQAPlot({
           row[k] == null ? null : (
             <div
               key={k}
-              style={{ display: "flex", alignItems: "center", gap: 6 }}
+              className="flex items-center gap-1.5"
             >
               <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 999,
-                  background: palette[(i + 1) % palette.length],
-                }}
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: palette[(i + 1) % palette.length] }}
               />
               <span>
                 <strong>{k}</strong>: {fmt(row[k])}
@@ -131,9 +120,9 @@ export default function TQIQAPlot({
   };
 
   return (
-    <div className="tqiqa-chart">
-      <div className="tqiqa-row">
-        <div className="tqiqa-chart-col">
+    <div className="w-full">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+        <div className="min-w-0">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart
               data={data}
@@ -191,11 +180,14 @@ export default function TQIQAPlot({
               <Tooltip content={<CustomTooltip />} />
 
               <Line
-                className="line-tqi"
                 type="monotone"
                 dataKey="TQI"
                 stroke={palette[0]}
                 strokeWidth={2}
+                strokeOpacity={1}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
                 connectNulls
@@ -204,11 +196,14 @@ export default function TQIQAPlot({
               {aspectKeys.map((k, i) => (
                 <Line
                   key={k}
-                  className={`line-aspect-${i}`}
                   type="monotone"
                   dataKey={k}
                   stroke={palette[(i + 1) % palette.length]}
                   strokeWidth={2}
+                  strokeOpacity={1}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
                   dot={{ r: 3 }}
                   activeDot={{ r: 5 }}
                   connectNulls
@@ -218,15 +213,15 @@ export default function TQIQAPlot({
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <div className="tqiqa-legend">
-          <div className="legend-item">
-            <span className="swatch" style={{ background: palette[0] }} />
+        <div className="flex flex-col gap-1.5 text-[14px]">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="h-3 w-3 rounded-full" style={{ background: palette[0] }} />
             <span>TQI</span>
           </div>
           {aspectKeys.map((k, i) => (
-            <div className="legend-item" key={k}>
+            <div className="flex items-center gap-2 whitespace-nowrap" key={k}>
               <span
-                className="swatch"
+                className="h-3 w-3 rounded-full"
                 style={{ background: palette[(i + 1) % palette.length] }}
               />
               <span>{k}</span>

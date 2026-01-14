@@ -1,103 +1,84 @@
-// component to render quality-aspect Product Factors/CWEs, CVEs/Diagnostics
-import React, { useMemo, useState } from "react";
-import { Box, Collapse } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
-import TextField from "@mui/material/TextField";
-import MuiTabs, { TabItem } from "./Tabs";
+// ProductFactorTabs.tsx
+// Uses FindingsTab and MeasuresDropdown.
+
+import React, { useEffect, useMemo, useState } from "react";
+import { Box } from "@mui/material";
+import SettingsIcon from "@mui/icons-material/Settings";
+import MuiTabs, { TabItem } from "../tabs/Tabs";
 import { RelationalExtract } from "../../Utilities/DataParser";
-import ProbabilityDensity from "../plotting/ProbabilityDensity";
-import ProbabilityCDF from "../plotting/ProbabilityCDF";
-import CVEScoreMiniChart from "../plotting/CVEChart";
-import "../../styles/SecurityTabs.css";
 import { DiffHints } from "../../Utilities/fileDiff";
+
+import FindingTab from "../tabs/FindingsTab";
+import MeasuresDropdown from "../tabs/MeasuresDropdown";
 
 type ScoresType = any;
 type PF = any;
 type Measure = any;
 
-type SecTabName = "PF" | "VULN_OR_DIAG" | "Lines of Code";
+type SecTabName = "PF" | "VULN_OR_DIAG";
+type ScoreBucket = "critical" | "severe" | "moderate";
+type Bucket = "all" | ScoreBucket;
 
-type Props = {
-  aspectName: string;
-  scores: ScoresType;
-  relational?: RelationalExtract;
-  controlledTab?: SecTabName;
-  onTabChange?: (v: SecTabName) => void;
-  controlledMeasures?: string | null;
-  onMeausreChange?: (key: string | null) => void;
-  controlledBucket?: "all" | "critical" | "severe" | "moderate";
-  onBucketChange?: (v: "all" | "critical" | "severe" | "moderate") => void;
-  controlledPkgFilter?: string;
-  onPkgFilterChange?: (v: string) => void;
-  controlledFixedFilter?: "all" | "fixed" | "notfixed";
-  onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
-  controlledExpandedPlots?: Record<string, boolean>;
-  onTogglePlot?: (key: string) => void;
-  diffHints?: DiffHints;
-  diffFilter?: "all" | "differing" | "unique";
+type ScoreThresholds = {
+  criticalMax: number;
+  severeMax: number;
 };
 
-type AssocItem = { name: string; description?: string };
+// ------- helpers (unchanged) -------
+const clamp = (val: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, val));
 
+const formatThreshold = (val: number) => {
+  const rounded = Number(val.toFixed(2));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+};
 
-// ------- helpers -------
-const bucketFor = (score: number): "critical" | "severe" | "moderate" =>
-  score < 0.6 ? "critical" : score < 0.8 ? "severe" : "moderate";
+const bucketFor = (score: number, thresholds: ScoreThresholds): ScoreBucket =>
+  score < thresholds.criticalMax
+    ? "critical"
+    : score < thresholds.severeMax
+      ? "severe"
+      : "moderate";
 
 type SeverityInfo = {
   color: string;
   border: string;
   label: string;
-  icon: string;
+  kind: ScoreBucket;
 };
-const getSeverityInfo = (score: number): SeverityInfo =>
-  score < 0.6
-    ? { color: "#c5052fff", border: "solid", label: "Score < 0.6", icon: "🔴" }
-    : score < 0.8
+const getSeverityInfo = (
+  score: number,
+  thresholds: ScoreThresholds
+): SeverityInfo =>
+  score < thresholds.criticalMax
+    ? {
+      color: "#c5052fff",
+      border: "solid",
+      label: `Score < ${formatThreshold(thresholds.criticalMax)}`,
+      kind: "critical",
+    }
+    : score < thresholds.severeMax
       ? {
         color: "rgb(240,228,066)",
         border: "dashed",
-        label: "Score 0.6–0.8",
-        icon: "🟡",
+        label: `Score ${formatThreshold(
+          thresholds.criticalMax
+        )}-${formatThreshold(thresholds.severeMax)}`,
+        kind: "severe",
       }
       : {
         color: "rgb(000,158,115)",
         border: "dotted",
-        label: "Score ≥ 0.8",
-        icon: "🟢",
+        label: `Score >= ${formatThreshold(thresholds.severeMax)}`,
+        kind: "moderate",
       };
 
-// CWE ID if present; otherwise strip boilerplate words.
-const cleanAssocLabel = (s?: string) => {
-  const txt = (s ?? "").trim();
-  if (!txt) return "";
-  const cwe = /CWE-[\w-]+/i.exec(txt);
-  if (cwe) return cwe[0];
-  return txt
-    .replace(/^(Product[_\s-]*Factor|Pillar)\s*/i, "")
-    .replace(/\s*(Measure|Pillar)\s*$/i, "")
-    .replace(/_/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-};
-
-const isVulnId = (s?: string) => !!(s && /^(?:CVE|GHSA)-/i.test(s));
-const normalizeFixed = (v: any): "Fixed" | "Not Fixed" | "" => {
-  if (v === true) return "Fixed";
-  const s = String(v ?? "")
-    .trim()
-    .toLowerCase();
-  if (s === "true" || s === "fixed") return "Fixed";
-  if (s === "false" || s === "not fixed") return "Not Fixed";
-  return "";
-};
 const mkey = (pfName: string, mName: string) => `${pfName}::${mName}`;
 
-// de-dupe measures *within a PF* (a measure can appear under multiple PFs, but only once per PF)
+// de-dupe measures within PF
 const measureKey = (m: any) =>
-  (m?.id ?? cleanAssocLabel(m?.name) ?? "").toString().trim().toLowerCase();
+  (m?.id ?? String(m?.name ?? "")).toString().trim().toLowerCase();
+
 const dedupeMeasuresForPF = <T extends { id?: string; name?: string }>(
   list: T[]
 ): T[] => {
@@ -113,49 +94,109 @@ const dedupeMeasuresForPF = <T extends { id?: string; name?: string }>(
   return out;
 };
 
-// diff/unique badges
+// de-dupe PFs within an aspect (keep a union of PF ids/names and measures)
+const pfKey = (pf: any) =>
+  String(pf?.name ?? pf?.id ?? "").toString().trim().toLowerCase();
+
+const dedupePFs = <
+  T extends {
+    id?: string;
+    name?: string;
+    measures?: any[];
+    description?: string;
+    value?: number;
+  }
+>(
+  list: T[]
+): (T & { __ids?: string[] })[] => {
+  const map = new Map<string, T & { __ids?: string[] }>();
+  for (const pf of list ?? []) {
+    const key = pfKey(pf);
+    if (!key) continue;
+
+    const existing = map.get(key);
+    const ids = [
+      String(pf?.id ?? "").trim(),
+      String(pf?.name ?? "").trim(),
+    ].filter(Boolean);
+
+    if (!existing) {
+      map.set(key, { ...pf, __ids: Array.from(new Set(ids)) });
+      continue;
+    }
+
+    const nextIds = new Set([...(existing.__ids ?? []), ...ids]);
+    existing.__ids = Array.from(nextIds);
+
+    if (!existing.name && pf.name) existing.name = pf.name;
+    if (!existing.description && (pf as any)?.description)
+      (existing as any).description = (pf as any).description;
+
+    if (typeof existing.value !== "number" && typeof (pf as any)?.value === "number")
+      (existing as any).value = (pf as any).value;
+    else if (
+      typeof existing.value === "number" &&
+      typeof (pf as any)?.value === "number"
+    )
+      (existing as any).value = Math.min(existing.value, (pf as any).value);
+
+    const existingMeasures = Array.isArray((existing as any).measures)
+      ? (existing as any).measures
+      : [];
+    const nextMeasures = Array.isArray((pf as any).measures)
+      ? (pf as any).measures
+      : [];
+    if (nextMeasures.length) {
+      (existing as any).measures = dedupeMeasuresForPF([
+        ...existingMeasures,
+        ...nextMeasures,
+      ]);
+    }
+  }
+
+  return Array.from(map.values());
+};
+
 type FlagKind = "diff" | "unique" | null;
-const pfKey = (pfName: string) => String(pfName ?? "");
-const measureDiffKey = (pfName: string, mName: string) => mkey(pfName, mName);
-const cveKey = (id: string) => String(id ?? "");
 
 const flagForPF = (name: string, hints?: DiffHints): FlagKind =>
   !hints
     ? null
-    : hints.missingPFs?.has(pfKey(name))
+    : hints.missingPFs?.has(name)
       ? "unique"
-      : hints.differingPFs?.has(pfKey(name))
+      : hints.differingPFs?.has(name)
         ? "diff"
         : null;
 
-const flagForMeasure = (
+const flagForPFIncludingMeasures = (
   pfName: string,
-  mName: string,
+  measures: any[],
   hints?: DiffHints
 ): FlagKind => {
   if (!hints) return null;
-  const key = measureDiffKey(pfName, mName);
-  return hints.missingMeasures?.has(key)
-    ? "unique"
-    : hints.differingMeasures?.has(key)
-      ? "diff"
-      : null;
+
+  const direct = flagForPF(pfName, hints);
+  if (direct) return direct;
+
+  let hasDiff = false;
+  let hasUnique = false;
+  for (const m of measures ?? []) {
+    const key = mkey(pfName, m.name);
+    if (hints.differingMeasures?.has(key)) hasDiff = true;
+    if (hints.missingMeasures?.has(key)) hasUnique = true;
+    if (hasDiff) break;
+  }
+  return hasDiff ? "diff" : hasUnique ? "unique" : null;
 };
 
-const flagForCVE = (id: string, hints?: DiffHints): FlagKind => {
-  if (!hints) return null;
-  const key = cveKey(id);
-  return hints.missingCVEs?.has(key)
-    ? "unique"
-    : hints.differingCVEs?.has(key)
-      ? "diff"
-      : null;
-};
-
-const DiffBadge: React.FC<{ kind: FlagKind }> = ({ kind }) =>
+const DiffBadge: React.FC<{ kind: FlagKind; className?: string }> = ({
+  kind,
+  className,
+}) =>
   !kind ? null : (
     <span
-      className={`diff-flag diff-flag--${kind}`}
+      className={`absolute left-[-2rem] top-2 text-[1.5rem] leading-none drop-shadow-[0_0_1px_rgba(0,0,0,0.25)] ${className ?? ""
+        }`}
       title={
         kind === "diff" ? "Differs from the other file" : "Only in this file"
       }
@@ -178,7 +219,8 @@ const Delta: React.FC<{
   const up = delta > 0;
   return (
     <span
-      className={`pf-delta ${up ? "pf-delta--up" : "pf-delta--down"}`}
+      className={`ml-2 whitespace-nowrap font-semibold ${up ? "text-[#188038]" : "text-[#d93025]"
+        }`}
       title={up ? "Higher than other file" : "Lower than other file"}
       aria-label={up ? "Higher than other file" : "Lower than other file"}
     >
@@ -187,37 +229,22 @@ const Delta: React.FC<{
   );
 };
 
-const flagForPFIncludingMeasures = (
-  pfName: string,
-  measures: any[],
-  hints?: DiffHints
-): FlagKind => {
-  if (!hints) return null;
-
-  // direct PF flags take precedence
-  const direct = flagForPF(pfName, hints);
-  if (direct) return direct;
-
-  // scan measures scoped to this PF
-  let hasDiff = false;
-  let hasUnique = false;
-  for (const m of measures ?? []) {
-    const key = mkey(pfName, m.name);
-    if (hints.differingMeasures?.has(key)) hasDiff = true;
-    if (hints.missingMeasures?.has(key)) hasUnique = true;
-    if (hasDiff) break; // 🚩 outranks ‼️
-  }
-  return hasDiff ? "diff" : hasUnique ? "unique" : null;
-};
-
 // ---- relational fallback helpers ----
 const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
-  if (Array.isArray(pf?.measures) && pf.measures.length) return pf.measures; // full JSON
+  if (Array.isArray(pf?.measures) && pf.measures.length) return pf.measures;
   if (!relational) return [];
+
   const ids = new Set<string>(
-    [String(pf?.id ?? ""), String(pf?.name ?? "")].filter(Boolean) as string[]
+    [
+      String(pf?.id ?? ""),
+      String(pf?.name ?? ""),
+      ...(((pf as any)?.__ids ?? []) as string[]),
+    ]
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean) as string[]
   );
   const edges = relational.pfMeasures.filter((e) => ids.has(e.pfId));
+
   const list = edges
     .map((edge) => {
       const m = relational.measures.find((mm) => mm.id === edge.measureId);
@@ -234,6 +261,7 @@ const measuresForPF = (pf: any, relational?: RelationalExtract): any[] => {
         : null;
     })
     .filter(Boolean) as any[];
+
   return dedupeMeasuresForPF(list);
 };
 
@@ -245,7 +273,34 @@ const firstThresholdsLen = (measures: any[]): number => {
   return 0;
 };
 
-// ---------- Component ----------
+// ---------- props ----------
+type Props = {
+  aspectName: string;
+  scores: ScoresType;
+  relational?: RelationalExtract;
+
+  controlledTab?: SecTabName;
+  onTabChange?: (v: SecTabName) => void;
+
+  controlledMeasures?: string | null;
+  onMeausreChange?: (key: string | null) => void;
+
+  controlledBucket?: "all" | "critical" | "severe" | "moderate";
+  onBucketChange?: (v: "all" | "critical" | "severe" | "moderate") => void;
+
+  controlledPkgFilter?: string;
+  onPkgFilterChange?: (v: string) => void;
+
+  controlledFixedFilter?: "all" | "fixed" | "notfixed";
+  onFixedFilterChange?: (v: "all" | "fixed" | "notfixed") => void;
+
+  controlledExpandedPlots?: Record<string, boolean>;
+  onTogglePlot?: (key: string) => void;
+
+  diffHints?: DiffHints;
+  diffFilter?: "all" | "differing" | "unique";
+};
+
 const ProductFactorTabs: React.FC<Props> = ({
   aspectName,
   scores,
@@ -265,7 +320,6 @@ const ProductFactorTabs: React.FC<Props> = ({
   diffHints,
   diffFilter,
 }) => {
-  // PFs for aspect
   const aspectPFs = useMemo<PF[]>(() => {
     const byAspect = (scores?.productFactorsByAspect ?? {}) as Record<
       string,
@@ -273,8 +327,8 @@ const ProductFactorTabs: React.FC<Props> = ({
     >;
     const list = (byAspect?.[aspectName] ?? []) as PF[];
     if (list.length === 0 && /security/i.test(aspectName || ""))
-      return (scores?.cweProductFactors ?? []) as PF[];
-    return list;
+      return dedupePFs((scores?.cweProductFactors ?? []) as PF[]);
+    return dedupePFs(list);
   }, [scores, aspectName]);
 
   const aspectPfIdSet = useMemo(() => {
@@ -282,35 +336,121 @@ const ProductFactorTabs: React.FC<Props> = ({
     aspectPFs.forEach((pf: any) => {
       if (pf?.id) set.add(String(pf.id));
       if (pf?.name) set.add(String(pf.name));
+      (pf?.__ids ?? []).forEach((id: string) => {
+        if (id) set.add(String(id));
+      });
     });
     return set;
   }, [aspectPFs]);
 
-  // ---------- PF tab state ----------
+  // controlled/uncontrolled tab selection
+  const [localTab, setLocalTab] = useState<SecTabName>("PF");
+  const tabName: SecTabName = controlledTab ?? localTab;
+
+  // expanded PF selection (controlled/uncontrolled)
   const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
   const expandedKey = controlledMeasures ?? expandedLocal;
+
   const setExpandedKey = (key: string | null) => {
     if (controlledMeasures === undefined) setExpandedLocal(key);
     onMeausreChange?.(key);
   };
 
+  // plot expansion state (controlled/uncontrolled)
   const [expandedPlotsLocal, setExpandedPlotsLocal] = useState<
     Record<string, boolean>
   >({});
   const expandedPlots = controlledExpandedPlots ?? expandedPlotsLocal;
+
   const togglePlotLocal = (key: string) => {
     if (onTogglePlot) onTogglePlot(key);
     else setExpandedPlotsLocal((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const diffFilterVal = diffFilter ?? "all";
+
+  const [scoreThresholds, setScoreThresholds] = useState<ScoreThresholds>({
+    criticalMax: 0.6,
+    severeMax: 0.8,
+  });
+  const [showThresholdSettings, setShowThresholdSettings] = useState(false);
+  const [thresholdInputs, setThresholdInputs] = useState(() => ({
+    criticalMax: formatThreshold(0.6),
+    severeMax: formatThreshold(0.8),
+  }));
+  const [activeThresholdInput, setActiveThresholdInput] = useState<
+    keyof ScoreThresholds | null
+  >(null);
+
+  const updateThreshold = (key: keyof ScoreThresholds, rawValue: number) => {
+    if (!Number.isFinite(rawValue)) return;
+    setScoreThresholds((prev) => {
+      const next = {
+        ...prev,
+        [key]: clamp(rawValue, 0, 1),
+      };
+
+      if (next.criticalMax >= next.severeMax) {
+        if (key === "criticalMax") {
+          next.criticalMax = clamp(next.severeMax - 0.01, 0, 0.99);
+        } else {
+          next.severeMax = clamp(next.criticalMax + 0.01, 0.01, 1);
+        }
+      }
+
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (activeThresholdInput !== "criticalMax") {
+      setThresholdInputs((prev) => ({
+        ...prev,
+        criticalMax: formatThreshold(scoreThresholds.criticalMax),
+      }));
+    }
+    if (activeThresholdInput !== "severeMax") {
+      setThresholdInputs((prev) => ({
+        ...prev,
+        severeMax: formatThreshold(scoreThresholds.severeMax),
+      }));
+    }
+  }, [scoreThresholds, activeThresholdInput]);
+
+  const onThresholdInputChange = (
+    key: keyof ScoreThresholds,
+    rawValue: string
+  ) => {
+    setThresholdInputs((prev) => ({ ...prev, [key]: rawValue }));
+    if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.")
+      return;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    updateThreshold(key, parsed);
+  };
+
+  const onThresholdInputBlur = (key: keyof ScoreThresholds) => {
+    setActiveThresholdInput(null);
+    const rawValue = thresholdInputs[key];
+    if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.")
+      return;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    updateThreshold(key, parsed);
+  };
+
+  const resetThresholds = () => {
+    setScoreThresholds({
+      criticalMax: 0.6,
+      severeMax: 0.8,
+    });
+  };
+
   const sortedPFs = useMemo(() => {
     const arr = [...aspectPFs];
-    // Single-file view: keep current behavior (low -> high score)
     if (!diffHints)
       return arr.sort((a: PF, b: PF) => (a.value ?? 0) - (b.value ?? 0));
 
-    // Compare view: align horizontally by shared PF name; uniques at the bottom
     const common = arr.filter((pf: PF) => !diffHints.missingPFs?.has(pf.name));
     const unique = arr.filter((pf: PF) => diffHints.missingPFs?.has(pf.name));
     const byName = (a: PF, b: PF) =>
@@ -320,39 +460,39 @@ const ProductFactorTabs: React.FC<Props> = ({
     return [...common, ...unique];
   }, [aspectPFs, diffHints]);
 
-  // counts
-  const counts = useMemo(
-    () => ({
-      critical: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value < 0.6
-      ).length,
-      severe: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value >= 0.6 && pf.value < 0.8
-      ).length,
-      moderate: sortedPFs.filter(
-        (pf: PF) => pf?.value != null && pf.value >= 0.8
-      ).length,
+  const counts = useMemo(() => {
+    const tally = {
+      critical: 0,
+      severe: 0,
+      moderate: 0,
       all: sortedPFs.length,
-    }),
-    [sortedPFs]
-  );
+    };
+    sortedPFs.forEach((pf: PF) => {
+      if (pf?.value == null) return;
+      tally[bucketFor(pf.value, scoreThresholds)] += 1;
+    });
+    return tally;
+  }, [sortedPFs, scoreThresholds]);
 
-  type Bucket = "all" | "critical" | "severe" | "moderate";
   const [bucketLocal, setBucketLocal] = useState<Bucket>("all");
   const bucket = controlledBucket ?? bucketLocal;
+
   const onChipClick = (next: Exclude<Bucket, "all">) => {
     const val: Bucket = bucket === next ? "all" : next;
     if (controlledBucket === undefined) setBucketLocal(val);
     onBucketChange?.(val);
   };
 
-  // Filtered PFs (optionally restricted by diff/unq)
   const filteredPFs = useMemo(() => {
     const base =
       bucket === "all"
         ? sortedPFs
-        : sortedPFs.filter((pf: PF) => bucketFor(pf.value) === bucket);
+        : sortedPFs.filter(
+          (pf: PF) => bucketFor(pf.value, scoreThresholds) === bucket
+        );
+
     if (!diffHints || diffFilterVal === "all") return base;
+
     if (diffFilterVal === "differing") {
       return base.filter((pf: PF) => {
         const measures = measuresForPF(pf, relational);
@@ -364,7 +504,7 @@ const ProductFactorTabs: React.FC<Props> = ({
         );
       });
     }
-    // unique
+
     return base.filter((pf: PF) => {
       const measures = measuresForPF(pf, relational);
       return (
@@ -374,13 +514,9 @@ const ProductFactorTabs: React.FC<Props> = ({
         )
       );
     });
-  }, [sortedPFs, bucket, diffHints, diffFilterVal, relational]);
+  }, [sortedPFs, bucket, diffHints, diffFilterVal, relational, scoreThresholds]);
 
-  // ---------- precompute measures per PF ----------
-  const INITIAL_MEASURES = 30;
-  const PAGE_MEASURES = 50;
-  const [visibleByPF, setVisibleByPF] = useState<Record<string, number>>({});
-
+  // measures computed per PF (sorting preserved)
   const measuresByPF = useMemo(() => {
     const map = new Map<string, any[]>();
     (aspectPFs ?? []).forEach((pf: any) => {
@@ -388,14 +524,12 @@ const ProductFactorTabs: React.FC<Props> = ({
 
       let arr: any[] = [];
       if (!diffHints) {
-        // Single-file: sort by score (low -> high)
         arr = base
           .slice()
           .sort(
             (a: any, b: any) => Number(a.score ?? 0) - Number(b.score ?? 0)
           );
       } else {
-        // Compare: align by name (shared first, uniques last)
         const isMissing = (m: any) =>
           diffHints.missingMeasures?.has(mkey(pf.name, m.name));
         const common = base.filter((m) => !isMissing(m));
@@ -412,353 +546,12 @@ const ProductFactorTabs: React.FC<Props> = ({
     return map;
   }, [aspectPFs, relational, diffHints]);
 
-  // ---------- CVE/GHSA for THIS aspect only ----------
-  type GroupedCVE = {
-    id: string;
-    title?: string;
-    alias?: string;
-    description?: string;
-    severity?: string | number;
-    fixed?: any;
-    vulnSource?: string;
-    vulnSourceVersion?: string;
-    fixedVersion?: string;
-    cwePillars?: AssocItem[];
-    cweMeasures?: AssocItem[];
-    byTool: any[];
-    raw: any[];
-  };
+  // paging state (preserved)
+  const INITIAL_MEASURES = 30;
+  const PAGE_MEASURES = 50;
+  const [visibleByPF, setVisibleByPF] = useState<Record<string, number>>({});
 
-  // state for vulnerable package, fixed status, and cwe filters
-  const [pkgLocal, setPkgLocal] = useState<string>("ALL");
-  const pkgFilter = controlledPkgFilter ?? pkgLocal;
-  const [fixedLocal, setFixedLocal] = useState<"all" | "fixed" | "notfixed">(
-    "all"
-  );
-  const fixedFilter = controlledFixedFilter ?? fixedLocal;
-  const [pkgInput, setPkgInput] = useState("");
-  const [cweLocal, setCweLocal] = useState<string>("ALL");
-  const cweFilter = cweLocal;
-  const [cweInput, setCweInput] = useState("");
-
-  const cveMatches = (payload: { vulnSource?: string; fixed?: any }) => {
-    const pkgPass =
-      pkgFilter === "ALL" || (payload?.vulnSource ?? "").trim() === pkgFilter;
-    const fixedNorm = normalizeFixed(payload?.fixed);
-    const fixedPass =
-      fixedFilter === "all" ||
-      (fixedFilter === "fixed" && fixedNorm === "Fixed") ||
-      (fixedFilter === "notfixed" && fixedNorm !== "Fixed");
-    return pkgPass && fixedPass;
-  };
-
-  const pkgFilterOptions = createFilterOptions<string>({
-    matchFrom: "any",
-    stringify: (opt) => (opt === "ALL" ? "All packages" : opt),
-    ignoreAccents: true,
-    trim: true,
-  });
-
-  const groupedCves = useMemo<GroupedCVE[]>(() => {
-    const groupedById = new Map<string, GroupedCVE>();
-    if (!relational) return [];
-
-    // full rows to grab descriptions
-    const pfById = new Map<string, any>();
-    (relational.productFactors ?? []).forEach((p) => pfById.set(p.id, p));
-
-    const measureById = new Map<string, any>();
-    (relational.measures ?? []).forEach((m) => measureById.set(m.id, m));
-
-    const diagToMeasures = new Map<string, string[]>();
-    (relational.measureDiagnostics ?? []).forEach((e) => {
-      const arr = diagToMeasures.get(e.diagnosticId) ?? [];
-      arr.push(e.measureId);
-      diagToMeasures.set(e.diagnosticId, arr);
-    });
-
-    const measureToPFs = new Map<string, string[]>();
-    (relational.pfMeasures ?? []).forEach((e) => {
-      const arr = measureToPFs.get(e.measureId) ?? [];
-      arr.push(e.pfId);
-      measureToPFs.set(e.measureId, arr);
-    });
-
-    for (const f of relational.findings ?? []) {
-      const id = String(f.id ?? "").trim();
-      if (!id) continue;
-
-      const diagId = f.diagnosticId;
-      const measureIds = diagToMeasures.get(diagId) ?? [];
-
-      let inAspect = false;
-      const pfLabelsInAspect = new Map<string, string>();      // PF name -> desc
-      const measureLabelsInAspect = new Map<string, string>(); // measure name -> desc
-
-      for (const mid of measureIds) {
-        const pfIds = measureToPFs.get(mid) ?? [];
-        const anyInAspectHere = pfIds.some((pfId) => aspectPfIdSet.has(pfId));
-        if (!anyInAspectHere) continue;
-
-        inAspect = true;
-
-        const mRow = measureById.get(mid);
-        const mName = mRow?.name ?? "";
-        const mLabel = cleanAssocLabel(mName);
-        if (mLabel) {
-          measureLabelsInAspect.set(mLabel, mRow?.description ?? "");
-        }
-
-        for (const pfId of pfIds) {
-          if (!aspectPfIdSet.has(pfId)) continue;
-          const pfRow = pfById.get(pfId);
-          const pfName = pfRow?.name ?? "";
-          const pfLabel = cleanAssocLabel(pfName);
-          if (pfLabel) {
-            pfLabelsInAspect.set(pfLabel, pfRow?.description ?? "");
-          }
-        }
-      }
-
-      if (!inAspect) continue;
-
-      let g = groupedById.get(id);
-      if (!g) {
-        g = {
-          id,
-          title: f.title ?? id,
-          alias: f.alias ?? "",
-          description: f.description ?? "",
-          severity: undefined,
-          fixed: f.fixed,
-          vulnSource: (f.vulnSource ?? "").trim(),
-          vulnSourceVersion: (f.vulnSourceVersion ?? "").trim(),
-          fixedVersion: f.fixedVersion,
-          byTool: (f.byTool ?? []).slice(),
-          raw: [f],
-          cwePillars: Array.from(pfLabelsInAspect.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([name, description]) => ({ name, description })),
-          cweMeasures: Array.from(measureLabelsInAspect.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([name, description]) => ({ name, description })),
-        };
-        groupedById.set(id, g);
-      } else {
-        // merge tools
-        const existing = new Set(
-          (g.byTool ?? []).map((t: any) => `${t.tool}|${t.score ?? ""}`)
-        );
-        for (const t of f.byTool ?? []) {
-          const key = `${t.tool}|${t.score ?? ""}`;
-          if (!existing.has(key)) g.byTool.push(t);
-        }
-
-        g.raw.push(f);
-
-        // merge PFs / measures
-        for (const [name, description] of pfLabelsInAspect.entries()) {
-          if (!g.cwePillars!.some((x) => x.name === name)) {
-            g.cwePillars!.push({ name, description });
-          }
-        }
-        for (const [name, description] of measureLabelsInAspect.entries()) {
-          if (!g.cweMeasures!.some((x) => x.name === name)) {
-            g.cweMeasures!.push({ name, description });
-          }
-        }
-      }
-    }
-
-    // apply package / fixed / CWE filters
-    return Array.from(groupedById.values()).filter((g) => {
-      const basePass = cveMatches({
-        vulnSource: g.vulnSource,
-        fixed: g.fixed,
-      });
-      if (!basePass) return false;
-
-      if (cweFilter === "ALL") return true;
-      const labels = [...(g.cwePillars ?? []), ...(g.cweMeasures ?? [])]
-        .map((it) => cleanAssocLabel(it.name))
-        .filter(Boolean);
-      return labels.includes(cweFilter);
-    });
-  }, [relational, aspectPfIdSet, pkgFilter, fixedFilter, cweFilter]);
-
-
-  const packageOptions = useMemo(() => {
-    const set = new Set<string>();
-    groupedCves.forEach((g) => {
-      const name = (g?.vulnSource ?? "").trim();
-      if (name) set.add(name);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [groupedCves]);
-  const allPkgOptions = useMemo(
-    () => ["ALL", ...packageOptions],
-    [packageOptions]
-  );
-
-  const cweOptions = useMemo(() => {
-    const set = new Set<string>();
-    groupedCves.forEach((g) => {
-      (g.cwePillars ?? []).forEach((it) => {
-        const lab = cleanAssocLabel(it.name);
-        if (lab) set.add(lab);
-      });
-      (g.cweMeasures ?? []).forEach((it) => {
-        const lab = cleanAssocLabel(it.name);
-        if (lab) set.add(lab);
-      });
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [groupedCves]);
-  const allCweOptions = useMemo(() => ["ALL", ...cweOptions], [cweOptions]);
-
-  // apply legend diff filter to CVEs
-  const filteredCves = useMemo(() => {
-    const mode = diffFilter ?? "all";
-    if (!diffHints || mode === "all") return groupedCves;
-
-    if (mode === "differing") {
-      return groupedCves.filter((g) => diffHints.differingCVEs?.has(g.id));
-    }
-    // mode === "unique"
-    return groupedCves.filter((g) => diffHints.missingCVEs?.has(g.id));
-  }, [groupedCves, diffHints, diffFilter]);
-
-  const cweFilterOptions = createFilterOptions<string>({
-    matchFrom: "any",
-    stringify: (opt) => (opt === "ALL" ? "All CWEs" : opt),
-    ignoreAccents: true,
-    trim: true,
-  });
-
-  // ---------- Non-CVE Diagnostics for aspect ----------
-  type DiagCard = {
-    id: string;
-    name: string;
-    description?: string;
-    toolName?: string;
-    value?: number;
-    measures: AssocItem[];
-    productFactors: AssocItem[];
-  };
-
-  const nonCveDiagnostics = useMemo<DiagCard[]>(() => {
-    if (!relational) return [];
-
-    const measuresById = new Map<string, any>(
-      (relational.measures ?? []).map((m) => [m.id, m])
-    );
-    const diagsById = new Map<string, any>(
-      (relational.diagnostics ?? []).map((d) => [d.id, d])
-    );
-    const pfNameById = new Map<string, string>();
-    (relational.productFactors ?? []).forEach((p) =>
-      pfNameById.set(p.id, p.name)
-    );
-
-    const measureDescByName = new Map<string, string>();
-    (relational.measures ?? []).forEach((m) => {
-      if (m?.name) measureDescByName.set(m.name, m.description ?? "");
-    });
-
-    const pfDescByName = new Map<string, string>();
-    (aspectPFs ?? []).forEach((pf: any) => {
-      if (pf?.name) pfDescByName.set(pf.name, pf.description ?? "");
-    });
-
-    const diagToMeasures = new Map<string, Set<string>>();
-    (relational.measureDiagnostics ?? []).forEach((e) => {
-      const s = diagToMeasures.get(e.diagnosticId) ?? new Set<string>();
-      s.add(e.measureId);
-      diagToMeasures.set(e.diagnosticId, s);
-    });
-
-    const measureToPFs = new Map<string, Set<string>>();
-    (relational.pfMeasures ?? []).forEach((e) => {
-      const s = measureToPFs.get(e.measureId) ?? new Set<string>();
-      s.add(e.pfId);
-      measureToPFs.set(e.measureId, s);
-    });
-
-    const diagHasFindings = new Set<string>();
-    (relational.findings ?? []).forEach((f) =>
-      diagHasFindings.add(f.diagnosticId)
-    );
-
-    const cards: DiagCard[] = [];
-    const seen = new Set<string>();
-
-    for (const [diagId, measureIdsSet] of diagToMeasures.entries()) {
-      const diagRow = diagsById.get(diagId);
-      const diagName = String(diagRow?.name ?? diagId);
-
-      if (isVulnId(diagId) || isVulnId(diagName)) continue;
-
-      if (diagHasFindings.has(diagId)) continue;
-
-      const measureIds = Array.from(measureIdsSet);
-      const pfNames = new Set<string>();
-      const mNames = new Set<string>();
-
-      for (const mid of measureIds) {
-        const pfIds = Array.from(measureToPFs.get(mid) ?? []);
-        const anyInAspect = pfIds.some((id) => aspectPfIdSet.has(id));
-        if (!anyInAspect) continue;
-
-        const m = measuresById.get(mid);
-        if (m?.name) mNames.add(m.name);
-
-        pfIds.forEach((id) => {
-          if (aspectPfIdSet.has(id)) {
-            const nm = pfNameById.get(id) ?? String(id);
-            pfNames.add(nm);
-          }
-        });
-      }
-
-      if (pfNames.size === 0) continue;
-      if (seen.has(diagId)) continue;
-      seen.add(diagId);
-
-      const productFactors = Array.from(pfNames)
-        .sort((a, b) => a.localeCompare(b))
-        .map((name) => ({
-          name,
-          description: pfDescByName.get(name),
-        }));
-
-      const measures = Array.from(mNames)
-        .sort((a, b) => a.localeCompare(b))
-        .map((name) => ({
-          name,
-          description: measureDescByName.get(name),
-        }));
-
-      cards.push({
-        id: diagId,
-        name: diagName,
-        description: diagRow?.description,
-        toolName: diagRow?.toolName,
-        value: diagRow?.value,
-        measures,
-        productFactors,
-      });
-    }
-
-    if (diffHints) {
-      // Compare page: alphabetize by diagnostic name for horizontal alignment
-      cards.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    // Single-file: keep input order
-    return cards;
-  }, [relational, aspectPFs, aspectPfIdSet, diffHints]);
-
-
-  // ---------- Tab labels & headers ----------
+  // PF tab labels
   const hasCWE = (aspectPFs ?? []).some(
     (pf: any) => typeof pf?.name === "string" && /cwe/i.test(pf.name)
   );
@@ -767,50 +560,89 @@ const ProductFactorTabs: React.FC<Props> = ({
     ? `# of CWEs: ${sortedPFs.length ?? 0}`
     : `# of product factors: ${sortedPFs.length ?? 0}`;
 
-  const hasPackageVulns = groupedCves.length > 0;
-  const secondTabLabel = hasPackageVulns
-    ? "Package Vulnerabilities"
-    : "Findings";
-  const secondHeader = hasPackageVulns
-    ? `# of package vulnerabilities: ${groupedCves.length}`
-    : `# of findings: ${nonCveDiagnostics.length}`;
+  // compute Findings tab label (unchanged logic)
+  const hasPackageVulns = useMemo(() => {
+    if (!relational) return false;
+
+    const diagToMeasures = new Map<string, string[]>();
+    relational.measureDiagnostics.forEach((e) => {
+      const arr = diagToMeasures.get(e.diagnosticId) ?? [];
+      arr.push(e.measureId);
+      diagToMeasures.set(e.diagnosticId, arr);
+    });
+
+    const measureToPFs = new Map<string, string[]>();
+    relational.pfMeasures.forEach((e) => {
+      const arr = measureToPFs.get(e.measureId) ?? [];
+      arr.push(e.pfId);
+      measureToPFs.set(e.measureId, arr);
+    });
+
+    for (const f of relational.findings ?? []) {
+      const id = String(f.id ?? "").trim();
+      if (!id) continue;
+      if (!/^(?:CVE|GHSA)-/i.test(id)) continue;
+
+      const midList = diagToMeasures.get(f.diagnosticId) ?? [];
+      for (const mid of midList) {
+        const pfs = measureToPFs.get(mid) ?? [];
+        if (pfs.some((pfId) => aspectPfIdSet.has(pfId))) return true;
+      }
+    }
+    return false;
+  }, [relational, aspectPfIdSet]);
 
   const tabs: TabItem[] = [];
 
-  // --- Tab 1: PFs ---
   tabs.push({
     label: pfTabLabel,
     content: (
-      <Box className="st-root">
-        <h3 className="st-h3">{pfHeader}</h3>
+      <Box className="px-4 py-2 text-[15px]">
+        <h3 className="mb-2 font-semibold text-[26px]">{pfHeader}</h3>
 
-        <div className="st-chips">
+        <div className="my-1.5 flex flex-wrap items-center gap-2.5">
           <button
-            className={`st-chip ${bucket === "critical" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "critical" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("critical")}
             aria-pressed={bucket === "critical"}
           >
-            <span /> 🔴 score &lt; 0.6{" "}
-            <span className="st-chip-count">{counts.critical}</span>
+            <span className="h-3 w-3 rounded-full bg-[#c5052f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
+            Score &lt; {formatThreshold(scoreThresholds.criticalMax)}{" "}
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.critical}
+            </span>
           </button>
+
           <button
-            className={`st-chip ${bucket === "severe" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "severe" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("severe")}
             aria-pressed={bucket === "severe"}
           >
-            <span /> 🟡 score 0.6–0.8{" "}
-            <span className="st-chip-count">{counts.severe}</span>
+            <span className="h-3 w-3 rounded-full bg-[rgb(240,228,66)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
+            Score {formatThreshold(scoreThresholds.criticalMax)}-
+            {formatThreshold(scoreThresholds.severeMax)}{" "}
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.severe}
+            </span>
           </button>
+
           <button
-            className={`st-chip ${bucket === "moderate" ? "is-active" : ""}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f5f5f5] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "moderate" ? "border-2 border-black bg-black text-white" : ""
+              }`}
             onClick={() => onChipClick("moderate")}
             aria-pressed={bucket === "moderate"}
           >
-            <span /> 🟢 score ≥ 0.8{" "}
-            <span className="st-chip-count">{counts.moderate}</span>
+            <span className="h-3 w-3 rounded-full bg-[rgb(0,158,115)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" />
+            Score &gt;= {formatThreshold(scoreThresholds.severeMax)}{" "}
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.moderate}
+            </span>
           </button>
+
           <button
-            className={`st-chip st-chip--all ${bucket === "all" ? "is-active" : ""
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f0f0f0] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${bucket === "all" ? "border-2 border-black bg-black text-white" : ""
               }`}
             onClick={() => {
               if (controlledBucket === undefined) setBucketLocal("all");
@@ -819,23 +651,97 @@ const ProductFactorTabs: React.FC<Props> = ({
             aria-pressed={bucket === "all"}
             title="Clear filter"
           >
-            All<span className="st-chip-count">{counts.all}</span>
+            All
+            <span className="ml-1 rounded-full bg-[rgba(0,0,0,0.08)] px-1.5 py-0.5 text-[12px]">
+              {counts.all}
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#f0f0f0] px-2.5 py-1.5 text-[16px] leading-none text-[#222] transition hover:bg-black hover:text-white active:translate-y-[1px] ${showThresholdSettings ? "border-2 border-black bg-black text-white" : ""
+              }`}
+            onClick={() => setShowThresholdSettings((prev) => !prev)}
+            aria-pressed={showThresholdSettings}
+          >
+            <SettingsIcon className="mr-1 text-[6px] align-middle" /> Settings
           </button>
         </div>
 
+        {showThresholdSettings && (
+          <div
+            className="my-1.5 flex flex-wrap items-center gap-3"
+            aria-label="Score thresholds"
+          >
+            <label className="inline-flex items-center gap-2 text-[14px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-[#c5052f] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]" />
+                Low score (red) value
+              </span>
+              <input
+                className="w-[90px] rounded-md border border-[#ccc] px-1.5 py-1 text-[14px]"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={thresholdInputs.criticalMax}
+                onFocus={() => setActiveThresholdInput("criticalMax")}
+                onBlur={() => onThresholdInputBlur("criticalMax")}
+                onChange={(e) =>
+                  onThresholdInputChange("criticalMax", e.target.value)
+                }
+              />
+            </label>
+            <label className="inline-flex items-center gap-2 text-[14px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-[rgb(240,228,66)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]" />
+                Middle score (yellow) value
+              </span>
+              <input
+                className="w-[90px] rounded-md border border-[#ccc] px-1.5 py-1 text-[14px]"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={thresholdInputs.severeMax}
+                onFocus={() => setActiveThresholdInput("severeMax")}
+                onBlur={() => onThresholdInputBlur("severeMax")}
+                onChange={(e) =>
+                  onThresholdInputChange("severeMax", e.target.value)
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 py-1 text-[14px] hover:bg-black hover:text-white"
+              onClick={resetThresholds}
+            >
+              Reset defaults
+            </button>
+          </div>
+        )}
+
         {filteredPFs.map((pf: PF) => {
-          const sev = getSeverityInfo(pf.value);
+          const sev = getSeverityInfo(pf.value, scoreThresholds);
           const isExpanded = expandedKey === pf.name;
           const allMeasures = measuresByPF.get(pf.name) ?? [];
+          const dotClass =
+            sev.kind === "critical"
+              ? "bg-[#c5052f]"
+              : sev.kind === "severe"
+                ? "bg-[rgb(240,228,66)]"
+                : "bg-[rgb(0,158,115)]";
+
           const pfBadge = flagForPFIncludingMeasures(
             pf.name,
             allMeasures,
             diffHints
           );
+          const pfDiff = diffHints?.pfFieldDiffs.get(pf.name);
+
           const visibleCount =
             visibleByPF[pf.name] ??
             Math.min(INITIAL_MEASURES, allMeasures.length);
-          const showMore = isExpanded && visibleCount < allMeasures.length;
+          const hasMore = isExpanded && visibleCount < allMeasures.length;
 
           const toggleExpand = () => {
             setExpandedKey(isExpanded ? null : pf.name);
@@ -847,31 +753,45 @@ const ProductFactorTabs: React.FC<Props> = ({
             }
           };
 
-          const pfDiff = diffHints?.pfFieldDiffs.get(pf.name);
+          const onShowMore = () => {
+            setVisibleByPF((v) => ({
+              ...v,
+              [pf.name]: Math.min(
+                (v[pf.name] ?? INITIAL_MEASURES) + PAGE_MEASURES,
+                allMeasures.length
+              ),
+            }));
+          };
 
           return (
             <Box
               key={pf.name}
-              className="pf-card card--with-badge"
+              className="relative mb-4 ml-[18px] rounded-lg bg-white p-3"
               style={{ border: `2px ${sev.border} ${sev.color}` }}
             >
-              <div>
-                <span className="icon">{sev.icon}</span>
+              <div className="inline-flex items-center gap-2">
+                <span
+                  className={`inline-block h-3 w-3 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)] ${dotClass}`}
+                  aria-hidden="true"
+                />
                 <span className="label">{sev.label}</span>
               </div>
-              <h4 className="pf-title">
-                {pf.name.replace("Product_Factor", "")}
+
+              <h4 className="mb-2 text-[24px]">
+                <strong>{pf.name.replace("Product_Factor", "")}</strong>
                 <DiffBadge kind={pfBadge} />
               </h4>
 
-              <ul className="pf-list">
+              <ul className="m-0 list-disc pl-5">
                 <li>
-                  <strong>Score:</strong>{" "}
+                  <strong className="inline-flex items-center gap-1.5">
+                    Score:
+                  </strong>{" "}
                   <span
                     className={
                       !diffHints?.missingPFs?.has(pf.name) &&
                         diffHints?.pfFieldDiffs.get(pf.name)?.value
-                        ? "diff-field"
+                        ? "rounded-[2px] bg-[#e49797] px-0.5"
                         : ""
                     }
                   >
@@ -896,238 +816,49 @@ const ProductFactorTabs: React.FC<Props> = ({
                       typeof pf?.benchmarkSize === "number"
                         ? pf.benchmarkSize
                         : firstThresholdsLen(allMeasures);
+
                     const peerRaw = diffHints?.pfPeerBenchmarkSize?.get(
                       pf.name
                     );
                     const peerBench =
                       typeof peerRaw === "number" ? peerRaw : null;
+
                     return (
                       <>
                         <span
                           className={
                             !diffHints?.missingPFs?.has(pf.name) &&
                               pfDiff?.benchmarkSize
-                              ? "diff-field"
+                              ? "rounded-[2px] bg-[#e49797] px-0.5"
                               : ""
                           }
                         >
                           {hereBench}
                         </span>
-                        <Delta here={hereBench} peer={peerBench} places={0} />
+                        {pfDiff?.benchmarkSize ? (
+                          <Delta here={hereBench} peer={peerBench} places={0} />
+                        ) : null}
                       </>
                     );
                   })()}
                 </li>
 
+                {/* delegate inner logic to MeasuresDropdown */}
                 <li>
-                  <div className="measure-toggle" onClick={toggleExpand}>
-                    <span className="measure-toggle-label">
-                      <strong>Measures</strong> (n = {allMeasures.length})
-                      <strong>:</strong>
-                    </span>
-                    {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  </div>
-
-                  {isExpanded && allMeasures.length > 0 && (
-                    <div className="measure-list">
-                      <ul>
-                        {(allMeasures as Measure[])
-                          .slice(0, visibleCount)
-                          .map((measure: Measure, idx: number) => {
-                            const key = mkey(pf.name, measure.name);
-                            const mDiff = diffHints?.measureFieldDiffs.get(key);
-                            const isMissing =
-                              diffHints?.missingMeasures?.has(key);
-                            const thresholds = (measure.thresholds ??
-                              measure.threshold ??
-                              []) as number[];
-
-                            if (
-                              diffFilterVal === "differing" &&
-                              !diffHints?.differingMeasures?.has(key)
-                            )
-                              return null;
-                            if (diffFilterVal === "unique" && !isMissing)
-                              return null;
-
-                            const mSev = getSeverityInfo(measure.score);
-                            const id = key;
-
-                            return (
-                              <li
-                                key={idx}
-                                className="measure-item card--with-badge"
-                                style={{
-                                  border: `2px ${mSev.border} ${mSev.color}`,
-                                  backgroundColor: "#fff",
-                                }}
-                              >
-                                <DiffBadge
-                                  kind={flagForMeasure(
-                                    pf.name,
-                                    measure.name,
-                                    diffHints
-                                  )}
-                                />
-                                <div className="severity-badge">
-                                  <span className="icon">{mSev.icon}</span>
-                                  <span className="label">{mSev.label}</span>
-                                </div>
-                                <strong>
-                                  {measure.name.replace(" Measure", "")}:
-                                </strong>{" "}
-                                {measure.description}
-                                <ul>
-                                  <li>
-                                    <strong>
-                                      Score:{" "}
-                                      <span
-                                        className={
-                                          mDiff?.score && !isMissing
-                                            ? "diff-field"
-                                            : ""
-                                        }
-                                      >
-                                        {measure.score.toFixed(4)} out of 1.
-                                      </span>
-                                    </strong>
-                                    <Delta
-                                      here={
-                                        typeof measure?.score === "number"
-                                          ? measure.score
-                                          : null
-                                      }
-                                      peer={
-                                        diffHints?.measurePeerValues?.get(
-                                          key
-                                        ) ?? null
-                                      }
-                                    />
-                                  </li>
-                                  <li>
-                                    <strong>Interpreted Score: </strong>
-                                    <span>
-                                      {(measure.score * 100).toFixed(2)}% better
-                                      than the benchmark set.
-                                    </span>
-                                  </li>
-                                  <li>
-                                    <strong>Weight:</strong> The measure contributed a{" "}
-                                    <strong>
-                                      <span
-                                        className={
-                                          mDiff?.weight && !isMissing
-                                            ? "diff-field"
-                                            : ""
-                                        }
-                                      >
-                                        {(measure.weight ?? 0).toFixed(4)}
-                                      </span>
-                                    </strong>{" "}
-                                    to the final product factor score.
-                                    <Delta
-                                      here={
-                                        typeof measure?.weight === "number"
-                                          ? measure.weight
-                                          : null
-                                      }
-                                      peer={
-                                        diffHints?.measurePeerWeights?.get(
-                                          key
-                                        ) ?? null
-                                      }
-                                    />
-                                  </li>
-                                  <li>
-                                    <div style={{ marginTop: 6 }}>
-                                      <span
-                                        className="density-link"
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => togglePlotLocal(id)}
-                                        onKeyDown={(e) =>
-                                          e.key === "Enter"
-                                            ? togglePlotLocal(id)
-                                            : null
-                                        }
-                                        aria-expanded={!!expandedPlots[id]}
-                                        aria-controls={`density-${id}`}
-                                        style={{
-                                          textDecoration: "underline",
-                                          cursor: "pointer",
-                                          marginRight: 16,
-                                        }}
-                                      >
-                                        {expandedPlots[id]
-                                          ? "Hide Plots"
-                                          : "Show Plots"}
-                                      </span>
-                                    </div>
-
-                                    <Collapse
-                                      in={!!expandedPlots[id]}
-                                      timeout={0}
-                                      unmountOnExit
-                                    >
-                                      <div
-                                        className="densityPlot"
-                                        id={`density-${id}`}
-                                      >
-                                        <ProbabilityDensity
-                                          thresholds={thresholds}
-                                          score={measure.score ?? 0}
-                                          cweName={measure.name}
-                                        />
-                                      </div>
-                                      <div
-                                        className="densityPlot"
-                                        id={`cdf-${id}`}
-                                      >
-                                        <ProbabilityCDF
-                                          thresholds={thresholds}
-                                          percentile={measure.score ?? 0}
-                                          cweName={measure.name}
-                                        />
-                                      </div>
-                                      <hr />
-                                      <div>
-                                        <strong>Top plot:</strong> Density of
-                                        benchmark set with a horizontal line
-                                        marking the area under the density curve
-                                        that matches the measure score.{" "}
-                                        <strong>Bottom plot:</strong> ECDF plot
-                                        showing how much better the measure
-                                        score is than the benchmark.
-                                      </div>
-                                    </Collapse>
-                                  </li>
-                                </ul>
-                              </li>
-                            );
-                          })}
-                      </ul>
-
-                      {showMore && (
-                        <div style={{ marginTop: 8 }}>
-                          <button
-                            className="st-chip"
-                            onClick={() =>
-                              setVisibleByPF((v) => ({
-                                ...v,
-                                [pf.name]: Math.min(
-                                  (v[pf.name] ?? INITIAL_MEASURES) +
-                                  PAGE_MEASURES,
-                                  allMeasures.length
-                                ),
-                              }))
-                            }
-                          >
-                            Show {allMeasures.length - visibleCount} more
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <MeasuresDropdown
+                    pfName={pf.name}
+                    measures={allMeasures as Measure[]}
+                    isExpanded={isExpanded}
+                    onToggleExpanded={toggleExpand}
+                    diffHints={diffHints}
+                    diffFilter={diffFilterVal}
+                    scoreThresholds={scoreThresholds}
+                    expandedPlots={expandedPlots}
+                    onTogglePlot={togglePlotLocal}
+                    visibleCount={visibleCount}
+                    onShowMore={onShowMore}
+                    hasMore={hasMore}
+                  />
                 </li>
               </ul>
             </Box>
@@ -1137,268 +868,27 @@ const ProductFactorTabs: React.FC<Props> = ({
     ),
   });
 
-  // --- Tab 2: Package Vulnerabilities (if any) else Findings ---
-  const tabsSecondContent = hasPackageVulns ? (
-    <Box className="st-root">
-      <h3 className="st-h3">{secondHeader}</h3>
-      <hr className="st-divider st-divider--narrow" />
+  tabs.push({
+    label: hasPackageVulns ? "Package Vulnerabilities" : "Diagnostic Findings",
+    content: (
+      <FindingTab
+        aspectName={aspectName}
+        relational={relational}
+        aspectPFs={aspectPFs}
+        aspectPfIdSet={aspectPfIdSet}
+        diffHints={diffHints}
+        diffFilter={diffFilter}
+        controlledPkgFilter={controlledPkgFilter}
+        onPkgFilterChange={onPkgFilterChange}
+        controlledFixedFilter={controlledFixedFilter}
+        onFixedFilterChange={onFixedFilterChange}
+      />
+    ),
+  });
 
-      {/* Filters ONLY when there are CVEs */}
-      <div className="st-filters">
-        <label className="st-filter">
-          <span className="st-filter-label">Vulnerable Package</span>
-          <Autocomplete
-            options={allPkgOptions}
-            value={pkgFilter ?? "ALL"}
-            onChange={(_, newValue) => {
-              const v = (newValue ?? "ALL") as string;
-              if (controlledPkgFilter === undefined) setPkgLocal(v);
-              onPkgFilterChange?.(v);
-            }}
-            inputValue={pkgInput}
-            onInputChange={(_, newInput) => setPkgInput(newInput)}
-            getOptionLabel={(opt) => (opt === "ALL" ? "All packages" : opt)}
-            filterOptions={pkgFilterOptions}
-            clearOnBlur={false}
-            autoSelect
-            openOnFocus
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="Search packages…"
-                size="small"
-                className="st-filter-select"
-              />
-            )}
-          />
-        </label>
-
-        <label className="st-filter">
-          <span className="st-filter-label">Fixed status</span>
-          <select
-            className="st-filter-select"
-            value={fixedFilter}
-            onChange={(e) => {
-              const v = e.target.value as "all" | "fixed" | "notfixed";
-              if (controlledFixedFilter === undefined) setFixedLocal(v);
-              onFixedFilterChange?.(v);
-            }}
-          >
-            <option value="all">All</option>
-            <option value="fixed">Fixed</option>
-            <option value="notfixed">Not fixed</option>
-          </select>
-        </label>
-
-        <label className="st-filter">
-          <span className="st-filter-label">CWE lookup</span>
-          <Autocomplete
-            options={allCweOptions}
-            value={cweFilter}
-            onChange={(_, v) => setCweLocal((v ?? "ALL") as string)}
-            inputValue={cweInput}
-            onInputChange={(_, v) => setCweInput(v)}
-            getOptionLabel={(opt) => (opt === "ALL" ? "All CWEs" : opt)}
-            filterOptions={cweFilterOptions}
-            clearOnBlur={false}
-            openOnFocus
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="Search CWEs…"
-                size="small"
-                className="st-filter-select"
-              />
-            )}
-          />
-        </label>
-
-        <button
-          className="st-filter-reset"
-          onClick={() => {
-            if (controlledPkgFilter === undefined) setPkgLocal("ALL");
-            if (controlledFixedFilter === undefined) setFixedLocal("all");
-            setPkgInput("");
-            onPkgFilterChange?.("ALL");
-            onFixedFilterChange?.("all");
-            setCweLocal("ALL");
-            setCweInput("");
-          }}
-          title="Clear filters"
-        >
-          Reset
-        </button>
-      </div>
-
-      <Box>
-        {filteredCves.map((g) => {
-          const byTool = g.byTool ?? [];
-          const cveDiff = diffHints?.cveFieldDiffs?.get(g.id);
-          const toolsStr = (g.byTool ?? []).length
-            ? Array.from(new Set(g.byTool.map((t: any) => t.tool))).join(", ")
-            : "—";
-          const fixedStr = normalizeFixed(g.fixed ?? "").trim() || "Not fixed";
-          return (
-            <Box
-              key={g.id}
-              className="cve-card card--with-badge"
-              style={{ position: "relative", marginLeft: "24px" }}
-            >
-              <DiffBadge kind={flagForCVE(g.id, diffHints)} />
-              <h4 className="cve-title">{g.id}</h4>
-              <strong>Related vulnerability ID:</strong> {g.alias || "None"}
-              <ul className="cve-list">
-                <li>
-                  <strong>Package name:</strong>{" "}
-                  <span className={cveDiff?.pkg ? "diff-field" : ""}>
-                    {g.vulnSource || "—"}
-                  </span>
-                </li>
-                <li>
-                  <strong>Vulnerable Package Version:</strong>{" "}
-                  <span className={cveDiff?.vulnVer ? "diff-field" : ""}>
-                    {g.vulnSourceVersion || "—"}
-                  </span>
-                </li>
-                <li>
-                  <strong>Fixed Status:</strong>{" "}
-                  <span className={cveDiff?.fixed ? "diff-field" : ""}>
-                    {fixedStr}
-                  </span>
-                </li>
-                {g.fixedVersion && (
-                  <li>
-                    <strong>Fixed Package Version(s):</strong>{" "}
-                    <span className={cveDiff?.fixedVer ? "diff-field" : ""}>
-                      {g.fixedVersion}
-                    </span>
-                  </li>
-                )}
-                <li>
-                  <strong>Description:</strong> {g.description || "—"}
-                </li>
-                {g.cwePillars?.length ? (
-                  <li>
-                    <strong>Associated Product Factor(s):</strong>{" "}
-                    {g.cwePillars.map((pf, idx) => (
-                      <span
-                        key={pf.name + idx}
-                        className="assoc-hover"
-                        title={pf.description || "No description available"}
-                      >
-                        {cleanAssocLabel(pf.name)}
-                        {idx < g.cwePillars!.length - 1 ? ", " : ""}
-                      </span>
-                    ))}
-                  </li>
-                ) : null}
-                {g.cweMeasures?.length ? (
-                  <li>
-                    <strong>Associated Measure(s):</strong>{" "}
-                    {g.cweMeasures.map((m, idx) => (
-                      <span
-                        key={m.name + idx}
-                        className="assoc-hover"
-                        title={m.description || "No description available"}
-                      >
-                        {cleanAssocLabel(m.name)}
-                        {idx < g.cweMeasures!.length - 1 ? ", " : ""}
-                      </span>
-                    ))}
-                  </li>
-                ) : null}
-
-                <li>
-                  <strong>Finding Identified From: </strong>{" "}
-                  <span className={cveDiff?.byTool ? "diff-field" : ""}>
-                    {toolsStr}
-                  </span>
-                </li>
-              </ul>
-              <div className="cve-chart-wrap">
-                <div className="cve-chart-caption">CVE Score</div>
-                <CVEScoreMiniChart byTool={byTool} />
-              </div>
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  ) : (
-    <Box className="st-root">
-      <h3 className="st-h3">{secondHeader}</h3>
-      <hr className="st-divider st-divider--narrow" />
-      <Box>
-        {nonCveDiagnostics.length === 0 ? (
-          <div style={{ opacity: 0.7 }}>
-            No findings available for this aspect.
-          </div>
-        ) : (
-          nonCveDiagnostics.map((d) => (
-            <Box
-              key={d.id}
-              className="cve-card card--with-badge"
-              style={{ position: "relative", marginLeft: "24px" }}
-            >
-              {/* diagnostics don't have explicit diff/unique tracking; add later if you extend DiffHints */}
-              <h4 className="cve-title">{d.name}</h4>
-              <ul className="cve-list">
-                <li>
-                  <strong>Finding from Tool(s):</strong> {d.toolName || "—"}
-                </li>
-                <li>
-                  <strong>Score Reported by Tool:</strong>{" "}
-                  {typeof d.value === "number" ? d.value.toFixed(4) : "—"}
-                </li>
-                <li>
-                  <strong>Associated Product Factor(s):</strong>{" "}
-                  {d.productFactors.map((pf, idx) => (
-                    <span
-                      key={pf.name + idx}
-                      className="assoc-hover"
-                      title={pf.description || "No description available"}
-                    >
-                      {cleanAssocLabel(pf.name)}
-                      {idx < d.productFactors.length - 1 ? ", " : ""}
-                    </span>
-                  ))}
-                </li>
-                <li>
-                  <strong>Associated Measure(s):</strong>{" "}
-                  {d.measures.map((m, idx) => (
-                    <span
-                      key={m.name + idx}
-                      className="assoc-hover"
-                      title={m.description || "No description available"}
-                    >
-                      {cleanAssocLabel(m.name)}
-                      {idx < d.measures.length - 1 ? ", " : ""}
-                    </span>
-                  ))}
-                </li>
-
-                {d.description && (
-                  <li>
-                    <strong>Description:</strong> {d.description}
-                  </li>
-                )}
-              </ul>
-            </Box>
-          ))
-        )}
-      </Box>
-    </Box>
-  );
-
-  tabs.push({ label: secondTabLabel, content: tabsSecondContent });
-
-  // controlled/uncontrolled tab selection
-  const [localTab, setLocalTab] = useState<SecTabName>("PF");
-  const tabName: SecTabName = controlledTab ?? localTab;
-  const nameToIndex = (name: SecTabName) =>
-    name === "PF" ? 0 : name === "VULN_OR_DIAG" ? 1 : 2;
+  const nameToIndex = (name: SecTabName) => (name === "PF" ? 0 : 1);
   const indexToName = (i: number): SecTabName =>
-    i === 0 ? "PF" : i === 1 ? "VULN_OR_DIAG" : "Lines of Code";
+    i === 0 ? "PF" : "VULN_OR_DIAG";
 
   return (
     <MuiTabs

@@ -39,6 +39,9 @@ function getToolColor(tool: string): string {
   return color;
 }
 
+const formatScore = (score: number) =>
+  Number.isFinite(score) ? score.toFixed(2) : "—";
+
 // create line chart
 const CVEScoreMiniChart: React.FC<Props> = ({
   byTool,
@@ -92,8 +95,37 @@ const CVEScoreMiniChart: React.FC<Props> = ({
     }
   });
 
+  const pointItems: {
+    score: number;
+    color: string;
+    label: string;
+    display: string;
+  }[] = [];
+
+  for (const [score, group] of byScore) {
+    if (group.length >= 2) {
+      const tools = group.map((g) => g.tool).join(", ");
+      const display = formatScore(group[0].score);
+      pointItems.push({
+        score,
+        color: "#000",
+        label: `${tools}: ${display}`,
+        display,
+      });
+    } else {
+      const t = group[0];
+      const display = formatScore(t.score);
+      pointItems.push({
+        score,
+        color: colorMap[t.tool],
+        label: `${t.tool}: ${display}`,
+        display,
+      });
+    }
+  }
+
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div className="flex items-center">
       <svg
         width={chartWidth}
         height={height}
@@ -110,31 +142,22 @@ const CVEScoreMiniChart: React.FC<Props> = ({
         </text>
 
         {/* points */}
-        {byTool.map((d, i) => (
-          <g key={i}>
-            <circle cx={cx(d.score)} cy={cy} r={5} fill={colorMap[d.tool]} />
-            <text x={cx(d.score)} y={cy - 8} fontSize="10" textAnchor="middle">
-              {Number.isFinite(d.score) ? d.score : "—"}
-            </text>
+        {pointItems.map((p, i) => (
+          <g key={`${p.label}-${i}`}>
+            <circle cx={cx(p.score)} cy={cy} r={5} fill={p.color}>
+              <title>{p.label}</title>
+            </circle>
           </g>
         ))}
       </svg>
 
       {/* legend */}
-      <div style={{ marginLeft: "10px", fontSize: "10px" }}>
+      <div className="ml-2.5 text-[10px]">
         {legendItems.map((item) => (
-          <div
-            key={item.label}
-            style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
-          >
+          <div key={item.label} className="mb-1 flex items-center">
             <div
-              style={{
-                width: 10,
-                height: 10,
-                backgroundColor: item.color,
-                marginRight: 5,
-                borderRadius: "50%", // round legend marker
-              }}
+              className="mr-1.5 h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: item.color }}
             />
             {item.label}
           </div>
