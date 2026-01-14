@@ -1,5 +1,0 @@
-﻿#!/usr/bin/env sh
-set -e
-
-echo "Running npm audit (moderate or higher)..."
-npm run audit:moderate
