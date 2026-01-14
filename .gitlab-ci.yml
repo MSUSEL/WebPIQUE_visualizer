@@ -1,0 +1,32 @@
+﻿stages:
+  - audit
+
+npm_audit:
+  stage: audit
+  image: node:20
+  script:
+    - npm ci
+    - |
+      set +e
+      node scripts/npm-audit-check.mjs --report audit-report.txt
+      AUDIT_EXIT=$?
+      if [ "$AUDIT_EXIT" -ne 0 ]; then
+        if [ -n "$GITLAB_TOKEN" ]; then
+          ISSUE_TITLE="npm audit: moderate or higher vulnerabilities"
+          ISSUE_BODY="$(cat audit-report.txt)"
+          curl --fail --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            --form "title=$ISSUE_TITLE" \
+            --form "description=$ISSUE_BODY" \
+            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/issues"
+        else
+          echo "GITLAB_TOKEN not set; skipping issue creation."
+        fi
+        exit $AUDIT_EXIT
+      fi
+  artifacts:
+    when: always
+    paths:
+      - audit-report.txt
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
