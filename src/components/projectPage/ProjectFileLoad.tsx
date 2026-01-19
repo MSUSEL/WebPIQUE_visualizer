@@ -477,7 +477,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
                 type="button"
                 className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${
                   mode === "single"
-                    ? "border-[#9bbcf9] bg-[#2679f5] font-semibold text-[#f3e8e8]"
+                    ? "border-black bg-black font-semibold text-white"
                     : "border-[#d1d5db] bg-[#f9fafb] text-[#111827]"
                 }`}
                 onClick={() =>
@@ -492,7 +492,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
                 type="button"
                 className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${
                   mode === "compare"
-                    ? "border-[#9bbcf9] bg-[#2679f5] font-semibold text-[#f3e8e8]"
+                    ? "border-black bg-black font-semibold text-white"
                     : "border-[#d1d5db] bg-[#f9fafb] text-[#111827]"
                 }`}
                 onClick={() =>
@@ -596,7 +596,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
             })}
           </ul>
         )}
-        <div className="mt-2 text-right text-[13px] text-[#6b7280]">
+        <div className="mt-2 text-left text-[13px] text-[#6b7280]">
           {scores.length} / {MAX_FILES} files loaded
         </div>
       </div>

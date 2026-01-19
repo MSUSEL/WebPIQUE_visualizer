@@ -306,7 +306,7 @@ const MeasuresDropdown: React.FC<Props> = ({
                         unmountOnExit
                       >
                         <div className="flex flex-wrap gap-4 pt-2">
-                          <div className="w-3/4 min-w-0 overflow-hidden" id={`density-${id}`}>
+                          <div className="w-[50%] min-w-0 overflow-hidden" id={`density-${id}`}>
                             <ProbabilityDensity
                               thresholds={thresholds}
                               score={measure.score ?? 0}
@@ -314,7 +314,7 @@ const MeasuresDropdown: React.FC<Props> = ({
                             />
                           </div>
 
-                          <div className="w-3/4 min-w-0 overflow-hidden" id={`cdf-${id}`}>
+                          <div className="w-[50%] min-w-0 overflow-hidden" id={`cdf-${id}`}>
                             <ProbabilityCDF
                               thresholds={thresholds}
                               percentile={measure.score ?? 0}

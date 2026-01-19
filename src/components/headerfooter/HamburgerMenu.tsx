@@ -7,6 +7,12 @@ type UploadPayload = { filename: string; data: any };
 
 const MENU_TOP = 40;
 const MENU_WIDTH = 270;
+const IDB_NAME = "wp_payload_db";
+const IDB_STORE = "payloads";
+const IDB_SINGLE_KEY = "single";
+const IDB_COMPARE_KEY = "compare";
+const IDB_SINGLE_PENDING_KEY = "wp_single_pending_idb";
+const IDB_COMPARE_PENDING_KEY = "wp_compare_pending_idb";
 
 // keys for passing data between pages
 const SINGLE_PAYLOAD_KEY = "wp_single_payload";
@@ -56,36 +62,126 @@ const HamburgerMenu: React.FC = () => {
   };
 
   // --- helper: store payload + navigate (for visualizer / compare) ---
-  const goToSingleVisualizer = (payload: UploadPayload) => {
+  const openPayloadDb = () =>
+    new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+  const storeSinglePayload = (payload: UploadPayload) =>
+    openPayloadDb().then(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.objectStore(IDB_STORE).put(payload, IDB_SINGLE_KEY);
+        })
+    );
+
+  const storeComparePayload = (payload: {
+    file1: UploadPayload;
+    file2: UploadPayload;
+  }) =>
+    openPayloadDb().then(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.objectStore(IDB_STORE).put(payload, IDB_COMPARE_KEY);
+        })
+    );
+
+  const goToSingleVisualizer = async (payload: UploadPayload) => {
+    let storedLocal = false;
+    let storedIdb = false;
     try {
       localStorage.setItem(SINGLE_PAYLOAD_KEY, JSON.stringify(payload));
+      storedLocal = true;
+      sessionStorage.removeItem(IDB_SINGLE_PENDING_KEY);
     } catch {
-      // ignore
+      storedLocal = false;
+      try {
+        localStorage.removeItem(SINGLE_PAYLOAD_KEY);
+      } catch {
+        /* ignore */
+      }
+      try {
+        sessionStorage.setItem(IDB_SINGLE_PENDING_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      await storeSinglePayload(payload);
+      storedIdb = true;
+    } catch {
+      storedIdb = false;
     }
     if (location.pathname === "/visualizer") {
       softNavigate("/visualizer", { jsonData: payload.data });
     } else {
-      hardNavigate("/visualizer");
+      if (storedLocal || storedIdb) {
+        hardNavigate("/visualizer");
+      } else {
+        softNavigate("/visualizer", { jsonData: payload.data });
+      }
     }
   };
 
-  const goToCompareVisualizer = (payload: {
+  const goToCompareVisualizer = async (payload: {
     file1: UploadPayload;
     file2: UploadPayload;
   }) => {
     (globalThis as any).__wpComparePayload = payload;
+    let storedSession = false;
+    let storedLocal = false;
     try {
       sessionStorage.setItem(
         COMPARE_PAYLOAD_SESSION_KEY,
         JSON.stringify(payload)
       );
+      storedSession = true;
     } catch {
-      // ignore
+      storedSession = false;
+      try {
+        sessionStorage.removeItem(COMPARE_PAYLOAD_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
     }
     try {
       localStorage.setItem(COMPARE_PAYLOAD_KEY, JSON.stringify(payload));
+      storedLocal = true;
     } catch {
-      // ignore
+      storedLocal = false;
+      try {
+        localStorage.removeItem(COMPARE_PAYLOAD_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      await storeComparePayload(payload);
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (storedSession || storedLocal) {
+        sessionStorage.removeItem(IDB_COMPARE_PENDING_KEY);
+      } else {
+        sessionStorage.setItem(IDB_COMPARE_PENDING_KEY, "1");
+      }
+    } catch {
+      /* ignore */
     }
     softNavigate("/compare", {
       file1: payload.file1,
@@ -99,7 +195,7 @@ const HamburgerMenu: React.FC = () => {
     setOpen(false);
     setShowCompareSubmenu(false);
     setShowLogin(false);
-    goToCompareVisualizer({ file1: leftJson, file2: rightJson });
+    void goToCompareVisualizer({ file1: leftJson, file2: rightJson });
   };
 
   // reset all submenu state on close
@@ -183,7 +279,7 @@ const HamburgerMenu: React.FC = () => {
               variant="menuItem"
               onJsonLoaded={({ filename, data }: UploadPayload) => {
                 handleToggle(false);
-                goToSingleVisualizer({ filename, data });
+                void goToSingleVisualizer({ filename, data });
               }}
             />
           </div>

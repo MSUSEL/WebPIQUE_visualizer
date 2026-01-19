@@ -28,11 +28,82 @@ type CompareProps = {
 // key used by HamburgerMenu hard navigation
 const COMPARE_PAYLOAD_KEY = "wp_compare_payload";
 const COMPARE_PAYLOAD_SESSION_KEY = "wp_compare_payload_session";
+const IDB_NAME = "wp_payload_db";
+const IDB_STORE = "payloads";
+const IDB_COMPARE_KEY = "compare";
+const IDB_COMPARE_PENDING_KEY = "wp_compare_pending_idb";
 
 const Compare: React.FC<CompareProps> = (props) => {
   const { state } = useLocation() as {
     state?: { file1?: UploadPayload; file2?: UploadPayload };
   };
+  const [idbPayload, setIdbPayload] = useState<
+    { file1?: UploadPayload; file2?: UploadPayload } | undefined
+  >(undefined);
+  const [idbLoaded, setIdbLoaded] = useState(false);
+  const [pendingIdb, setPendingIdb] = useState(() => {
+    try {
+      return sessionStorage.getItem(IDB_COMPARE_PENDING_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const openPayloadDb = () =>
+    new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+  const readComparePayload = () =>
+    openPayloadDb().then(
+      (db) =>
+        new Promise<{ file1?: UploadPayload; file2?: UploadPayload } | undefined>(
+          (resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, "readonly");
+            tx.onerror = () => reject(tx.error);
+            const req = tx.objectStore(IDB_STORE).get(IDB_COMPARE_KEY);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          }
+        )
+    );
+
+  useEffect(() => {
+    let canceled = false;
+    readComparePayload()
+      .then((payload) => {
+        if (!canceled && payload) {
+          setIdbPayload(payload);
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      })
+      .finally(() => {
+        if (!canceled) setIdbLoaded(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingIdb || !idbLoaded) return;
+    setPendingIdb(false);
+    try {
+      sessionStorage.removeItem(IDB_COMPARE_PENDING_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [pendingIdb, idbLoaded]);
 
   // 1) prefer props (embedded usage)
   // 2) fallback to router state
@@ -49,46 +120,57 @@ const Compare: React.FC<CompareProps> = (props) => {
   }
 
   if (!file1 || !file2) {
-    try {
-      const sessionRaw = sessionStorage.getItem(COMPARE_PAYLOAD_SESSION_KEY);
-      if (sessionRaw) {
-        const parsed = JSON.parse(sessionRaw) as {
-          file1?: UploadPayload;
-          file2?: UploadPayload;
-        };
-        if (!file1 && parsed.file1) file1 = parsed.file1;
-        if (!file2 && parsed.file2) file2 = parsed.file2;
+    if (pendingIdb) {
+      if (idbPayload?.file1 && idbPayload?.file2) {
+        file1 = idbPayload.file1;
+        file2 = idbPayload.file2;
       }
-    } catch (err) {
-      console.error("Error reading compare payload from sessionStorage", err);
+    } else {
+      try {
+        const sessionRaw = sessionStorage.getItem(COMPARE_PAYLOAD_SESSION_KEY);
+        if (sessionRaw) {
+          const parsed = JSON.parse(sessionRaw) as {
+            file1?: UploadPayload;
+            file2?: UploadPayload;
+          };
+          if (!file1 && parsed.file1) file1 = parsed.file1;
+          if (!file2 && parsed.file2) file2 = parsed.file2;
+        }
+      } catch (err) {
+        console.error("Error reading compare payload from sessionStorage", err);
+      }
     }
   }
 
   if (!file1 || !file2) {
-    try {
-      const raw = localStorage.getItem(COMPARE_PAYLOAD_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as {
-          file1?: UploadPayload;
-          file2?: UploadPayload;
-        };
-        if (!file1 && parsed.file1) file1 = parsed.file1;
-        if (!file2 && parsed.file2) file2 = parsed.file2;
+    if (!pendingIdb) {
+      try {
+        const raw = localStorage.getItem(COMPARE_PAYLOAD_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            file1?: UploadPayload;
+            file2?: UploadPayload;
+          };
+          if (!file1 && parsed.file1) file1 = parsed.file1;
+          if (!file2 && parsed.file2) file2 = parsed.file2;
+        }
+      } catch (err) {
+        console.error("Error reading compare payload from localStorage", err);
       }
-    } catch (err) {
-      console.error("Error reading compare payload from localStorage", err);
     }
   }
 
   if (!file1 || !file2) {
-    // still nothing – go home
-    return <Navigate to="/" replace />;
+    if (idbPayload?.file1 && idbPayload?.file2) {
+      file1 = idbPayload.file1;
+      file2 = idbPayload.file2;
+    }
   }
 
   const sizesInit = props.initialSizes ?? [50, 50];
 
-  const file1Name = file1.filename ?? "File 1";
-  const file2Name = file2.filename ?? "File 2";
+  const file1Name = file1?.filename ?? "File 1";
+  const file2Name = file2?.filename ?? "File 2";
 
   const formatCompareFileName = (name: string, maxBase = 20) => {
     const safe = String(name ?? "");
@@ -106,11 +188,11 @@ const Compare: React.FC<CompareProps> = (props) => {
 
   // parse once per file (keep both scores + relational for CVE/diagnostic scoping)
   const parsed1 = useMemo(
-    () => parsePIQUEJSON((file1 as any).data ?? file1),
+    () => (file1 ? parsePIQUEJSON((file1 as any).data ?? file1) : null),
     [file1]
   );
   const parsed2 = useMemo(
-    () => parsePIQUEJSON((file2 as any).data ?? file2),
+    () => (file2 ? parsePIQUEJSON((file2 as any).data ?? file2) : null),
     [file2]
   );
 
@@ -493,6 +575,30 @@ const Compare: React.FC<CompareProps> = (props) => {
     </div>
   );
 
+  const hasFiles = !!file1 && !!file2;
+
+  if (pendingIdb && !idbLoaded && !hasFiles) {
+    const loadingRootClass = props.embedded
+      ? "flex h-full flex-col"
+      : "flex min-h-[calc(100vh-185px)] flex-col";
+    const loadingMainClass = props.embedded
+      ? "flex flex-1 min-h-0 flex-col items-stretch px-0"
+      : "mt-2 flex flex-1 min-h-0 flex-col items-stretch px-0";
+    return (
+      <div className={loadingRootClass}>
+        <main className={loadingMainClass}>
+          <p className="mt-8 text-center">
+            <strong>Loading files...</strong>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!hasFiles) {
+    return <Navigate to="/" replace />;
+  }
+
   const rootClass = props.embedded
     ? "flex h-full flex-col"
     : "flex min-h-[calc(100vh-185px)] flex-col";
@@ -628,8 +734,8 @@ const Compare: React.FC<CompareProps> = (props) => {
         )}
 
         <div className="flex-1 min-h-0" style={paneStyle}>
-          <ScrollSync className="h-full" style={{ height: "100%" }}>
-            <div className="h-full">
+          <ScrollSync>
+            <div className="h-full" style={{ height: "100%" }}>
               <SplitPane
                 split="vertical"
                 sizes={sizes}
