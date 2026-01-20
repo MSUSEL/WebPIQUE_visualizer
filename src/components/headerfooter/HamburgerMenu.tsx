@@ -183,6 +183,10 @@ const HamburgerMenu: React.FC = () => {
     } catch {
       /* ignore */
     }
+    if (location.pathname !== "/compare" && (storedSession || storedLocal)) {
+      hardNavigate("/compare");
+      return;
+    }
     softNavigate("/compare", {
       file1: payload.file1,
       file2: payload.file2,
