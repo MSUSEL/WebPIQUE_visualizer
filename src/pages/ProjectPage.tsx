@@ -283,7 +283,7 @@ export default function ProjectView() {
                   />
 
                   {/* Add File + Visualize buttons live under the file box */}
-                  <div className="mt-3 flex items-center justify-end gap-3">
+                  <div className="mt-3 flex items-center justify-start gap-3">
                     <button
                       type="button"
                       className="rounded-[10px] border border-[#9bbcf9] bg-[#2679f5] px-3.5 py-2 font-semibold text-[#f3e8e8] disabled:cursor-not-allowed disabled:border-[#727679] disabled:bg-[#8a8c8d] disabled:text-[#afafaf]"

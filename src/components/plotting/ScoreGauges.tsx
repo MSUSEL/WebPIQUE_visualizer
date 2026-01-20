@@ -3,7 +3,7 @@ import GaugeComponent from "react-gauge-component";
 import { ParsedScore } from "../../Utilities/DataParser";
 
 interface ScoreGaugesProps {
-  scores: ParsedScore;
+  scores?: ParsedScore;
   onAspectClick?: (aspectName: string) => void;
   selectedAspect?: string | null;
   className?: string;

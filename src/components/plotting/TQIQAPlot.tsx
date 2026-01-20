@@ -42,8 +42,8 @@ export default function TQIQAPlot({
     });
   }, [files]);
 
-  const palette = [
-    "#1f77b4", // blue
+  const tqiColor = "#1f77b4"; // blue (reserved for TQI)
+  const aspectPalette = [
     "#ff7f0e", // orange
     "#2ca02c", // green
     "#d62728", // red
@@ -93,7 +93,7 @@ export default function TQIQAPlot({
         <div className="flex items-center gap-1.5">
           <span
             className="h-2.5 w-2.5 rounded-full"
-            style={{ background: palette[0] }}
+            style={{ background: tqiColor }}
           />
           <span>
             <strong>TQI</strong>: {fmt(row.TQI)}
@@ -107,7 +107,9 @@ export default function TQIQAPlot({
             >
               <span
                 className="h-2.5 w-2.5 rounded-full"
-                style={{ background: palette[(i + 1) % palette.length] }}
+                style={{
+                  background: aspectPalette[i % aspectPalette.length],
+                }}
               />
               <span>
                 <strong>{k}</strong>: {fmt(row[k])}
@@ -179,26 +181,12 @@ export default function TQIQAPlot({
 
               <Tooltip content={<CustomTooltip />} />
 
-              <Line
-                type="monotone"
-                dataKey="TQI"
-                stroke={palette[0]}
-                strokeWidth={2}
-                strokeOpacity={1}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-                connectNulls
-                isAnimationActive={false}
-              />
               {aspectKeys.map((k, i) => (
                 <Line
                   key={k}
                   type="monotone"
                   dataKey={k}
-                  stroke={palette[(i + 1) % palette.length]}
+                  stroke={aspectPalette[i % aspectPalette.length]}
                   strokeWidth={2}
                   strokeOpacity={1}
                   strokeLinecap="round"
@@ -210,19 +198,35 @@ export default function TQIQAPlot({
                   isAnimationActive={false}
                 />
               ))}
+              <Line
+                type="monotone"
+                dataKey="TQI"
+                stroke={tqiColor}
+                strokeWidth={2}
+                strokeOpacity={1}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+                connectNulls
+                isAnimationActive={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
         <div className="flex flex-col gap-1.5 text-[14px]">
           <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="h-3 w-3 rounded-full" style={{ background: palette[0] }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: tqiColor }} />
             <span>TQI</span>
           </div>
           {aspectKeys.map((k, i) => (
             <div className="flex items-center gap-2 whitespace-nowrap" key={k}>
               <span
                 className="h-3 w-3 rounded-full"
-                style={{ background: palette[(i + 1) % palette.length] }}
+                style={{
+                  background: aspectPalette[i % aspectPalette.length],
+                }}
               />
               <span>{k}</span>
             </div>

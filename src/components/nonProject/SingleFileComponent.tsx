@@ -1,5 +1,5 @@
 // page to display single PIQIUE output file (page 2)
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import ScoreGauges from "../plotting/ScoreGauges";
 import ProductFactorTabs from "../tabs/ProductFactorTabs";
@@ -53,9 +53,76 @@ type Props = {
 
 // key used by HamburgerMenu hard navigation
 const SINGLE_PAYLOAD_KEY = "wp_single_payload";
+const IDB_NAME = "wp_payload_db";
+const IDB_STORE = "payloads";
+const IDB_SINGLE_KEY = "single";
+const IDB_SINGLE_PENDING_KEY = "wp_single_pending_idb";
 
 const SingleFileVisualizer: React.FC<Props> = (props) => {
   const location = useLocation();
+  const [idbPayload, setIdbPayload] = useState<any>(undefined);
+  const [idbLoaded, setIdbLoaded] = useState(false);
+  const [pendingIdb, setPendingIdb] = useState(() => {
+    try {
+      return sessionStorage.getItem(IDB_SINGLE_PENDING_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const openPayloadDb = () =>
+    new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+  const readSinglePayload = () =>
+    openPayloadDb().then(
+      (db) =>
+        new Promise<any>((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, "readonly");
+          tx.onerror = () => reject(tx.error);
+          const req = tx.objectStore(IDB_STORE).get(IDB_SINGLE_KEY);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        })
+    );
+
+  useEffect(() => {
+    let canceled = false;
+    readSinglePayload()
+      .then((payload) => {
+        if (!canceled && payload) {
+          setIdbPayload(payload?.data ?? payload);
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      })
+      .finally(() => {
+        if (!canceled) setIdbLoaded(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingIdb || !idbLoaded) return;
+    setPendingIdb(false);
+    try {
+      sessionStorage.removeItem(IDB_SINGLE_PENDING_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [pendingIdb, idbLoaded]);
 
   // 1) props.jsonData (supports embedded usage & Compare)
   // 2) router state from /visualizer navigation
@@ -66,6 +133,12 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
 
   if (!jsonDataInput) {
     jsonDataInput = (location.state as any)?.jsonData;
+  }
+
+  if (!jsonDataInput) {
+    if (pendingIdb && idbPayload) {
+      jsonDataInput = idbPayload;
+    }
   }
 
   if (!jsonDataInput) {
@@ -88,26 +161,15 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   }
 
   if (!jsonDataInput) {
-    const emptyRootClass = props.embedded
-      ? "flex h-full flex-col"
-      : "flex flex-1 min-h-0 flex-col";
-    const emptyMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
-    return (
-      <div className={emptyRootClass}>
-        <main className={emptyMainClass}>
-          <p className="mt-8 text-center">
-            <strong>
-              No file loaded. Use the menu to upload a PIQUE JSON file.
-            </strong>
-          </p>
-        </main>
-      </div>
-    );
+    if (idbPayload) jsonDataInput = idbPayload;
   }
 
-  // parse once per input
-  const parsed = useMemo(() => parsePIQUEJSON(jsonDataInput), [jsonDataInput]);
-  const { scores, relational } = parsed;
+  const parsed = useMemo(
+    () => (jsonDataInput ? parsePIQUEJSON(jsonDataInput) : null),
+    [jsonDataInput]
+  );
+
+  const { scores, relational } = parsed ?? { scores: undefined, relational: undefined };
 
   // ------- atoms (readers & writers) -------
   const aspect = useAtomValue(aspectAtom);
@@ -202,6 +264,55 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
     [props.onTogglePlot, selectedPlots, setOpenPlots]
   );
 
+  if (pendingIdb && !idbLoaded) {
+    const loadingRootClass = props.embedded
+      ? "flex h-full flex-col"
+      : "flex flex-1 min-h-0 flex-col";
+    const loadingMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+    return (
+      <div className={loadingRootClass}>
+        <main className={loadingMainClass}>
+          <p className="mt-8 text-center">
+            <strong>Loading file...</strong>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!jsonDataInput) {
+    if (!idbLoaded) {
+      const loadingRootClass = props.embedded
+        ? "flex h-full flex-col"
+        : "flex flex-1 min-h-0 flex-col";
+      const loadingMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+      return (
+        <div className={loadingRootClass}>
+          <main className={loadingMainClass}>
+            <p className="mt-8 text-center">
+              <strong>Loading file...</strong>
+            </p>
+          </main>
+        </div>
+      );
+    }
+    const emptyRootClass = props.embedded
+      ? "flex h-full flex-col"
+      : "flex flex-1 min-h-0 flex-col";
+    const emptyMainClass = "flex flex-1 flex-col items-stretch px-0 pt-0";
+    return (
+      <div className={emptyRootClass}>
+        <main className={emptyMainClass}>
+          <p className="mt-8 text-center">
+            <strong>
+              No file loaded. Use the menu to upload a PIQUE JSON file.
+            </strong>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
   const rootClass = props.embedded
     ? "flex h-full flex-col"
     : "flex flex-1 min-h-0 flex-col";
@@ -214,9 +325,7 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
           scores={scores}
           onAspectClick={handleAspectClick}
           selectedAspect={selectedAspect}
-          className={
-            props.compareMode && props.embedded ? "-mt-[55px]" : undefined
-          }
+          className={props.compareMode && props.embedded ? "mt-0" : undefined}
         />
 
         {selectedAspect ? (
