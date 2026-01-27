@@ -2,8 +2,10 @@
 // Contains ALL "Measures" section UI + logic (expand/collapse, score/weight/plots),
 // while preserving the exact <li> order within measure details.
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Collapse } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ProbabilityDensity from "../plotting/ProbabilityDensity";
@@ -163,11 +165,72 @@ const MeasuresDropdown: React.FC<Props> = ({
   onShowMore,
   hasMore,
 }) => {
-  // pre-slice here so we do not rearrange <li> items; we only omit items by returning null
+  const [measureLookupLocal, setMeasureLookupLocal] = useState<string>("ALL");
+  const measureLookupFilter = measureLookupLocal;
+  const [measureLookupInput, setMeasureLookupInput] = useState("");
+
+  const filterInputSx = {
+    "& .MuiInputBase-root": {
+      height: 32,
+      fontSize: "14px",
+    },
+    "& .MuiInputBase-input": {
+      padding: "0 8px",
+    },
+  };
+
+  const matchesMeasureLookup = (measure: Measure, filter = measureLookupFilter) =>
+    filter === "ALL" || measure.name === filter;
+
+  const matchesDiffFilter = (measure: Measure) => {
+    if (!diffHints || diffFilter === "all") return true;
+    const key = mkey(pfName, measure.name);
+    if (diffFilter === "differing")
+      return !!diffHints.differingMeasures?.has(key);
+    return !!diffHints.missingMeasures?.has(key);
+  };
+
   const renderedMeasures = useMemo(
     () => measures.slice(0, visibleCount),
     [measures, visibleCount]
   );
+
+  const filteredMeasures = useMemo(
+    () =>
+      renderedMeasures.filter(
+        (measure) => matchesDiffFilter(measure) && matchesMeasureLookup(measure)
+      ),
+    [renderedMeasures, diffFilter, diffHints, measureLookupFilter]
+  );
+
+  const measureOptions = useMemo(() => {
+    const set = new Set<string>();
+    measures.forEach((measure) => {
+      if (!matchesDiffFilter(measure)) return;
+      if (measure.name) set.add(measure.name);
+    });
+    if (measureLookupFilter !== "ALL") set.add(measureLookupFilter);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [measures, diffFilter, diffHints, measureLookupFilter]);
+
+  const allMeasureOptions = useMemo(
+    () => ["ALL", ...measureOptions],
+    [measureOptions]
+  );
+
+  const measureFilterOptions = createFilterOptions<string>({
+    matchFrom: "any",
+    stringify: (opt) => (opt === "ALL" ? "All measures" : opt),
+    ignoreAccents: true,
+    trim: true,
+  });
+
+  React.useEffect(() => {
+    if (measureLookupFilter === "ALL") return;
+    if (measureOptions.includes(measureLookupFilter)) return;
+    setMeasureLookupLocal("ALL");
+    setMeasureLookupInput("");
+  }, [measureLookupFilter, measureOptions]);
 
   return (
     <>
@@ -180,18 +243,47 @@ const MeasuresDropdown: React.FC<Props> = ({
 
       {isExpanded && measures.length > 0 && (
         <div className="px-3 py-2.5">
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[15px] text-[#555]">Measure lookup</span>
+              <Autocomplete
+                options={allMeasureOptions}
+                value={measureLookupFilter}
+                onChange={(_, v) => setMeasureLookupLocal((v ?? "ALL") as string)}
+                inputValue={measureLookupInput}
+                onInputChange={(_, v) => setMeasureLookupInput(v)}
+                getOptionLabel={(opt) => (opt === "ALL" ? "All measures" : opt)}
+                filterOptions={measureFilterOptions}
+                clearOnBlur={false}
+                autoSelect
+                openOnFocus
+                sx={{ width: 240 }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="Search measures..."
+                    size="small"
+                    sx={filterInputSx}
+                  />
+                )}
+              />
+            </label>
+            <button
+              className="h-[32px] rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 text-[14px] hover:bg-black hover:text-white"
+              onClick={() => {
+                setMeasureLookupLocal("ALL");
+                setMeasureLookupInput("");
+              }}
+              title="Clear filters"
+            >
+              Reset
+            </button>
+          </div>
           <ul>
-            {renderedMeasures.map((measure: Measure, idx: number) => {
+            {filteredMeasures.map((measure: Measure, idx: number) => {
               const key = mkey(pfName, measure.name);
               const mDiff = diffHints?.measureFieldDiffs.get(key);
               const isMissing = diffHints?.missingMeasures?.has(key);
-
-              if (
-                diffFilter === "differing" &&
-                !diffHints?.differingMeasures?.has(key)
-              )
-                return null;
-              if (diffFilter === "unique" && !isMissing) return null;
 
               const thresholds = (measure.thresholds ??
                 measure.threshold ??

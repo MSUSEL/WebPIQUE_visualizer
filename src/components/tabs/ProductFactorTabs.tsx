@@ -3,6 +3,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Box } from "@mui/material";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import SettingsIcon from "@mui/icons-material/Settings";
 import MuiTabs, { TabItem } from "../tabs/Tabs";
 import { RelationalExtract } from "../../Utilities/DataParser";
@@ -477,13 +479,20 @@ const ProductFactorTabs: React.FC<Props> = ({
   const [bucketLocal, setBucketLocal] = useState<Bucket>("all");
   const bucket = controlledBucket ?? bucketLocal;
 
+  const pfDisplayName = (name?: string) =>
+    String(name ?? "").replace("Product_Factor", "").trim();
+
+  const [pfLookupLocal, setPfLookupLocal] = useState<string>("ALL");
+  const pfLookupFilter = pfLookupLocal;
+  const [pfLookupInput, setPfLookupInput] = useState("");
+
   const onChipClick = (next: Exclude<Bucket, "all">) => {
     const val: Bucket = bucket === next ? "all" : next;
     if (controlledBucket === undefined) setBucketLocal(val);
     onBucketChange?.(val);
   };
 
-  const filteredPFs = useMemo(() => {
+  const baseFilteredPFs = useMemo(() => {
     const base =
       bucket === "all"
         ? sortedPFs
@@ -515,6 +524,39 @@ const ProductFactorTabs: React.FC<Props> = ({
       );
     });
   }, [sortedPFs, bucket, diffHints, diffFilterVal, relational, scoreThresholds]);
+
+  const matchesPfLookup = (pf: PF, filter = pfLookupFilter) =>
+    filter === "ALL" || pfDisplayName(pf.name) === filter;
+
+  const filteredPFs = useMemo(
+    () => baseFilteredPFs.filter((pf: PF) => matchesPfLookup(pf)),
+    [baseFilteredPFs, pfLookupFilter]
+  );
+
+  const pfLookupOptions = useMemo(() => {
+    const set = new Set<string>();
+    baseFilteredPFs.forEach((pf: PF) => {
+      const label = pfDisplayName(pf.name);
+      if (label) set.add(label);
+    });
+    if (pfLookupFilter !== "ALL") set.add(pfLookupFilter);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [baseFilteredPFs, pfLookupFilter]);
+
+  const allPfLookupOptions = useMemo(
+    () => ["ALL", ...pfLookupOptions],
+    [pfLookupOptions]
+  );
+
+  const filterInputSx = {
+    "& .MuiInputBase-root": {
+      height: 32,
+      fontSize: "14px",
+    },
+    "& .MuiInputBase-input": {
+      padding: "0 8px",
+    },
+  };
 
   // measures computed per PF (sorting preserved)
   const measuresByPF = useMemo(() => {
@@ -557,8 +599,24 @@ const ProductFactorTabs: React.FC<Props> = ({
   );
   const pfTabLabel = hasCWE ? "CWEs" : "Product Factors";
   const pfHeader = hasCWE
-    ? `# of CWEs: ${sortedPFs.length ?? 0}`
-    : `# of product factors: ${sortedPFs.length ?? 0}`;
+    ? `# of CWEs: ${filteredPFs.length ?? 0}`
+    : `# of product factors: ${filteredPFs.length ?? 0}`;
+  const pfLookupLabel = hasCWE ? "CWE lookup" : "Product Factor lookup";
+  const pfAllLabel = hasCWE ? "All CWEs" : "All product factors";
+
+  const lookupFilterOptions = createFilterOptions<string>({
+    matchFrom: "any",
+    stringify: (opt) => (opt === "ALL" ? pfAllLabel : opt),
+    ignoreAccents: true,
+    trim: true,
+  });
+
+  useEffect(() => {
+    if (pfLookupFilter === "ALL") return;
+    if (pfLookupOptions.includes(pfLookupFilter)) return;
+    setPfLookupLocal("ALL");
+    setPfLookupInput("");
+  }, [pfLookupFilter, pfLookupOptions]);
 
   // compute Findings tab label (unchanged logic)
   const hasPackageVulns = useMemo(() => {
@@ -599,6 +657,44 @@ const ProductFactorTabs: React.FC<Props> = ({
     content: (
       <Box className="px-4 py-2 text-[15px]">
         <h3 className="mb-2 font-semibold text-[26px]">{pfHeader}</h3>
+
+        <div className="mb-2 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[15px] text-[#555]">{pfLookupLabel}</span>
+            <Autocomplete
+              options={allPfLookupOptions}
+              value={pfLookupFilter}
+              onChange={(_, v) => setPfLookupLocal((v ?? "ALL") as string)}
+              inputValue={pfLookupInput}
+              onInputChange={(_, v) => setPfLookupInput(v)}
+              getOptionLabel={(opt) => (opt === "ALL" ? pfAllLabel : opt)}
+              filterOptions={lookupFilterOptions}
+              clearOnBlur={false}
+              autoSelect
+              openOnFocus
+              sx={{ width: 220 }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder={`Search ${hasCWE ? "CWEs" : "product factors"}...`}
+                  size="small"
+                  sx={filterInputSx}
+                />
+              )}
+            />
+          </label>
+
+          <button
+            className="h-[32px] rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 text-[14px] hover:bg-black hover:text-white"
+            onClick={() => {
+              setPfLookupLocal("ALL");
+              setPfLookupInput("");
+            }}
+            title="Clear filters"
+          >
+            Reset
+          </button>
+        </div>
 
         <div className="my-1.5 flex flex-wrap items-center gap-2.5">
           <button
