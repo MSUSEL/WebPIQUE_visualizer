@@ -201,6 +201,14 @@ const FindingTab: React.FC<Props> = ({
   const cweFilter = cweLocal;
   const [cweInput, setCweInput] = useState("");
 
+  const [diagLocal, setDiagLocal] = useState<string>("ALL");
+  const diagFilter = diagLocal;
+  const [diagInput, setDiagInput] = useState("");
+
+  const [diagCweLocal, setDiagCweLocal] = useState<string>("ALL");
+  const diagCweFilter = diagCweLocal;
+  const [diagCweInput, setDiagCweInput] = useState("");
+
   const matchesPkg = (vulnSource?: string, filter = pkgFilter) =>
     filter === "ALL" || (vulnSource ?? "").trim() === filter;
 
@@ -216,6 +224,17 @@ const FindingTab: React.FC<Props> = ({
   const matchesCwe = (g: GroupedCVE, filter = cweFilter) => {
     if (filter === "ALL") return true;
     const labels = [...(g.cwePillars ?? []), ...(g.cweMeasures ?? [])]
+      .map(cleanAssocLabel)
+      .filter(Boolean);
+    return labels.includes(filter);
+  };
+
+  const matchesDiagName = (card: DiagCard, filter = diagFilter) =>
+    filter === "ALL" || card.name === filter;
+
+  const matchesDiagCwe = (card: DiagCard, filter = diagCweFilter) => {
+    if (filter === "ALL") return true;
+    const labels = [...(card.productFactors ?? []), ...(card.measures ?? [])]
       .map(cleanAssocLabel)
       .filter(Boolean);
     return labels.includes(filter);
@@ -440,6 +459,13 @@ const FindingTab: React.FC<Props> = ({
     trim: true,
   });
 
+  const diagFilterOptions = createFilterOptions<string>({
+    matchFrom: "any",
+    stringify: (opt) => (opt === "ALL" ? "All diagnostics" : opt),
+    ignoreAccents: true,
+    trim: true,
+  });
+
   // apply legend diff filter and alignment+bucket sort for CVEs
   const visibleCves = useMemo(() => {
     const base = (() => {
@@ -465,7 +491,7 @@ const FindingTab: React.FC<Props> = ({
   }, [groupedCves, diffHints, diffFilter]);
 
   // ---------- Non-CVE Diagnostics for aspect ----------
-  const nonCveDiagnostics = useMemo<DiagCard[]>(() => {
+  const baseNonCveDiagnostics = useMemo<DiagCard[]>(() => {
     if (!relational) return [];
     const measuresById = new Map(relational.measures.map((m) => [m.id, m]));
     const diagsById = new Map(relational.diagnostics.map((d) => [d.id, d]));
@@ -618,6 +644,64 @@ const FindingTab: React.FC<Props> = ({
     return filtered;
   }, [relational, aspectPFs, aspectPfIdSet, diffHints, diffFilter]);
 
+  const filteredNonCveDiagnostics = useMemo(
+    () =>
+      baseNonCveDiagnostics.filter(
+        (card) => matchesDiagName(card) && matchesDiagCwe(card)
+      ),
+    [baseNonCveDiagnostics, diagFilter, diagCweFilter]
+  );
+
+  const diagNameOptions = useMemo(() => {
+    const set = new Set<string>();
+    baseNonCveDiagnostics.forEach((d) => {
+      if (!matchesDiagCwe(d, diagCweFilter)) return;
+      if (d.name) set.add(d.name);
+    });
+    if (diagFilter !== "ALL") set.add(diagFilter);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [baseNonCveDiagnostics, diagCweFilter, diagFilter]);
+
+  const allDiagNameOptions = useMemo(
+    () => ["ALL", ...diagNameOptions],
+    [diagNameOptions]
+  );
+
+  const diagCweOptions = useMemo(() => {
+    const set = new Set<string>();
+    baseNonCveDiagnostics.forEach((d) => {
+      if (!matchesDiagName(d, diagFilter)) return;
+      (d.productFactors ?? []).forEach((nm) => {
+        const lab = cleanAssocLabel(nm);
+        if (lab) set.add(lab);
+      });
+      (d.measures ?? []).forEach((nm) => {
+        const lab = cleanAssocLabel(nm);
+        if (lab) set.add(lab);
+      });
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [baseNonCveDiagnostics, diagFilter]);
+
+  const allDiagCweOptions = useMemo(
+    () => ["ALL", ...diagCweOptions],
+    [diagCweOptions]
+  );
+
+  React.useEffect(() => {
+    if (diagFilter === "ALL") return;
+    if (diagNameOptions.includes(diagFilter)) return;
+    setDiagLocal("ALL");
+    setDiagInput("");
+  }, [diagFilter, diagNameOptions]);
+
+  React.useEffect(() => {
+    if (diagCweFilter === "ALL") return;
+    if (diagCweOptions.includes(diagCweFilter)) return;
+    setDiagCweLocal("ALL");
+    setDiagCweInput("");
+  }, [diagCweFilter, diagCweOptions]);
+
   // ---------- Tab label/header logic (same behavior) ----------
   const hasPackageVulns = baseGroupedCves.length > 0;
   const secondTabLabel = hasPackageVulns
@@ -625,7 +709,7 @@ const FindingTab: React.FC<Props> = ({
     : "Diagnostic Findings";
   const secondHeader = hasPackageVulns
     ? `# of package vulnerabilities: ${groupedCves.length}`
-    : `# of diagnostic findings: ${nonCveDiagnostics.length}`;
+    : `# of diagnostic findings: ${filteredNonCveDiagnostics.length}`;
 
   // ---------- Render ----------
   if (hasPackageVulns) {
@@ -689,7 +773,7 @@ const FindingTab: React.FC<Props> = ({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[15px] text-[#555]">CWE lookup</span>
+            <span className="text-[15px] text-[#555]">Associated PF/Meausre lookup</span>
             <Autocomplete
               options={allCweOptions}
               value={cweFilter}
@@ -914,13 +998,77 @@ const FindingTab: React.FC<Props> = ({
     <Box className="px-4 py-2 text-[15px]">
       <h3 className="mb-2 font-semibold text-[26px]">{secondHeader}</h3>
 
+      <div className="ml-[18px] flex max-w-[calc(100%-18px)] flex-wrap items-end gap-2 pb-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[15px] text-[#555]">Diagnostic Finding</span>
+          <Autocomplete
+            options={allDiagNameOptions}
+            value={diagFilter}
+            onChange={(_, v) => setDiagLocal((v ?? "ALL") as string)}
+            inputValue={diagInput}
+            onInputChange={(_, v) => setDiagInput(v)}
+            getOptionLabel={(opt) => (opt === "ALL" ? "All diagnostics" : opt)}
+            filterOptions={diagFilterOptions}
+            clearOnBlur={false}
+            autoSelect
+            openOnFocus
+            sx={{ width: 220 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Search diagnostics..."
+                size="small"
+                sx={filterInputSx}
+              />
+            )}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[15px] text-[#555]">Associated PF/Meausre lookup</span>
+          <Autocomplete
+            options={allDiagCweOptions}
+            value={diagCweFilter}
+            onChange={(_, v) => setDiagCweLocal((v ?? "ALL") as string)}
+            inputValue={diagCweInput}
+            onInputChange={(_, v) => setDiagCweInput(v)}
+            getOptionLabel={(opt) => (opt === "ALL" ? "All CWEs" : opt)}
+            filterOptions={cweFilterOptions}
+            clearOnBlur={false}
+            openOnFocus
+            sx={{ width: 180 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Search CWEs..."
+                size="small"
+                sx={filterInputSx}
+              />
+            )}
+          />
+        </label>
+
+        <button
+          className="h-[32px] rounded-md border border-[#bbb] bg-[#f5f5f5] px-2.5 text-[14px] hover:bg-black hover:text-white"
+          onClick={() => {
+            setDiagLocal("ALL");
+            setDiagInput("");
+            setDiagCweLocal("ALL");
+            setDiagCweInput("");
+          }}
+          title="Clear filters"
+        >
+          Reset
+        </button>
+      </div>
+
       <Box>
-        {nonCveDiagnostics.length === 0 ? (
+        {filteredNonCveDiagnostics.length === 0 ? (
           <div className="opacity-70">
             No diagnostics available for this aspect.
           </div>
         ) : (
-          nonCveDiagnostics.map((d) => (
+          filteredNonCveDiagnostics.map((d) => (
             <Box
               key={d.id}
               className="relative mt-2 ml-[24px] rounded-lg border border-[grey] p-3 text-[16px]"

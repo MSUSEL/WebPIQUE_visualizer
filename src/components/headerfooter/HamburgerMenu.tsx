@@ -344,7 +344,7 @@ const HamburgerMenu: React.FC = () => {
             />
           </div>
           <button
-            className={`mt-1 w-3/5 self-center rounded-[10px] border-2 border-black px-2.5 py-2 text-[15px] text-black shadow-sm disabled:cursor-not-allowed disabled:border-[lightgrey] disabled:bg-white disabled:text-[lightgrey] ${leftJson && rightJson ? "bg-[#f2f2f2]" : ""
+            className={`mt-1 w-3/5 self-center rounded-lg border px-3.5 py-2 text-[15px] text-white shadow-sm disabled:cursor-not-allowed disabled:border-[#0d6efd] disabled:bg-[#9bbcf9] disabled:text-[white] ${leftJson && rightJson ? "bg-[#0d6efd]" : ""
               }`}
             onClick={handleCompare}
             disabled={!leftJson || !rightJson}
