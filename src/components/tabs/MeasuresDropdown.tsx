@@ -352,6 +352,11 @@ const MeasuresDropdown: React.FC<Props> = ({
                     </li>
 
                     <li>
+                      <strong>Description: </strong>
+                      <span>{measure.description ?? "--"}</span>
+                    </li>
+
+                    <li>
                       <strong>Weight: </strong> The measure contributed a weight of{" "}
                       <strong>
                         <span

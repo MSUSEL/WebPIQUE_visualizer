@@ -12,6 +12,7 @@ import { DiffHints } from "../../Utilities/fileDiff";
 
 import FindingTab from "../tabs/FindingsTab";
 import MeasuresDropdown from "../tabs/MeasuresDropdown";
+import TreeVisual from "../tabs/TreeVisual";
 
 type ScoresType = any;
 type PF = any;
@@ -345,9 +346,23 @@ const ProductFactorTabs: React.FC<Props> = ({
     return set;
   }, [aspectPFs]);
 
+  const aspectScore = useMemo(() => {
+    const list = (scores?.aspects ?? []) as { name: string; value: number }[];
+    const match = list.find((a) => String(a?.name) === String(aspectName));
+    return typeof match?.value === "number" ? match.value : null;
+  }, [scores, aspectName]);
+
   // controlled/uncontrolled tab selection
   const [localTab, setLocalTab] = useState<SecTabName>("PF");
   const tabName: SecTabName = controlledTab ?? localTab;
+  const treeTabIndex = 2;
+  const [tabIndex, setTabIndex] = useState<number>(tabName === "PF" ? 0 : 1);
+
+  useEffect(() => {
+    if (tabIndex === treeTabIndex) return;
+    const next = tabName === "PF" ? 0 : 1;
+    if (tabIndex !== next) setTabIndex(next);
+  }, [tabName, tabIndex]);
 
   // expanded PF selection (controlled/uncontrolled)
   const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
@@ -982,16 +997,27 @@ const ProductFactorTabs: React.FC<Props> = ({
     ),
   });
 
-  const nameToIndex = (name: SecTabName) => (name === "PF" ? 0 : 1);
-  const indexToName = (i: number): SecTabName =>
-    i === 0 ? "PF" : "VULN_OR_DIAG";
+  tabs.push({
+    label: "Hierarchical Tree View",
+    content: (
+      <TreeVisual
+        aspectName={aspectName}
+        aspectPFs={aspectPFs}
+        aspectPfIdSet={aspectPfIdSet}
+        aspectScore={aspectScore}
+        relational={relational}
+      />
+    ),
+  });
 
   return (
     <MuiTabs
       tabs={tabs}
-      value={nameToIndex(tabName)}
+      value={tabIndex}
       onChange={(i) => {
-        const next = indexToName(i);
+        setTabIndex(i);
+        if (i === treeTabIndex) return;
+        const next: SecTabName = i === 0 ? "PF" : "VULN_OR_DIAG";
         if (controlledTab === undefined) setLocalTab(next);
         onTabChange?.(next);
       }}
