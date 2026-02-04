@@ -41,7 +41,7 @@ pages:
   script:
     - npm ci
     - VITE_BASE=./ npm run build
-    - mv dist public
+    - mv dist/* public/
   artifacts:
     paths:
       - public
