@@ -1,5 +1,6 @@
-﻿stages:
+stages:
   - audit
+  - deploy
 
 npm_audit:
   stage: audit
@@ -13,7 +14,7 @@ npm_audit:
       if [ "$AUDIT_EXIT" -ne 0 ]; then
         if [ -n "$GITLAB_TOKEN" ]; then
           ISSUE_TITLE="npm audit: moderate or higher vulnerabilities"
-          ISSUE_BODY="$(cat audit-report.txt)"
+          ISSUE_BODY="$(printf '@g81k698\n\n%s' "$(cat audit-report.txt)")"
           curl --fail --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
             --form "title=$ISSUE_TITLE" \
             --form "description=$ISSUE_BODY" \
@@ -30,3 +31,21 @@ npm_audit:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
+
+default:
+  image: ruby:3.2
+
+pages:
+  stage: deploy
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - gem install bundler
+    - bundle install
+    - bundle exec jekyll build -d public
+  artifacts:
+    paths:
+      - public
+  pages: true
+
