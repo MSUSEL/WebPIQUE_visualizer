@@ -40,7 +40,8 @@ pages:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - npm ci
-    - VITE_BASE=/$CI_PROJECT_PATH/ npm run build
+    - echo "CI_PAGES_URL=$CI_PAGES_URL"
+    - VITE_BASE="${CI_PAGES_URL%/}/" npm run build
     - mv dist public
   artifacts:
     paths:
