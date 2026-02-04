@@ -32,20 +32,17 @@ npm_audit:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
 
-default:
-  image: ruby:3.2
-
 pages:
   stage: deploy
+  image: node:20
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - gem install bundler
-    - bundle install
-    - bundle exec jekyll build -d public
+    - npm ci
+    - npm run build
+    - mv dist public
   artifacts:
     paths:
       - public
   pages: true
-
