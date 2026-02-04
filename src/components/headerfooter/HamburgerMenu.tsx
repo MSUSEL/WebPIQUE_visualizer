@@ -40,7 +40,7 @@ const HamburgerMenu: React.FC = () => {
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  // --- helper: close menu + hard navigation ---
+  // --- helper: close menu + in-app navigation ---
   const hardNavigate = (path: string) => {
     setOpen(false);
     setShowCompareSubmenu(false);
@@ -48,7 +48,7 @@ const HamburgerMenu: React.FC = () => {
     setLeftJson(null);
     setRightJson(null);
 
-    window.location.assign(path);
+    navigate(path, { replace: true });
   };
 
   const softNavigate = (path: string, state?: Record<string, unknown>) => {
