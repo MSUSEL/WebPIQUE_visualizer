@@ -1,5 +1,5 @@
 // project page
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProjectSidebar, {
   Project,
 } from "../components/projectPage/ProjectSidebar";
@@ -17,6 +17,13 @@ import CompareComponent from "../components/nonProject/CompareComponent";
 
 // helper for compressed file load (wrapper we pass through)
 type UploadPayload = { filename: string; data: any };
+type ViewerPayload =
+  | { mode: "single"; file?: UploadPayload }
+  | { mode: "compare"; file1?: UploadPayload; file2?: UploadPayload };
+const sameStringArray = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+const sameUpload = (a?: UploadPayload, b?: UploadPayload) =>
+  a?.filename === b?.filename && a?.data === b?.data;
 
 // ----- localStorage keys -----
 const PROJECTS_KEY = "wp_projects";
@@ -215,6 +222,40 @@ export default function ProjectView() {
     });
   };
 
+  const handleScores = useCallback(
+    (pid: string, scores: ProjectFileScore[]) => {
+      setFilesByProject((prev) => {
+        if (prev[pid] === scores) return prev;
+        return { ...prev, [pid]: scores };
+      });
+    },
+    []
+  );
+
+  const handleSelectionChange = useCallback((ids: string[]) => {
+    setSelectedIds((prev) => (sameStringArray(prev, ids) ? prev : ids));
+  }, []);
+
+  const handleViewerPayload = useCallback((v: ViewerPayload) => {
+    if (v.mode === "single") {
+      setComparePayload((prev) => (prev === undefined ? prev : undefined));
+      setSinglePayload((prev) => (sameUpload(prev, v.file) ? prev : v.file));
+      return;
+    }
+
+    setSinglePayload((prev) => (prev === undefined ? prev : undefined));
+    setComparePayload((prev) => {
+      const next = { file1: v.file1, file2: v.file2 };
+      if (
+        sameUpload(prev?.file1, next.file1) &&
+        sameUpload(prev?.file2, next.file2)
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
   // ---------- render ----------
   return (
     <div className="flex flex-1 min-h-0">
@@ -261,25 +302,9 @@ export default function ProjectView() {
                     projectId={activeProjectId}
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
-                    onScores={(pid, scores) =>
-                      setFilesByProject((prev) => ({
-                        ...prev,
-                        [pid]: scores,
-                      }))
-                    }
-                    onSelectionChange={setSelectedIds}
-                    onViewerPayload={(v) => {
-                      if (v.mode === "single") {
-                        setComparePayload(undefined);
-                        setSinglePayload(v.file);
-                      } else {
-                        setSinglePayload(undefined);
-                        setComparePayload({
-                          file1: v.file1,
-                          file2: v.file2,
-                        });
-                      }
-                    }}
+                    onScores={handleScores}
+                    onSelectionChange={handleSelectionChange}
+                    onViewerPayload={handleViewerPayload}
                   />
 
                   {/* Add File + Visualize buttons live under the file box */}

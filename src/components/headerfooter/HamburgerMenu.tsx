@@ -40,24 +40,18 @@ const HamburgerMenu: React.FC = () => {
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
-  // --- helper: close menu + in-app navigation ---
-  const hardNavigate = (path: string) => {
+  // --- helper: close menu state ---
+  const closeMenuState = () => {
     setOpen(false);
     setShowCompareSubmenu(false);
     setShowLogin(false);
     setLeftJson(null);
     setRightJson(null);
-
-    navigate(path, { replace: true });
   };
 
-  const softNavigate = (path: string, state?: Record<string, unknown>) => {
-    setOpen(false);
-    setShowCompareSubmenu(false);
-    setShowLogin(false);
-    setLeftJson(null);
-    setRightJson(null);
-
+  // --- single route transition helper ---
+  const routeTo = (path: string, state?: Record<string, unknown>) => {
+    closeMenuState();
     navigate(path, { state });
   };
 
@@ -127,13 +121,12 @@ const HamburgerMenu: React.FC = () => {
       storedIdb = false;
     }
     if (location.pathname === "/visualizer") {
-      softNavigate("/visualizer", { jsonData: payload.data });
+      routeTo("/visualizer", { jsonData: payload.data });
     } else {
-      if (storedLocal || storedIdb) {
-        hardNavigate("/visualizer");
-      } else {
-        softNavigate("/visualizer", { jsonData: payload.data });
-      }
+      routeTo(
+        "/visualizer",
+        storedLocal || storedIdb ? undefined : { jsonData: payload.data }
+      );
     }
   };
 
@@ -183,11 +176,7 @@ const HamburgerMenu: React.FC = () => {
     } catch {
       /* ignore */
     }
-    if (location.pathname !== "/compare" && (storedSession || storedLocal)) {
-      hardNavigate("/compare");
-      return;
-    }
-    softNavigate("/compare", {
+    routeTo("/compare", {
       file1: payload.file1,
       file2: payload.file2,
       ts: Date.now(),
@@ -267,7 +256,7 @@ const HamburgerMenu: React.FC = () => {
           <div
             className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
-              hardNavigate("/");
+              routeTo("/");
             }}
           >
             <span>Home</span>
@@ -308,7 +297,7 @@ const HamburgerMenu: React.FC = () => {
           <div
             className="flex cursor-pointer items-center justify-between rounded-md px-2 py-2 text-[16px] text-[#333] hover:bg-[#f2f2f2]"
             onClick={() => {
-              hardNavigate("/projects");
+              routeTo("/projects");
             }}
           >
             <span>Project</span>

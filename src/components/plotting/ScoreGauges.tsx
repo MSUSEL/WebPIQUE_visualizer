@@ -15,70 +15,77 @@ interface GaugeProps {
   onClick?: () => void;
 }
 
-const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => (
-  <div
-    className={`flex flex-col items-center text-center ${
-      onClick ? "cursor-pointer" : "cursor-default"
-    }`}
-    onClick={onClick}
-  >
-    <h3
-      className={`-mb-5 ${
-        title === "TQI Score" ? "text-[1.75rem]" : "text-[1.25rem]"
-      }`}
-    >
-      {title}
-    </h3>
-    <GaugeComponent
-      arc={{
-        nbSubArcs: 150,
-        colorArray: ["#EA4228", "#F5CD19", "#5BE12C"],
-        width: 0.5,
-        padding: 0.003,
-        subArcs: [
-          {
-            limit: 0.5,
-            color: "#EA4228",
-            showTick: false,
-          },
-          {
-            limit: 0.6,
-            color: "#F58B19",
-            showTick: false,
-          },
-          {
-            limit: 0.8,
-            color: "#F5CD19",
-            showTick: false,
-          },
-          {
-            limit: 1,
-            color: "#5BE12C",
-            showTick: true,
-          },
-        ],
-      }}
-      value={value}
-      maxValue={1}
-      labels={{
-        valueLabel: { hide: true },
-        tickLabels: {
-          defaultTickValueConfig: {
-            style: { fill: "#ffffff", fontSize: 18 },
-          },
-        },
-      }}
-      style={{ width: 220, height: 140, overflow: "visible" }}
-    />
+const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => {
+  const isTqi = title === "TQI Score";
+
+  return (
     <div
-      className={
-        title === "TQI Score" ? "text-base" : "mt-[-20px] text-[17px]"
-      }
+      className={`flex flex-col items-center text-center ${onClick ? "cursor-pointer" : "cursor-default"
+        }`}
+      onClick={onClick}
     >
-      Current score: {value.toFixed(4)}
+      <h3
+        className={`${isTqi
+            ? "mb-2 text-[1.75rem] leading-tight"
+            : "mb-1 min-h-[2.5rem] text-[1.35rem] leading-tight"
+          }`}
+      >
+        {title}
+      </h3>
+      <GaugeComponent
+        arc={{
+          nbSubArcs: 150,
+          colorArray: ["#EA4228", "#F5CD19", "#5BE12C"],
+          width: 0.5,
+          padding: 0.003,
+          subArcs: [
+            {
+              limit: 0.5,
+              color: "#EA4228",
+              showTick: false,
+            },
+            {
+              limit: 0.6,
+              color: "#F58B19",
+              showTick: false,
+            },
+            {
+              limit: 0.8,
+              color: "#F5CD19",
+              showTick: false,
+            },
+            {
+              limit: 1,
+              color: "#5BE12C",
+              showTick: true,
+            },
+          ],
+        }}
+        value={value}
+        maxValue={1}
+        labels={{
+          valueLabel: { hide: true },
+          tickLabels: {
+            defaultTickValueConfig: {
+              style: {
+                fill: "#ffffff",
+                fontSize: isTqi ? 18 : 14,
+              },
+            },
+          },
+        }}
+        style={{
+          width: isTqi ? 220 : 200,
+          height: isTqi ? 140 : 95,
+          overflow: "visible",
+        }}
+      />
+      <div className={isTqi ? "mt-2 text-base" : "mt-1 text-[17px]"}>
+        Current score: {value.toFixed(4)}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ScoreGauges: React.FC<ScoreGaugesProps> = ({
   scores,
@@ -107,11 +114,10 @@ const ScoreGauges: React.FC<ScoreGaugesProps> = ({
 
             return (
               <div
-                className={`flex flex-col items-center overflow-visible rounded-lg border border-[rgb(78,78,78)] bg-[#3d90b7] p-[0.8rem] text-center text-white transition-transform ${
-                  isActive
+                className={`flex w-[240px] flex-col items-center justify-between overflow-visible rounded-lg border border-[rgb(78,78,78)] bg-[#3d90b7] px-[1rem] py-[0.55rem] text-center text-white transition-transform ${isActive
                     ? "scale-[0.9] outline outline-2 outline-black outline-offset-2 shadow-[0_0_0_3px_rgba(0,0,0,0.4),0_8px_16px_rgba(0,0,0,0.35)] hover:scale-[0.95]"
                     : "scale-[0.8] hover:scale-[0.85]"
-                }`}
+                  }`}
                 key={aspect.name}
               >
                 <GaugeDisplay
