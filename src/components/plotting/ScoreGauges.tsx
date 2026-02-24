@@ -12,10 +12,11 @@ interface ScoreGaugesProps {
 interface GaugeProps {
   title: string;
   value: number;
+  weight?: number;
   onClick?: () => void;
 }
 
-const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => {
+const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, weight, onClick }) => {
   const isTqi = title === "TQI Score";
 
   return (
@@ -26,8 +27,8 @@ const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => {
     >
       <h3
         className={`${isTqi
-            ? "mb-2 text-[1.75rem] leading-tight"
-            : "mb-1 min-h-[2.5rem] text-[1.35rem] leading-tight"
+          ? "mb-2 text-[1.75rem] leading-tight"
+          : "mb-1 min-h-[2.5rem] text-[1.35rem] leading-tight"
           }`}
       >
         {title}
@@ -81,8 +82,11 @@ const GaugeDisplay: React.FC<GaugeProps> = ({ title, value, onClick }) => {
         }}
       />
       <div className={isTqi ? "mt-2 text-base" : "mt-1 text-[17px]"}>
-        Current score: {value.toFixed(4)}
+        Score: {value.toFixed(4)}
       </div>
+      {!isTqi && typeof weight === "number" && (
+        <div className="text-[16px]">Weight: {weight.toFixed(4)}</div>
+      )}
     </div>
   );
 };
@@ -115,8 +119,8 @@ const ScoreGauges: React.FC<ScoreGaugesProps> = ({
             return (
               <div
                 className={`flex w-[240px] flex-col items-center justify-between overflow-visible rounded-lg border border-[rgb(78,78,78)] bg-[#3d90b7] px-[1rem] py-[0.55rem] text-center text-white transition-transform ${isActive
-                    ? "scale-[0.9] outline outline-2 outline-black outline-offset-2 shadow-[0_0_0_3px_rgba(0,0,0,0.4),0_8px_16px_rgba(0,0,0,0.35)] hover:scale-[0.95]"
-                    : "scale-[0.8] hover:scale-[0.85]"
+                  ? "scale-[0.9] outline outline-2 outline-black outline-offset-2 shadow-[0_0_0_3px_rgba(0,0,0,0.4),0_8px_16px_rgba(0,0,0,0.35)] hover:scale-[0.95]"
+                  : "scale-[0.8] hover:scale-[0.85]"
                   }`}
                 key={aspect.name}
               >
@@ -124,6 +128,7 @@ const ScoreGauges: React.FC<ScoreGaugesProps> = ({
                   key={aspect.name}
                   title={aspect.name}
                   value={aspect.value}
+                  weight={aspect.weight}
                   onClick={() => onAspectClick?.(aspect.name)}
                 />
               </div>

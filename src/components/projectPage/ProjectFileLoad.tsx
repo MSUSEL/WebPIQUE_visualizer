@@ -475,11 +475,10 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
-                className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${
-                  mode === "single"
+                className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${mode === "single"
                     ? "border-black bg-black font-semibold text-white"
                     : "border-[#d1d5db] bg-[#f9fafb] text-[#111827]"
-                }`}
+                  }`}
                 onClick={() =>
                   onViewModeChange
                     ? onViewModeChange("single")
@@ -490,11 +489,10 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
               </button>
               <button
                 type="button"
-                className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${
-                  mode === "compare"
+                className={`rounded-[10px] border px-3 py-1.5 text-[0.95rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(96,165,250,0.45)] ${mode === "compare"
                     ? "border-black bg-black font-semibold text-white"
                     : "border-[#d1d5db] bg-[#f9fafb] text-[#111827]"
-                }`}
+                  }`}
                 onClick={() =>
                   onViewModeChange
                     ? onViewModeChange("compare")
@@ -514,13 +512,13 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
 
           <hr />
 
-        {displayList.length === 0 ? (
-          <div className="text-[#6b7280]">No files loaded.</div>
-        ) : (
-          <ul
-            className="m-0 list-none p-0 grid grid-cols-2 gap-x-8 gap-y-1"
-          >
-            {displayList.map((s) => {
+          {displayList.length === 0 ? (
+            <div className="text-[#6b7280]">No files loaded.</div>
+          ) : (
+            <ul
+              className="m-0 list-none p-0 grid grid-cols-2 gap-x-8 gap-y-1"
+            >
+              {displayList.map((s) => {
                 const isSel = selected.has(s.id);
                 const base = s.fileName.replace(/\.json$/i, "");
                 const label =
@@ -550,14 +548,6 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
                       {label}
                     </span>
 
-                    {s.needsRaw && (
-                      <span
-                        title="Compressed data missing — re-import this file once."
-                        className="ml-1.5 text-[#b45309]"
-                      >
-                        (re-import)
-                      </span>
-                    )}
 
                     {/* CHANGE (pencil) */}
                     <button
@@ -593,16 +583,16 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
                     </button>
                   </li>
                 );
-            })}
-          </ul>
-        )}
-        <div className="mt-2 text-left text-[13px] text-[#6b7280]">
-          {scores.length} / {MAX_FILES} files loaded
+              })}
+            </ul>
+          )}
+          <div className="mt-2 text-left text-[13px] text-[#6b7280]">
+            {scores.length} / {MAX_FILES} files loaded
+          </div>
         </div>
-      </div>
-    </section>
-  );
-}
+      </section>
+    );
+  }
 );
 
 ProjectFileLoad.displayName = "ProjectFileLoad";

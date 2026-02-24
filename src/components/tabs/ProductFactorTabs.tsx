@@ -108,6 +108,7 @@ const dedupePFs = <
     measures?: any[];
     description?: string;
     value?: number;
+    weight?: number;
   }
 >(
   list: T[]
@@ -134,6 +135,11 @@ const dedupePFs = <
     if (!existing.name && pf.name) existing.name = pf.name;
     if (!existing.description && (pf as any)?.description)
       (existing as any).description = (pf as any).description;
+    if (
+      typeof (existing as any).weight !== "number" &&
+      typeof (pf as any)?.weight === "number"
+    )
+      (existing as any).weight = (pf as any).weight;
 
     if (typeof existing.value !== "number" && typeof (pf as any)?.value === "number")
       (existing as any).value = (pf as any).value;
@@ -350,6 +356,16 @@ const ProductFactorTabs: React.FC<Props> = ({
     const list = (scores?.aspects ?? []) as { name: string; value: number }[];
     const match = list.find((a) => String(a?.name) === String(aspectName));
     return typeof match?.value === "number" ? match.value : null;
+  }, [scores, aspectName]);
+
+  const aspectWeight = useMemo(() => {
+    const list = (scores?.aspects ?? []) as {
+      name: string;
+      value: number;
+      weight?: number;
+    }[];
+    const match = list.find((a) => String(a?.name) === String(aspectName));
+    return typeof match?.weight === "number" ? match.weight : null;
   }, [scores, aspectName]);
 
   // controlled/uncontrolled tab selection
@@ -920,6 +936,12 @@ const ProductFactorTabs: React.FC<Props> = ({
                   </li>
                 )}
 
+                {typeof pf?.weight === "number" && (
+                  <li>
+                    <strong>Weight:</strong> {Number(pf.weight).toFixed(4)}
+                  </li>
+                )}
+
                 <li>
                   <strong>Benchmark size: </strong>
                   {(() => {
@@ -1005,6 +1027,7 @@ const ProductFactorTabs: React.FC<Props> = ({
         aspectPFs={aspectPFs}
         aspectPfIdSet={aspectPfIdSet}
         aspectScore={aspectScore}
+        aspectWeight={aspectWeight}
         relational={relational}
       />
     ),

@@ -261,6 +261,7 @@ export interface CVEItem {
 export interface ProductFactor {
   name: string;
   value: number;
+  weight?: number;
   description?: string;
   type?: string;
   aspect?: string;
@@ -282,7 +283,7 @@ export interface VulnerabilitySummary {
 
 export interface ParsedScore {
   tqiScore: number;
-  aspects: { name: string; value: number }[];
+  aspects: { name: string; value: number; weight?: number }[];
   productFactorsByAspect: ProductFactorsByAspect;
   vulnerabilitySummary?: VulnerabilitySummary;
   cweProductFactors?: ProductFactor[];
@@ -299,6 +300,7 @@ export function parsePIQUEJSON(json: any): {
 } {
   const tqiRaw = json.factors?.tqi;
   const tqiNode = tqiRaw ? Object.values(tqiRaw)[0] : null;
+  const tqiWeights = ((tqiNode as any)?.weights ?? {}) as Record<string, number>;
   const qualityAspectsRaw = json.factors?.quality_aspects || {};
   const productFactorsRaw = json.factors?.product_factors || {};
 
@@ -313,8 +315,23 @@ export function parsePIQUEJSON(json: any): {
     ([aspectName, aspectData]: any) => ({
       name: aspectName,
       value: typeof aspectData?.value === "number" ? aspectData.value : 0,
+      weight: Number(
+        tqiWeights?.[aspectName] ??
+          tqiWeights?.[String(aspectData?.name ?? "")] ??
+          0
+      ),
     })
   );
+
+  const pfWeightByName = new Map<string, number>();
+  for (const [, qaData] of Object.entries(qualityAspectsRaw as Record<string, any>)) {
+    const qaWeights = ((qaData as any)?.weights ?? {}) as Record<string, number>;
+    for (const [pfName, pfWeight] of Object.entries(qaWeights)) {
+      if (!pfWeightByName.has(String(pfName))) {
+        pfWeightByName.set(String(pfName), Number(pfWeight ?? 0));
+      }
+    }
+  }
 
   // Product factors per aspect (full: children; compact: weights)
   const productFactorsByAspect: ProductFactorsByAspect = {};
@@ -349,6 +366,11 @@ export function parsePIQUEJSON(json: any): {
       pfList.push({
         name: String(pfData?.name ?? pfKey),
         value: Number(pfData?.value ?? 0),
+        weight: Number(
+          (aspect.weights ?? {})[pfKey] ??
+            (aspect.weights ?? {})[String(pfData?.name ?? "")] ??
+            0
+        ),
         description: pfData?.description ?? "",
         measures: [],
         cves: [],
@@ -450,6 +472,11 @@ export function parsePIQUEJSON(json: any): {
     cweProductFactors.push({
       name: key,
       value: Number(pfData?.value ?? 0),
+      weight: Number(
+        pfWeightByName.get(String(key)) ??
+          pfWeightByName.get(String(pfData?.name ?? "")) ??
+          0
+      ),
       description: pfData?.description ?? "",
       measures,
       type: "CWE",

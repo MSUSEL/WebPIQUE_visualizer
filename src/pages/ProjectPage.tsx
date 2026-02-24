@@ -14,6 +14,9 @@ import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 import ModalPopout from "../components/projectPage/ModalPopout";
 import SingleFileComponent from "../components/nonProject/SingleFileComponent";
 import CompareComponent from "../components/nonProject/CompareComponent";
+import { fetchRecentRepoJsonFiles } from "../Utilities/RepoAuto";
+import { parseTQIQAScores } from "../Utilities/TQIQAScoreParser";
+import LZString from "lz-string";
 
 // helper for compressed file load (wrapper we pass through)
 type UploadPayload = { filename: string; data: any };
@@ -24,6 +27,20 @@ const sameStringArray = (a: string[], b: string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i]);
 const sameUpload = (a?: UploadPayload, b?: UploadPayload) =>
   a?.filename === b?.filename && a?.data === b?.data;
+const normalizeAspects = (raw: any) => {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr.map((a: any) => {
+    if (Array.isArray(a))
+      return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
+    if (a && typeof a === "object") {
+      const name = a.name ?? a.aspect ?? a.id ?? "";
+      const value = a.value ?? a.score ?? a.val ?? NaN;
+      return { name: String(name), value: Number(value) };
+    }
+    if (typeof a === "string") return { name: a, value: NaN };
+    return { name: "", value: Number(a) };
+  });
+};
 
 // ----- localStorage keys -----
 const PROJECTS_KEY = "wp_projects";
@@ -38,6 +55,8 @@ export default function ProjectView() {
     Record<string, ProjectFileScore[]>
   >({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectRefreshNonce, setProjectRefreshNonce] = useState(0);
+  const [refreshStatus, setRefreshStatus] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
 
   // selection for plot + viewers
@@ -62,7 +81,20 @@ export default function ProjectView() {
     try {
       const storedProjects = localStorage.getItem(PROJECTS_KEY);
       if (storedProjects) {
-        const parsedProjects: Project[] = JSON.parse(storedProjects);
+        const parsedProjects: Project[] = (JSON.parse(storedProjects) as Project[]).map(
+          (p: any) => {
+            const rc = p?.repoConnection
+              ? {
+                  provider: p.repoConnection.provider,
+                  baseUrl: p.repoConnection.baseUrl,
+                  repoPath: p.repoConnection.repoPath,
+                  ref: p.repoConnection.ref,
+                  dir: p.repoConnection.dir,
+                }
+              : undefined;
+            return { id: p.id, name: p.name, repoConnection: rc };
+          }
+        );
         setProjects(parsedProjects);
 
         // load files for each project
@@ -139,6 +171,12 @@ export default function ProjectView() {
     setSelectedIds([]);
   }, [activeProjectId]);
 
+  const handleSelectProject = useCallback((id: string) => {
+    setActiveProjectId(id);
+    setProjectRefreshNonce((n) => n + 1);
+    setRefreshStatus("");
+  }, []);
+
 
   const activeFiles = useMemo(
     () => (activeProjectId ? filesByProject[activeProjectId] ?? [] : []),
@@ -148,9 +186,13 @@ export default function ProjectView() {
 
   // ---------- project operations ----------
 
-  function handleCreateProject(name: string, files: ProjectFileScore[]) {
+  function handleCreateProject(
+    name: string,
+    files: ProjectFileScore[],
+    repoConnection?: Project["repoConnection"]
+  ) {
     const id = crypto.randomUUID();
-    const proj: Project = { id, name };
+    const proj: Project = { id, name, repoConnection };
     const first12 = files.slice(0, 12);
 
     setProjects((prev) => {
@@ -175,6 +217,94 @@ export default function ProjectView() {
       /* ignore */
     }
   }
+
+  useEffect(() => {
+    if (!projectsLoaded || !activeProjectId) return;
+    const activeProject = projects.find((p) => p.id === activeProjectId);
+    const repoCfg = activeProject?.repoConnection;
+    if (!repoCfg) return;
+
+    let cancelled = false;
+    (async () => {
+      setRefreshStatus(`Refreshing files from ${repoCfg.provider}...`);
+      const fetchEntries = async (token?: string) =>
+        fetchRecentRepoJsonFiles({
+          ...repoCfg,
+          token,
+          maxFiles: MAX_FILES,
+        });
+
+      try {
+        let entries;
+        try {
+          entries = await fetchEntries();
+        } catch (e: any) {
+          const msg = String(e?.message ?? "");
+          const authErr =
+            /\((401|403)\)/.test(msg) ||
+            (repoCfg.provider === "github" && /\(404\)/.test(msg));
+          if (!authErr) throw e;
+
+          const token =
+            window.prompt(
+              "This repository appears to require a personal access token. Enter token to refresh files:",
+              ""
+            ) ?? "";
+          if (!token.trim()) throw e;
+          entries = await fetchEntries(token.trim());
+        }
+        if (cancelled) return;
+
+        const nextFiles: ProjectFileScore[] = [];
+        for (const item of entries.slice(0, MAX_FILES)) {
+          const parsed: any = parseTQIQAScores(item.json);
+          const tqi: number | null =
+            parsed?.tqi ??
+            parsed?.tqiScore ??
+            parsed?.scores?.tqi ??
+            parsed?.scores?.tqiScore ??
+            null;
+          const aspects = normalizeAspects(
+            parsed?.aspects ?? parsed?.scores?.aspects ?? []
+          );
+          const fileMillis = Number(item.fileMillis) || Date.now();
+          const id = `${item.fileName}-${fileMillis}`;
+          const rawKey = `raw:${id}`;
+          try {
+            const comp = LZString.compressToUTF16(JSON.stringify(item.json));
+            localStorage.setItem(rawKey, comp);
+          } catch {
+            // ignore local storage failures
+          }
+          nextFiles.push({
+            id,
+            rawKey,
+            fileName: item.fileName,
+            fileDateISO: new Date(fileMillis).toISOString(),
+            tqi,
+            aspects,
+            needsRaw: false,
+          });
+        }
+
+        setFilesByProject((prev) => ({ ...prev, [activeProject.id]: nextFiles }));
+        setRefreshStatus(
+          `Refreshed ${nextFiles.length} file(s) from ${repoCfg.provider}.`
+        );
+      } catch (e) {
+        console.warn("Repo auto-refresh failed:", e);
+        setRefreshStatus(
+          `Repo refresh failed${
+            e instanceof Error && e.message ? `: ${e.message}` : "."
+          }`
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectsLoaded, activeProjectId, projects, projectRefreshNonce]);
 
   function handleRemoveProject(id: string) {
     if (
@@ -269,7 +399,7 @@ export default function ProjectView() {
             ])
           )}
           onAddProject={() => setCreateOpen(true)}
-          onSelectProject={setActiveProjectId}
+          onSelectProject={handleSelectProject}
           onRemoveProject={handleRemoveProject}
           onRenameProject={handleRenameProject}
       />
@@ -277,7 +407,9 @@ export default function ProjectView() {
       <CreateProjectDialog
           open={createOpen}
           onClose={() => setCreateOpen(false)}
-          onCreate={(name, files) => handleCreateProject(name, files)}
+          onCreate={(name, files, repoConnection) =>
+            handleCreateProject(name, files, repoConnection)
+          }
           defaultName={`Project ${projects.length + 1}`}
       />
 
@@ -292,6 +424,11 @@ export default function ProjectView() {
                       <strong>TQI &amp; Quality Aspect Score Tracker for{" "}
                         {projects.find((p) => p.id === activeProjectId)?.name}</strong>
                     </h2>
+                    {refreshStatus ? (
+                      <div className="mt-1 text-[14px] text-[#555]">
+                        {refreshStatus}
+                      </div>
+                    ) : null}
                   </header>
                   <TQIQAPlot files={activeFiles} selectedIds={selectedIds} />
                 </section>

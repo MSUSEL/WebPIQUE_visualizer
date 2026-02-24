@@ -1,8 +1,17 @@
 // project sidebar - allows user to create project and add files
 import CIcon from "@coreui/icons-react";
 import { cilListRich, cilPlus, cilTrash, cilPencil } from "@coreui/icons";
+import type { RepoProvider } from "../../Utilities/RepoAuto";
 
-export type Project = { id: string; name: string };
+export type RepoConnectionConfig = {
+  provider: RepoProvider;
+  baseUrl: string;
+  repoPath: string;
+  ref: string;
+  dir: string;
+};
+
+export type Project = { id: string; name: string; repoConnection?: RepoConnectionConfig };
 export type ProjectFileLite = { fileName: string };
 
 export default function ProjectSidebar({

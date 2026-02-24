@@ -1,18 +1,17 @@
 // create project and load file dialog box
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import LZString from "lz-string"; // NEW: for compressed storage
+import LZString from "lz-string";
 import type { ProjectFileScore, AspectItem } from "./ProjectFileLoad";
+import { fetchRecentRepoJsonFiles, type RepoProvider } from "../../Utilities/RepoAuto";
+import type { RepoConnectionConfig } from "./ProjectSidebar";
 
 const MAX_FILES = 12;
 
-// --- small helpers ----------------------------------------------------------
 const isObj = (x: any) => x && typeof x === "object" && !Array.isArray(x);
 
-// accept a few shapes; adjust if your schema is stricter
 const validateLikelySchema = (root: any) => {
   if (!isObj(root)) return false;
-  // accept if it has "factors" or "measures" or something that looks like a score object
   if (isObj(root.factors) || isObj(root.measures)) return true;
   if (isObj(root.scores)) return true;
   return false;
@@ -33,8 +32,6 @@ const normalizeAspects = (raw: any): AspectItem[] => {
   });
 };
 
-// ---------------------------------------------------------------------------
-
 export default function CreateProjectDialog({
   open,
   onClose,
@@ -43,7 +40,11 @@ export default function CreateProjectDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, files: ProjectFileScore[]) => void;
+  onCreate: (
+    name: string,
+    files: ProjectFileScore[],
+    repoConnection?: RepoConnectionConfig
+  ) => void;
   defaultName?: string;
 }) {
   const [name, setName] = useState("");
@@ -53,12 +54,30 @@ export default function CreateProjectDialog({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // always reseed name on open; clear when closed so the default increments every time
+  const [repoPanelOpen, setRepoPanelOpen] = useState(false);
+  const [repoProvider, setRepoProvider] = useState<RepoProvider>("gitlab");
+  const [repoBaseUrl, setRepoBaseUrl] = useState("https://gitlab.com");
+  const [repoPath, setRepoPath] = useState("");
+  const [repoRef, setRepoRef] = useState("main");
+  const [repoDir, setRepoDir] = useState("");
+  const [repoToken, setRepoToken] = useState("");
+  const [repoStatus, setRepoStatus] = useState("");
+  const [repoConnected, setRepoConnected] = useState(false);
+
   useEffect(() => {
     if (open) setName(defaultName ?? "Project 1");
     else {
       setName("");
-      setFiles([]); // clear any staged files when closing
+      setFiles([]);
+      setRepoPanelOpen(false);
+      setRepoProvider("gitlab");
+      setRepoBaseUrl("https://gitlab.com");
+      setRepoPath("");
+      setRepoRef("main");
+      setRepoDir("");
+      setRepoToken("");
+      setRepoStatus("");
+      setRepoConnected(false);
     }
   }, [open, defaultName]);
 
@@ -67,14 +86,11 @@ export default function CreateProjectDialog({
     [files.length]
   );
 
-  // core loader: validates, parses, caps at 12, and de-dupes by fileName
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList) return;
-
-    // Start loading immediately so the bar can mount even if the import is slow
+  async function upsertParsedEntries(
+    entries: { fileName: string; fileMillis: number; json: any }[]
+  ) {
     setLoading(true);
     setProgress(0);
-    // Give React a frame to paint the bar before doing any heavy work
     await new Promise(requestAnimationFrame);
 
     let parseTQIQAScores: any;
@@ -87,57 +103,55 @@ export default function CreateProjectDialog({
       return;
     }
 
-    const incoming = Array.from(fileList);
-    const startCount = files.length;
-    const roomLeft = Math.max(0, MAX_FILES - startCount);
-    if (incoming.length > roomLeft) {
+    const roomLeft = Math.max(0, MAX_FILES - files.length);
+    if (entries.length > roomLeft) {
       alert(
         `You can add up to ${MAX_FILES} files per project. Only the first ${roomLeft} will be added.`
       );
     }
-    const trimmed = incoming.slice(0, roomLeft);
 
+    const trimmed = entries.slice(0, roomLeft);
     const next: ProjectFileScore[] = [...files];
 
     try {
       const total = trimmed.length || 1;
       let processed = 0;
 
-      for (const f of trimmed) {
-        if (!f.name.toLowerCase().endsWith(".json")) {
-          alert(`Only JSON files are allowed. Skipped: ${f.name}`);
+      for (const item of trimmed) {
+        if (!item.fileName.toLowerCase().endsWith(".json")) {
+          alert(`Only JSON files are allowed. Skipped: ${item.fileName}`);
+          processed += 1;
+          setProgress(processed / total);
+          await new Promise(requestAnimationFrame);
           continue;
         }
 
-        let json: any;
-        try {
-          json = JSON.parse(await f.text());
-        } catch {
-          alert(`Invalid JSON: ${f.name}`);
-          continue;
-        }
-
-        if (!validateLikelySchema(json)) {
+        if (!validateLikelySchema(item.json)) {
           alert(
-            `"${f.name}" doesn’t match the supported schema. Please refer to the documentation.`
+            `"${item.fileName}" does not match the supported schema. Please refer to the documentation.`
           );
+          processed += 1;
+          setProgress(processed / total);
+          await new Promise(requestAnimationFrame);
           continue;
         }
 
-        // --- Light parser for top plot ---
-        const fileMillis = f.lastModified;
-        const id = `${f.name}-${fileMillis}`;
+        const fileMillis = Number(item.fileMillis) || Date.now();
+        const id = `${item.fileName}-${fileMillis}`;
         const rawKey = `raw:${id}`;
 
-        // light parser only
         let parsed: any;
         try {
-          parsed = parseTQIQAScores(json);
+          parsed = parseTQIQAScores(item.json);
         } catch (err) {
           console.error("parseTQIQAScores error", err);
-          alert(`Could not parse scores from ${f.name}`);
+          alert(`Could not parse scores from ${item.fileName}`);
+          processed += 1;
+          setProgress(processed / total);
+          await new Promise(requestAnimationFrame);
           continue;
         }
+
         const tqi: number | null =
           parsed?.tqi ??
           parsed?.tqiScore ??
@@ -149,30 +163,28 @@ export default function CreateProjectDialog({
           parsed?.aspects ?? parsed?.scores?.aspects ?? []
         );
 
-        // write compressed raw once
         try {
-          const txt = JSON.stringify(json);
+          const txt = JSON.stringify(item.json);
           const comp = LZString.compressToUTF16(txt);
           localStorage.setItem(rawKey, comp);
         } catch (e) {
-          console.warn("Failed to persist compressed raw for", f.name, e);
+          console.warn("Failed to persist compressed raw for", item.fileName, e);
         }
 
-        // create/update entry
         const entry: ProjectFileScore = {
           id,
           rawKey,
-          fileName: f.name,
+          fileName: item.fileName,
           fileDateISO: new Date(fileMillis).toISOString(),
           tqi,
           aspects,
           needsRaw: false,
         };
-        const idx = next.findIndex((x) => x.fileName === f.name);
+
+        const idx = next.findIndex((x) => x.fileName === item.fileName);
         if (idx >= 0) next[idx] = entry;
         else next.push(entry);
 
-        // ---- progress & yield so the bar paints ----
         processed += 1;
         setProgress(processed / total);
         await new Promise(requestAnimationFrame);
@@ -184,6 +196,65 @@ export default function CreateProjectDialog({
     }
   }
 
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList) return;
+    const parsedEntries: { fileName: string; fileMillis: number; json: any }[] = [];
+
+    for (const f of Array.from(fileList)) {
+      if (!f.name.toLowerCase().endsWith(".json")) {
+        alert(`Only JSON files are allowed. Skipped: ${f.name}`);
+        continue;
+      }
+      try {
+        parsedEntries.push({
+          fileName: f.name,
+          fileMillis: f.lastModified,
+          json: JSON.parse(await f.text()),
+        });
+      } catch {
+        alert(`Invalid JSON: ${f.name}`);
+      }
+    }
+
+    await upsertParsedEntries(parsedEntries);
+  }
+
+  async function handleConnectRepo() {
+    setRepoStatus("");
+
+    try {
+      setLoading(true);
+      setProgress(0.02);
+      await new Promise(requestAnimationFrame);
+      const parsedEntries = await fetchRecentRepoJsonFiles({
+        provider: repoProvider,
+        repoPath,
+        baseUrl: repoBaseUrl,
+        ref: repoRef,
+        dir: repoDir,
+        token: repoToken,
+        maxFiles: MAX_FILES,
+        onProgress: setProgress,
+      });
+
+      setLoading(false);
+      setProgress(0);
+
+      await upsertParsedEntries(parsedEntries);
+      setRepoStatus(
+        `Fetched ${parsedEntries.length} file(s) from ${repoProvider}.`
+      );
+      setRepoConnected(true);
+    } catch (e: any) {
+      console.error(e);
+      setLoading(false);
+      setProgress(0);
+      setRepoStatus(e?.message ?? "Failed to connect to repository.");
+      alert(e?.message ?? "Failed to connect to repository.");
+      setRepoConnected(false);
+    }
+  }
+
   function removeFile(id: string) {
     setFiles((prev) => prev.filter((x) => x.id !== id));
   }
@@ -191,13 +262,22 @@ export default function CreateProjectDialog({
   function handleContinue() {
     const n = name.trim();
     if (!n || files.length === 0) return;
-    onCreate(n, files);
+    const repoConnection: RepoConnectionConfig | undefined =
+      repoConnected && repoPath.trim()
+        ? {
+            provider: repoProvider,
+            baseUrl: repoBaseUrl.trim(),
+            repoPath: repoPath.trim(),
+            ref: repoRef.trim() || "main",
+            dir: repoDir.trim(),
+          }
+        : undefined;
+    onCreate(n, files, repoConnection);
     onClose();
   }
 
   if (!open) return null;
 
-  // --- styles kept inline to avoid external CSS collisions ---
   const content = (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-[rgba(0,0,0,0.35)]"
@@ -207,7 +287,6 @@ export default function CreateProjectDialog({
         className="w-[560px] max-w-[92vw] rounded-[10px] bg-white p-5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="mb-3 flex items-center justify-between">
           <h3 className="m-0">Create Project</h3>
           <button
@@ -216,15 +295,12 @@ export default function CreateProjectDialog({
             className="cursor-pointer text-[18px] leading-none"
             title="Close"
           >
-            ✕
+            X
           </button>
         </div>
 
-        {/* Name input */}
         <label className="mb-3 block">
-          <div className="mb-1.5 text-[12px] opacity-80">
-            Project name
-          </div>
+          <div className="mb-1.5 text-[12px] opacity-80">Project name</div>
           <input
             type="text"
             value={name}
@@ -240,7 +316,6 @@ export default function CreateProjectDialog({
           />
         </label>
 
-        {/* File controls */}
         <div>
           <div className="flex items-center gap-3">
             <button
@@ -249,8 +324,124 @@ export default function CreateProjectDialog({
             >
               Browse files
             </button>
+            <button
+              className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3 py-2"
+              onClick={() => setRepoPanelOpen((v) => !v)}
+            >
+              {repoPanelOpen ? "Hide Repo Connect" : "Connect to Repo"}
+            </button>
             <div className="text-[12px] opacity-75">{fileCountLabel}</div>
           </div>
+
+          {repoPanelOpen && (
+            <div className="mt-3 rounded-lg border border-[#ddd] bg-[#fafafa] p-3">
+              <div className="mb-2 text-[13px] font-semibold">
+                Repository Source
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={repoProvider}
+                    onChange={(e) => {
+                      const next = e.target.value as "gitlab" | "github";
+                      setRepoProvider(next);
+                      setRepoConnected(false);
+                      setRepoStatus("");
+                      setRepoBaseUrl(
+                        next === "gitlab"
+                          ? "https://gitlab.com"
+                          : "https://api.github.com"
+                      );
+                    }}
+                    className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                  >
+                    <option value="gitlab">GitLab</option>
+                    <option value="github">GitHub</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={repoBaseUrl}
+                    onChange={(e) => {
+                      setRepoBaseUrl(e.target.value);
+                      setRepoConnected(false);
+                      setRepoStatus("");
+                    }}
+                    placeholder={
+                      repoProvider === "gitlab"
+                        ? "GitLab base URL"
+                        : "GitHub API base URL"
+                    }
+                    className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={repoPath}
+                  onChange={(e) => {
+                    setRepoPath(e.target.value);
+                    setRepoConnected(false);
+                    setRepoStatus("");
+                  }}
+                  placeholder={
+                    repoProvider === "gitlab"
+                      ? "Repo path or URL (group/subgroup/project)"
+                      : "Repo path or URL (owner/repo)"
+                  }
+                  className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={repoRef}
+                    onChange={(e) => {
+                      setRepoRef(e.target.value);
+                      setRepoConnected(false);
+                      setRepoStatus("");
+                    }}
+                    placeholder="Ref/branch (default: main)"
+                    className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                  />
+                  <input
+                    type="text"
+                    value={repoDir}
+                    onChange={(e) => {
+                      setRepoDir(e.target.value);
+                      setRepoConnected(false);
+                      setRepoStatus("");
+                    }}
+                    placeholder="Directory path (optional)"
+                    className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                  />
+                </div>
+                <input
+                  type="password"
+                  value={repoToken}
+                  onChange={(e) => {
+                    setRepoToken(e.target.value);
+                    setRepoConnected(false);
+                    setRepoStatus("");
+                  }}
+                  placeholder={
+                    repoProvider === "gitlab"
+                      ? "GitLab private token (optional)"
+                      : "GitHub token (optional, for private repos)"
+                  }
+                  className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                />
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  className="cursor-pointer rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[13px]"
+                  onClick={handleConnectRepo}
+                >
+                  Fetch Latest Files (up to 12)
+                </button>
+                {repoStatus ? (
+                  <div className="text-[12px] text-[#555]">{repoStatus}</div>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           <input
             ref={inputRef}
@@ -275,7 +466,6 @@ export default function CreateProjectDialog({
             Drag & drop up to {MAX_FILES} JSON files here
           </div>
 
-          {/* Loading bar */}
           {loading && (
             <div className="mt-3">
               <div className="flex justify-between text-[12px] opacity-80">
@@ -285,7 +475,7 @@ export default function CreateProjectDialog({
               <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#eee]">
                 <div
                   style={{
-                    width: `${Math.max(2, progress * 100)}%`, // keep a small sliver visible at 0%
+                    width: `${Math.max(2, progress * 100)}%`,
                     height: "100%",
                     background: "#0d6efd",
                     transition: "width .2s linear",
@@ -295,7 +485,6 @@ export default function CreateProjectDialog({
             </div>
           )}
 
-          {/* Selected files list */}
           {files.length > 0 && (
             <ul className="mt-3 list-disc pl-[18px]">
               {files.map((f) => (
@@ -307,7 +496,7 @@ export default function CreateProjectDialog({
                     title="Remove"
                     className="cursor-pointer text-[16px] leading-none"
                   >
-                    ✕
+                    X
                   </button>
                 </li>
               ))}
@@ -315,7 +504,6 @@ export default function CreateProjectDialog({
           )}
         </div>
 
-        {/* Actions */}
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -335,8 +523,8 @@ export default function CreateProjectDialog({
               !name.trim()
                 ? "Enter a project name"
                 : files.length === 0
-                  ? "Add at least one file"
-                  : "Create project"
+                ? "Add at least one file"
+                : "Create project"
             }
           >
             Continue
@@ -346,7 +534,6 @@ export default function CreateProjectDialog({
     </div>
   );
 
-  // safe portal target
   const portalTarget =
     typeof document !== "undefined" && document.body ? document.body : null;
 

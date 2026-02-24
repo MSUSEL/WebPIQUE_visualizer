@@ -9,12 +9,14 @@ type Props = {
   aspectPFs: PF[];
   aspectPfIdSet: Set<string>;
   aspectScore?: number | null;
+  aspectWeight?: number | null;
   relational?: RelationalExtract;
 };
 
 type Node = {
   key: string;
   text: string;
+  subtext?: string;
   type: "qa" | "pf" | "measure" | "diagnostic";
 };
 
@@ -47,6 +49,7 @@ const TreeVisual: React.FC<Props> = ({
   aspectPFs,
   aspectPfIdSet,
   aspectScore,
+  aspectWeight,
   relational,
 }) => {
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -81,17 +84,38 @@ const TreeVisual: React.FC<Props> = ({
 
     const qaLabel = String(aspectName || "Quality Aspect");
     const qaKey = `qa:${qaLabel}`;
-    nodes.push({ key: qaKey, text: qaLabel, type: "qa" });
+    nodes.push({
+      key: qaKey,
+      text: qaLabel,
+      subtext:
+        typeof aspectWeight === "number"
+          ? `Weight: ${aspectWeight.toFixed(4)}`
+          : undefined,
+      type: "qa",
+    });
 
     const pfNames = new Set<string>();
+    const pfWeightByName = new Map<string, number | null>();
     (aspectPFs ?? []).forEach((pf) => {
       const name = String(pf?.name ?? pf?.id ?? "").trim();
-      if (name) pfNames.add(name);
+      if (!name) return;
+      pfNames.add(name);
+      pfWeightByName.set(
+        name,
+        typeof (pf as any)?.weight === "number" ? Number((pf as any).weight) : null
+      );
     });
     const pfList = Array.from(pfNames).sort((a, b) => a.localeCompare(b));
     pfList.forEach((name) => {
       const key = `pf:${name}`;
-      nodes.push({ key, text: name, type: "pf" });
+      const pfWeight = pfWeightByName.get(name);
+      nodes.push({
+        key,
+        text: name,
+        subtext:
+          typeof pfWeight === "number" ? `Weight: ${pfWeight.toFixed(4)}` : undefined,
+        type: "pf",
+      });
       links.push({ from: qaKey, to: key });
     });
 
@@ -140,8 +164,47 @@ const TreeVisual: React.FC<Props> = ({
     const measureList = Array.from(measureNames).sort((a, b) =>
       a.localeCompare(b)
     );
+
+    const pfNameById = new Map<string, string>(
+      (relational.productFactors ?? []).map((p) => [String(p.id), String(p.name)])
+    );
+    const measureWeightBitsByName = new Map<string, Set<string>>();
+    const addMeasureWeightBit = (measureName: string, bit: string) => {
+      if (!measureName || !bit) return;
+      const set = measureWeightBitsByName.get(measureName) ?? new Set<string>();
+      set.add(bit);
+      measureWeightBitsByName.set(measureName, set);
+    };
+    (aspectPFs ?? []).forEach((pf: any) => {
+      const pfName = String(pf?.name ?? pf?.id ?? "").trim();
+      (pf?.measures ?? []).forEach((m: any) => {
+        const measureName = String(m?.name ?? "").trim();
+        if (!measureName || !measureNames.has(measureName)) return;
+        if (typeof m?.weight !== "number") return;
+        addMeasureWeightBit(measureName, `${pfName}: ${Number(m.weight).toFixed(4)}`);
+      });
+    });
+    (relational.pfMeasures ?? []).forEach((e) => {
+      const pfId = String(e.pfId ?? "").trim();
+      const mid = String(e.measureId ?? "").trim();
+      if (!pfId || !mid || !aspectPfIdSet.has(pfId)) return;
+      if (typeof e.weight !== "number") return;
+      const measureName = measureLabelById.get(mid) ?? measureById.get(mid) ?? mid;
+      if (!measureName || !measureNames.has(measureName)) return;
+      const pfName = pfNameById.get(pfId) ?? pfId;
+      addMeasureWeightBit(measureName, `${pfName}: ${Number(e.weight).toFixed(4)}`);
+    });
+
     measureList.forEach((name) => {
-      nodes.push({ key: `m:${name}`, text: name, type: "measure" });
+      const bits = Array.from(measureWeightBitsByName.get(name) ?? []).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      nodes.push({
+        key: `m:${name}`,
+        text: name,
+        subtext: bits.length ? `Weight: ${bits.join(", ")}` : undefined,
+        type: "measure",
+      });
     });
 
     const pfIdsByName = new Map<string, Set<string>>();
@@ -252,7 +315,7 @@ const TreeVisual: React.FC<Props> = ({
     }
 
     return { nodes, links };
-  }, [aspectName, aspectPFs, aspectPfIdSet, relational]);
+  }, [aspectName, aspectPFs, aspectPfIdSet, aspectWeight, relational]);
 
   const parentsByKey = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -280,14 +343,25 @@ const TreeVisual: React.FC<Props> = ({
             `Score: ${
               typeof aspectScore === "number" ? aspectScore.toFixed(4) : "N/A"
             }`,
+            `Weight: ${
+              typeof aspectWeight === "number" ? aspectWeight.toFixed(4) : "N/A"
+            }`,
           ],
         };
       }
 
       if (type === "pf") {
-        const pf =
-          (relational.productFactors ?? []).find((p) => p.name === name) ??
-          (aspectPFs ?? []).find((p: any) => String(p?.name ?? "") === name);
+        const relPf =
+          (relational.productFactors ?? []).find((p) => p.name === name) ?? null;
+        const aspectPf =
+          (aspectPFs ?? []).find((p: any) => String(p?.name ?? "") === name) ?? null;
+        const pf = aspectPf ?? relPf;
+        const pfWeight =
+          typeof (aspectPf as any)?.weight === "number"
+            ? Number((aspectPf as any).weight)
+            : typeof (relPf as any)?.weight === "number"
+            ? Number((relPf as any).weight)
+            : null;
         return {
           title: "Product Factor",
           lines: [
@@ -296,6 +370,9 @@ const TreeVisual: React.FC<Props> = ({
               typeof (pf as any)?.value === "number"
                 ? Number((pf as any).value).toFixed(4)
                 : "N/A"
+            }`,
+            `Weight: ${
+              typeof pfWeight === "number" ? pfWeight.toFixed(4) : "N/A"
             }`,
             `Description: ${String((pf as any)?.description ?? "--")}`,
           ],
@@ -348,16 +425,16 @@ const TreeVisual: React.FC<Props> = ({
                 ? Number((measure as any).score).toFixed(4)
                 : "N/A"
             }`,
+            ...(weightLines.length || relWeights.length
+              ? [
+                  `Weight: ${(weightLines.length ? weightLines : relWeights).join(", ")}`,
+                ]
+              : ["Weight: N/A"]),
             ...(pfMeasure?.description || relationalMeasure?.description
               ? [
                   `Description: ${String(
                     (pfMeasure?.description ?? relationalMeasure?.description) || "--"
                   )}`,
-                ]
-              : []),
-            ...(weightLines.length || relWeights.length
-              ? [
-                  `Weight: ${(weightLines.length ? weightLines : relWeights).join(", ")}`,
                 ]
               : []),
           ],
@@ -455,6 +532,7 @@ const TreeVisual: React.FC<Props> = ({
     relational,
     aspectName,
     aspectScore,
+    aspectWeight,
     aspectPFs,
     parentsByKey,
   ]);
@@ -505,7 +583,11 @@ const TreeVisual: React.FC<Props> = ({
     data.nodes.forEach((n) => {
       const font =
         n.type === "qa" ? "700 13px Arial, sans-serif" : "600 12px Arial, sans-serif";
-      const lines = wrapText(n.text, nodeWidth - padX * 2, font);
+      const titleLines = wrapText(n.text, nodeWidth - padX * 2, font);
+      const subtitleLines = n.subtext
+        ? wrapText(n.subtext, nodeWidth - padX * 2, "500 11px Arial, sans-serif")
+        : [];
+      const lines = [...titleLines, ...subtitleLines];
       const height = padY * 2 + lines.length * lineHeight;
       sizes.set(n.key, { width: nodeWidth, height, lines });
     });
@@ -663,6 +745,8 @@ const TreeVisual: React.FC<Props> = ({
                           key={`${node.key}-line-${idx}`}
                           x={layout.nodeWidth / 2}
                           dy={idx === 0 ? 0 : layout.lineHeight}
+                          fontWeight={idx === 0 ? (node.type === "qa" ? 700 : 600) : 500}
+                          fontSize={idx === 0 ? 12 : 11}
                         >
                           {line}
                         </tspan>
