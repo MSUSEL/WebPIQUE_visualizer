@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:a11y": "playwright test e2e/accessibility.e2e.spec.ts",
     "test:integration": "vitest --run src/App.integration.test.tsx",
     "test:e2e:headed": "playwright test --headed"
   },
@@ -45,6 +46,7 @@
     "split-pane-react": "^0.1.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

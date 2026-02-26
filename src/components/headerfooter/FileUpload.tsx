@@ -107,7 +107,7 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
           if (e.key === "Enter" || e.key === " ") open();
         }}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps({ "aria-label": "Upload new JSON file" })} />
         New File Upload
       </div>
     );
@@ -116,7 +116,9 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
   if (variant === "compact") {
     return (
       <div className="flex items-center gap-2.5">
-        <input {...getInputProps()} />
+        <input
+          {...getInputProps({ "aria-label": "Upload JSON file for comparison" })}
+        />
         <span className="opacity-80">File:</span>
 
         {!fileName ? (
@@ -150,7 +152,7 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
       className={`relative z-[1] flex h-full w-full flex-1 items-center justify-center text-center transition-colors duration-200 ${isDragActive ? "bg-[#bebdbd]" : ""
         }`}
     >
-      <input {...getInputProps()} />
+      <input {...getInputProps({ "aria-label": "Upload WebPIQUE JSON file" })} />
       <div>
         {isDragActive ? (
           <p className="mb-2 text-[18px]">Drop the JSON file here...</p>
