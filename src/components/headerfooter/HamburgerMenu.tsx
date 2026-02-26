@@ -242,7 +242,12 @@ const HamburgerMenu: React.FC = () => {
   return (
     <div className="relative z-[3000]" ref={menuRef}>
       <div className="z-[1001] ml-[10px] flex h-full items-center justify-start">
-        <Hamburger toggled={isOpen} toggle={handleToggle} size={22} />
+        <Hamburger
+          toggled={isOpen}
+          toggle={handleToggle}
+          size={22}
+          label={isOpen ? "Close navigation menu" : "Open navigation menu"}
+        />
       </div>
 
       {isOpen && (
