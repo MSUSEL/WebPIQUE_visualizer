@@ -595,10 +595,12 @@ export default function CreateProjectDialog({
                               <span className="block">{candidate.fileName}</span>
                               <span className="block text-[#6b7280]">
                                 {candidate.filePath}
-                                {" | "}
-                                {candidate.fileMillis
-                                  ? new Date(candidate.fileMillis).toLocaleString()
-                                  : "Unknown date"}
+                              </span>
+                              <span className="block text-[#6b7280]">
+                                {candidate.details ??
+                                  (candidate.fileMillis
+                                    ? new Date(candidate.fileMillis).toLocaleString()
+                                    : "Unknown date")}
                               </span>
                             </span>
                           </label>

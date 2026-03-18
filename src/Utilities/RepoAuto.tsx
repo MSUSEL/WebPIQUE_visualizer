@@ -11,6 +11,7 @@ export type RepoAutoCandidate = {
   fileName: string;
   filePath: string;
   fileMillis: number;
+  details?: string;
 };
 
 export type RepoAutoOptions = {
@@ -46,9 +47,11 @@ type RemoteFile = {
   fileName: string;
   filePath: string;
   fileMillis: number;
+  details?: string;
   sha?: string;
   artifactJob?: string;
   artifactPath?: string;
+  artifactJobId?: number;
 };
 
 const cleanPath = (s: string) =>
@@ -361,42 +364,56 @@ async function listGitLabArtifactFiles(
   const projectId = encodeURIComponent(resolved.projectPath);
   const refEnc = encodeURIComponent(resolved.ref);
 
-  const jobsUrl = `${apiBase}/projects/${projectId}/jobs?scope[]=success&per_page=100`;
-  const jobsResp = await fetch(jobsUrl, { headers });
-  if (!jobsResp.ok) {
+  const pipelinesUrl = `${apiBase}/projects/${projectId}/pipelines?status=success&ref=${refEnc}&per_page=20`;
+  const pipelinesResp = await fetch(pipelinesUrl, { headers });
+  if (!pipelinesResp.ok) {
     throw new Error(
-      `GitLab jobs request failed (${jobsResp.status}). Check repo path, token, and access.`
+      `GitLab pipelines request failed (${pipelinesResp.status}). Check repo path, ref, token, and access.`
     );
   }
-  const jobsJson = await jobsResp.json();
-  const jobs = Array.isArray(jobsJson) ? jobsJson : [];
-  const matchingJobs = jobs.filter(
-    (job: any) =>
-      String(job?.ref ?? "") === resolved.ref &&
-      (job?.artifacts_file?.filename || job?.artifacts?.length)
-  );
-  if (matchingJobs.length === 0) {
-    throw new Error(`No successful GitLab artifact jobs were found for ref "${resolved.ref}".`);
+  const pipelinesJson = await pipelinesResp.json();
+  const pipelines = Array.isArray(pipelinesJson) ? pipelinesJson : [];
+  if (pipelines.length === 0) {
+    throw new Error(
+      `No successful GitLab pipelines were found for ref "${resolved.ref}".`
+    );
   }
 
-  const browseJobPath = async (job: any, path: string): Promise<RemoteFile[]> => {
+  const browseJobPath = async (
+    job: any,
+    pipeline: any,
+    path: string
+  ): Promise<RemoteFile[]> => {
     const artifactJob = String(job?.name ?? "").trim();
+    const artifactJobId = Number(job?.id);
     if (!artifactJob) return [];
     const jobMillisRaw = Date.parse(
       String(job?.finished_at ?? job?.created_at ?? job?.started_at ?? 0)
     );
     const jobMillis = Number.isFinite(jobMillisRaw) ? jobMillisRaw : 0;
-    const pathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
-    const browseUrl = `${apiBase}/projects/${projectId}/jobs/artifacts/${refEnc}/browse?job=${encodeURIComponent(
-      artifactJob
-    )}${pathQuery}`;
-    const resp = await fetch(browseUrl, { headers });
-    if (!resp.ok) {
-      throw new Error(
-        `GitLab artifact browse request failed (${resp.status}). Check ref, job name, token, and access.`
-      );
+    if (!Number.isFinite(artifactJobId)) return [];
+
+    const treePathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
+    const treeUrl = `${apiBase}/projects/${projectId}/jobs/${artifactJobId}/artifacts/tree?recursive=true${treePathQuery}`;
+    let items: any[] = [];
+    const treeResp = await fetch(treeUrl, { headers });
+    if (treeResp.ok) {
+      const treeJson = await treeResp.json();
+      items = Array.isArray(treeJson) ? treeJson : [];
+    } else {
+      const pathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
+      const browseUrl = `${apiBase}/projects/${projectId}/jobs/artifacts/${refEnc}/browse?job=${encodeURIComponent(
+        artifactJob
+      )}${pathQuery}`;
+      const browseResp = await fetch(browseUrl, { headers });
+      if (!browseResp.ok) {
+        throw new Error(
+          `GitLab artifact browse request failed (${browseResp.status}). Check ref, token, and access.`
+        );
+      }
+      const browseJson = await browseResp.json();
+      items = Array.isArray(browseJson) ? browseJson : [];
     }
-    const items = await resp.json();
     if (!Array.isArray(items)) return [];
 
     const nested = await Promise.all(
@@ -406,8 +423,11 @@ async function listGitLabArtifactFiles(
           String(item?.name ?? "").trim() || itemPath.split("/").pop() || "";
         const itemType = String(item?.type ?? "").toLowerCase();
         if (!itemPath) return [];
-        if (itemType === "directory" || itemType === "tree" || itemType === "dir") {
-          return browseJobPath(job, itemPath);
+        if (
+          !treeResp.ok &&
+          (itemType === "directory" || itemType === "tree" || itemType === "dir")
+        ) {
+          return browseJobPath(job, pipeline, itemPath);
         }
         if (!fileName.toLowerCase().endsWith(".json")) return [];
         const modifiedRaw = Date.parse(
@@ -421,14 +441,23 @@ async function listGitLabArtifactFiles(
           )
         );
         const fileMillis = Number.isFinite(modifiedRaw) ? modifiedRaw : jobMillis;
+        const refLabel = String(pipeline?.ref ?? job?.ref ?? resolved.ref).trim();
+        const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
+          .trim()
+          .slice(0, 8);
+        const dateLabel = fileMillis
+          ? new Date(fileMillis).toLocaleString()
+          : "Unknown date";
         return [
           {
             id: `${toFileId(opts.provider, itemPath)}:${artifactJob}`,
             fileName,
             filePath: `${artifactJob} | ${itemPath}`,
             fileMillis,
+            details: `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`,
             artifactJob,
             artifactPath: itemPath,
+            artifactJobId,
           },
         ];
       })
@@ -437,12 +466,32 @@ async function listGitLabArtifactFiles(
     return nested.flat();
   };
 
+  const nestedJobs = await Promise.all(
+    pipelines.map(async (pipeline: any) => {
+      const pipelineId = Number(pipeline?.id);
+      if (!Number.isFinite(pipelineId)) return [];
+      const jobsUrl = `${apiBase}/projects/${projectId}/pipelines/${pipelineId}/jobs?scope[]=success&per_page=100`;
+      const jobsResp = await fetch(jobsUrl, { headers });
+      if (!jobsResp.ok) return [];
+      const jobsJson = await jobsResp.json();
+      const jobs = Array.isArray(jobsJson) ? jobsJson : [];
+      return jobs
+        .filter(
+          (job: any) =>
+            (job?.artifacts_file?.filename || job?.artifacts?.length) &&
+            String(job?.status ?? "").toLowerCase() === "success"
+        )
+        .map((job: any) => ({ job, pipeline }));
+    })
+  );
   const nestedFiles = await Promise.all(
-    matchingJobs.map((job) => browseJobPath(job, resolved.dirPath))
+    nestedJobs
+      .flat()
+      .map(({ job, pipeline }) => browseJobPath(job, pipeline, resolved.dirPath))
   );
   const files = nestedFiles.flat();
   if (files.length === 0) {
-    throw new Error("No JSON files found in the selected GitLab build artifacts.");
+    throw new Error("No JSON files were found in the selected GitLab build artifacts.");
   }
   return files.sort((a, b) => b.fileMillis - a.fileMillis);
 }
@@ -463,6 +512,7 @@ export async function listRecentRepoJsonFiles(
     fileName: f.fileName,
     filePath: f.filePath,
     fileMillis: f.fileMillis,
+    details: f.details,
   }));
 }
 
@@ -608,15 +658,13 @@ export async function fetchSelectedRepoJsonFiles(
   for (let i = 0; i < targetFiles.length; i += 1) {
     const f = targetFiles[i];
     const artifactPath = String(f.artifactPath ?? f.filePath).trim();
-    const artifactJob = String(f.artifactJob ?? "").trim();
-    if (!artifactPath || !artifactJob) continue;
+    const artifactJobId = Number(f.artifactJobId);
+    if (!artifactPath || !Number.isFinite(artifactJobId)) continue;
     const rawPath = artifactPath
       .split("/")
       .map((part) => encodeURIComponent(part))
       .join("/");
-    const rawUrl = `${apiBase}/projects/${projectId}/jobs/artifacts/${refEnc}/raw/${rawPath}?job=${encodeURIComponent(
-      artifactJob
-    )}`;
+    const rawUrl = `${apiBase}/projects/${projectId}/jobs/${artifactJobId}/artifacts/${rawPath}`;
     const resp = await fetch(rawUrl, { headers });
     if (!resp.ok) continue;
     const text = await resp.text();
