@@ -106,6 +106,28 @@ const resolveGitLabInput = (
       };
     }
 
+    if (dashIdx >= 0) {
+      const projectPath = cleanPath(segs.slice(0, dashIdx).join("/"));
+      const artifactsIdx = segs.findIndex((s, i) => i > dashIdx && s === "artifacts");
+      const mode =
+        artifactsIdx >= 0 && artifactsIdx + 1 < segs.length
+          ? segs[artifactsIdx + 1]
+          : "";
+      const dirFromArtifacts =
+        artifactsIdx >= 0 &&
+        (mode === "browse" || mode === "file" || mode === "raw") &&
+        artifactsIdx + 2 < segs.length
+          ? cleanPath(segs.slice(artifactsIdx + 2).join("/"))
+          : "";
+
+      return {
+        host,
+        projectPath,
+        ref: fallbackRef,
+        dirPath: fallbackDir || dirFromArtifacts,
+      };
+    }
+
     return {
       host,
       projectPath: cleanPath(u.pathname),
