@@ -368,7 +368,7 @@ async function listGitLabArtifactFiles(
   const pipelinesResp = await fetch(pipelinesUrl, { headers });
   if (!pipelinesResp.ok) {
     throw new Error(
-      `GitLab pipelines request failed (${pipelinesResp.status}). Check repo path, ref, token, and access.`
+      `GitLab pipelines request failed (${pipelinesResp.status}) at ${pipelinesUrl}. Check repo path, ref, token, and access.`
     );
   }
   const pipelinesJson = await pipelinesResp.json();
@@ -408,7 +408,7 @@ async function listGitLabArtifactFiles(
       const browseResp = await fetch(browseUrl, { headers });
       if (!browseResp.ok) {
         throw new Error(
-          `GitLab artifact browse request failed (${browseResp.status}). Check ref, token, and access.`
+          `GitLab artifact browse request failed (${browseResp.status}) at ${browseUrl}. The job artifact tree endpoint also failed at ${treeUrl}. Check ref, token, and access.`
         );
       }
       const browseJson = await browseResp.json();
@@ -472,7 +472,11 @@ async function listGitLabArtifactFiles(
       if (!Number.isFinite(pipelineId)) return [];
       const jobsUrl = `${apiBase}/projects/${projectId}/pipelines/${pipelineId}/jobs?scope[]=success&per_page=100`;
       const jobsResp = await fetch(jobsUrl, { headers });
-      if (!jobsResp.ok) return [];
+      if (!jobsResp.ok) {
+        throw new Error(
+          `GitLab pipeline jobs request failed (${jobsResp.status}) at ${jobsUrl}. Check repo path, ref, token, and access.`
+        );
+      }
       const jobsJson = await jobsResp.json();
       const jobs = Array.isArray(jobsJson) ? jobsJson : [];
       return jobs
