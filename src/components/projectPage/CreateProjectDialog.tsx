@@ -2,8 +2,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import LZString from "lz-string";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import type { ProjectFileScore, AspectItem } from "./ProjectFileLoad";
-import { fetchRecentRepoJsonFiles, type RepoProvider } from "../../Utilities/RepoAuto";
+import {
+  fetchSelectedRepoJsonFiles,
+  listRecentRepoJsonFiles,
+  type RepoAutoCandidate,
+  type RepoProvider,
+} from "../../Utilities/RepoAuto";
 import type { RepoConnectionConfig } from "./ProjectSidebar";
 
 const MAX_FILES = 12;
@@ -20,8 +26,9 @@ const validateLikelySchema = (root: any) => {
 const normalizeAspects = (raw: any): AspectItem[] => {
   const arr = Array.isArray(raw) ? raw : [];
   return arr.map((a: any) => {
-    if (Array.isArray(a))
+    if (Array.isArray(a)) {
       return { name: String(a[0] ?? ""), value: Number(a[1] ?? NaN) };
+    }
     if (a && typeof a === "object") {
       const name = a.name ?? a.aspect ?? a.id ?? "";
       const value = a.value ?? a.score ?? a.val ?? NaN;
@@ -50,6 +57,7 @@ export default function CreateProjectDialog({
   const [name, setName] = useState("");
   const [files, setFiles] = useState<ProjectFileScore[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogBodyRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -63,6 +71,11 @@ export default function CreateProjectDialog({
   const [repoToken, setRepoToken] = useState("");
   const [repoStatus, setRepoStatus] = useState("");
   const [repoConnected, setRepoConnected] = useState(false);
+  const [repoCandidates, setRepoCandidates] = useState<RepoAutoCandidate[]>([]);
+  const [selectedRepoCandidateIds, setSelectedRepoCandidateIds] = useState<string[]>(
+    []
+  );
+  const [showScrollArrow, setShowScrollArrow] = useState(false);
 
   useEffect(() => {
     if (open) setName(defaultName ?? "Project 1");
@@ -78,13 +91,55 @@ export default function CreateProjectDialog({
       setRepoToken("");
       setRepoStatus("");
       setRepoConnected(false);
+      setRepoCandidates([]);
+      setSelectedRepoCandidateIds([]);
     }
   }, [open, defaultName]);
+
+  useEffect(() => {
+    const el = dialogBodyRef.current;
+    if (!open || !el) return;
+
+    const syncScrollArrow = () => {
+      const canScroll = el.scrollHeight > el.clientHeight + 4;
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 12;
+      setShowScrollArrow(canScroll && !nearBottom);
+    };
+
+    syncScrollArrow();
+    el.addEventListener("scroll", syncScrollArrow);
+    window.addEventListener("resize", syncScrollArrow);
+
+    return () => {
+      el.removeEventListener("scroll", syncScrollArrow);
+      window.removeEventListener("resize", syncScrollArrow);
+    };
+  }, [
+    open,
+    files.length,
+    repoPanelOpen,
+    repoCandidates.length,
+    selectedRepoCandidateIds.length,
+    loading,
+    repoStatus,
+  ]);
 
   const fileCountLabel = useMemo(
     () => `${files.length} / ${MAX_FILES} file${files.length === 1 ? "" : "s"}`,
     [files.length]
   );
+  const allRepoCandidatesSelected =
+    repoCandidates.length > 0 &&
+    repoCandidates.every((candidate) =>
+      selectedRepoCandidateIds.includes(candidate.id)
+    );
+
+  function resetRepoSelection() {
+    setRepoConnected(false);
+    setRepoStatus("");
+    setRepoCandidates([]);
+    setSelectedRepoCandidateIds([]);
+  }
 
   async function upsertParsedEntries(
     entries: { fileName: string; fileMillis: number; json: any }[]
@@ -219,14 +274,14 @@ export default function CreateProjectDialog({
     await upsertParsedEntries(parsedEntries);
   }
 
-  async function handleConnectRepo() {
+  async function handlePreviewRepoFiles() {
     setRepoStatus("");
 
     try {
       setLoading(true);
       setProgress(0.02);
       await new Promise(requestAnimationFrame);
-      const parsedEntries = await fetchRecentRepoJsonFiles({
+      const candidates = await listRecentRepoJsonFiles({
         provider: repoProvider,
         repoPath,
         baseUrl: repoBaseUrl,
@@ -234,23 +289,60 @@ export default function CreateProjectDialog({
         dir: repoDir,
         token: repoToken,
         maxFiles: MAX_FILES,
-        onProgress: setProgress,
       });
 
       setLoading(false);
       setProgress(0);
-
-      await upsertParsedEntries(parsedEntries);
+      setRepoCandidates(candidates);
+      setSelectedRepoCandidateIds(candidates.map((candidate) => candidate.id));
       setRepoStatus(
-        `Fetched ${parsedEntries.length} file(s) from ${repoProvider}.`
+        `Found ${candidates.length} recent file(s) from ${repoProvider}. Select what to import.`
       );
-      setRepoConnected(true);
+      setRepoConnected(false);
     } catch (e: any) {
       console.error(e);
       setLoading(false);
       setProgress(0);
       setRepoStatus(e?.message ?? "Failed to connect to repository.");
       alert(e?.message ?? "Failed to connect to repository.");
+      setRepoConnected(false);
+      setRepoCandidates([]);
+      setSelectedRepoCandidateIds([]);
+    }
+  }
+
+  async function handleFetchSelectedRepoFiles() {
+    setRepoStatus("");
+
+    try {
+      setLoading(true);
+      setProgress(0.02);
+      await new Promise(requestAnimationFrame);
+      const parsedEntries = await fetchSelectedRepoJsonFiles({
+        provider: repoProvider,
+        repoPath,
+        baseUrl: repoBaseUrl,
+        ref: repoRef,
+        dir: repoDir,
+        token: repoToken,
+        selectedIds: selectedRepoCandidateIds,
+        maxFiles: MAX_FILES,
+        onProgress: setProgress,
+      });
+
+      setLoading(false);
+      setProgress(0);
+      await upsertParsedEntries(parsedEntries);
+      setRepoStatus(
+        `Fetched ${parsedEntries.length} selected file(s) from ${repoProvider}.`
+      );
+      setRepoConnected(true);
+    } catch (e: any) {
+      console.error(e);
+      setLoading(false);
+      setProgress(0);
+      setRepoStatus(e?.message ?? "Failed to fetch selected files.");
+      alert(e?.message ?? "Failed to fetch selected files.");
       setRepoConnected(false);
     }
   }
@@ -270,6 +362,18 @@ export default function CreateProjectDialog({
             repoPath: repoPath.trim(),
             ref: repoRef.trim() || "main",
             dir: repoDir.trim(),
+            selectedIds:
+              selectedRepoCandidateIds.length > 0
+                ? [...selectedRepoCandidateIds]
+                : undefined,
+            selectedPaths:
+              selectedRepoCandidateIds.length > 0
+                ? repoCandidates
+                    .filter((candidate) =>
+                      selectedRepoCandidateIds.includes(candidate.id)
+                    )
+                    .map((candidate) => candidate.filePath)
+                : undefined,
           }
         : undefined;
     onCreate(n, files, repoConnection);
@@ -278,45 +382,55 @@ export default function CreateProjectDialog({
 
   if (!open) return null;
 
+  function scrollDialogToBottom() {
+    dialogBodyRef.current?.scrollTo({
+      top: dialogBodyRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }
+
   const content = (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-[rgba(0,0,0,0.35)]"
       onClick={onClose}
     >
       <div
-        className="w-[560px] max-w-[92vw] rounded-[10px] bg-white p-5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
+        className="relative flex max-h-[92vh] w-[560px] max-w-[92vw] flex-col overflow-hidden rounded-[10px] bg-white shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="m-0">Create Project</h3>
-          <button
-            aria-label="Close"
-            onClick={onClose}
-            className="cursor-pointer text-[18px] leading-none"
-            title="Close"
-          >
-            X
-          </button>
-        </div>
+        <div
+          ref={dialogBodyRef}
+          className="flex-1 overflow-y-auto px-5 pb-4 pt-5"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="m-0">Create Project</h3>
+            <button
+              aria-label="Close"
+              onClick={onClose}
+              className="cursor-pointer text-[18px] leading-none"
+              title="Close"
+            >
+              X
+            </button>
+          </div>
 
-        <label className="mb-3 block">
-          <div className="mb-1.5 text-[12px] opacity-80">Project name</div>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Project 1"
-            className="w-full rounded-lg border border-[#ddd] px-2.5 py-2 outline-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleContinue();
-              }
-            }}
-          />
-        </label>
+          <label className="mb-3 block">
+            <div className="mb-1.5 text-[12px] opacity-80">Project name</div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Project 1"
+              className="w-full rounded-lg border border-[#ddd] px-2.5 py-2 outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleContinue();
+                }
+              }}
+            />
+          </label>
 
-        <div>
           <div className="flex items-center gap-3">
             <button
               className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3 py-2"
@@ -343,33 +457,32 @@ export default function CreateProjectDialog({
                   <select
                     value={repoProvider}
                     onChange={(e) => {
-                      const next = e.target.value as "gitlab" | "github";
+                      const next = e.target.value as RepoProvider;
                       setRepoProvider(next);
-                      setRepoConnected(false);
-                      setRepoStatus("");
+                      resetRepoSelection();
                       setRepoBaseUrl(
-                        next === "gitlab"
-                          ? "https://gitlab.com"
-                          : "https://api.github.com"
+                        next === "github"
+                          ? "https://api.github.com"
+                          : "https://gitlab.com"
                       );
                     }}
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                   >
-                    <option value="gitlab">GitLab</option>
-                    <option value="github">GitHub</option>
+                    <option value="gitlab">GitLab Repo</option>
+                    <option value="github">GitHub Repo</option>
+                    <option value="gitlab-artifacts">GitLab Build Artifacts</option>
                   </select>
                   <input
                     type="text"
                     value={repoBaseUrl}
                     onChange={(e) => {
                       setRepoBaseUrl(e.target.value);
-                      setRepoConnected(false);
-                      setRepoStatus("");
+                      resetRepoSelection();
                     }}
                     placeholder={
-                      repoProvider === "gitlab"
-                        ? "GitLab base URL"
-                        : "GitHub API base URL"
+                      repoProvider === "github"
+                        ? "GitHub API base URL"
+                        : "GitLab base URL"
                     }
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                   />
@@ -379,13 +492,12 @@ export default function CreateProjectDialog({
                   value={repoPath}
                   onChange={(e) => {
                     setRepoPath(e.target.value);
-                    setRepoConnected(false);
-                    setRepoStatus("");
+                    resetRepoSelection();
                   }}
                   placeholder={
-                    repoProvider === "gitlab"
-                      ? "Repo path or URL (group/subgroup/project)"
-                      : "Repo path or URL (owner/repo)"
+                    repoProvider === "github"
+                      ? "Repo path or URL (owner/repo)"
+                      : "Repo path or URL (group/subgroup/project)"
                   }
                   className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                 />
@@ -395,8 +507,7 @@ export default function CreateProjectDialog({
                     value={repoRef}
                     onChange={(e) => {
                       setRepoRef(e.target.value);
-                      setRepoConnected(false);
-                      setRepoStatus("");
+                      resetRepoSelection();
                     }}
                     placeholder="Ref/branch (default: main)"
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
@@ -406,10 +517,13 @@ export default function CreateProjectDialog({
                     value={repoDir}
                     onChange={(e) => {
                       setRepoDir(e.target.value);
-                      setRepoConnected(false);
-                      setRepoStatus("");
+                      resetRepoSelection();
                     }}
-                    placeholder="Directory path (optional)"
+                    placeholder={
+                      repoProvider === "gitlab-artifacts"
+                        ? "Artifact directory path (optional)"
+                        : "Directory path (optional)"
+                    }
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                   />
                 </div>
@@ -418,13 +532,12 @@ export default function CreateProjectDialog({
                   value={repoToken}
                   onChange={(e) => {
                     setRepoToken(e.target.value);
-                    setRepoConnected(false);
-                    setRepoStatus("");
+                    resetRepoSelection();
                   }}
                   placeholder={
-                    repoProvider === "gitlab"
-                      ? "GitLab private token (optional)"
-                      : "GitHub token (optional, for private repos)"
+                    repoProvider === "github"
+                      ? "GitHub token (optional, for private repos)"
+                      : "GitLab private token (optional)"
                   }
                   className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                 />
@@ -432,14 +545,81 @@ export default function CreateProjectDialog({
               <div className="mt-2 flex items-center gap-2">
                 <button
                   className="cursor-pointer rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[13px]"
-                  onClick={handleConnectRepo}
+                  onClick={handlePreviewRepoFiles}
                 >
-                  Fetch Latest Files (up to 12)
+                  Preview Latest Files
                 </button>
                 {repoStatus ? (
                   <div className="text-[12px] text-[#555]">{repoStatus}</div>
                 ) : null}
               </div>
+
+              {repoCandidates.length > 0 ? (
+                <div className="mt-3 rounded-md border border-[#e5e7eb] bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[13px] font-semibold">
+                      Select files to fetch
+                    </div>
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded border border-[#ddd] px-2 py-1 text-[12px]"
+                      onClick={() =>
+                        setSelectedRepoCandidateIds(
+                          allRepoCandidatesSelected
+                            ? []
+                            : repoCandidates.map((candidate) => candidate.id)
+                        )
+                      }
+                    >
+                      {allRepoCandidatesSelected ? "Clear all" : "Select all"}
+                    </button>
+                  </div>
+                  <ul className="mt-2 max-h-[180px] space-y-1 overflow-auto">
+                    {repoCandidates.map((candidate) => {
+                      const checked = selectedRepoCandidateIds.includes(candidate.id);
+                      return (
+                        <li key={candidate.id}>
+                          <label className="flex cursor-pointer items-start gap-2 text-[12px]">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setSelectedRepoCandidateIds((prev) =>
+                                  checked
+                                    ? prev.filter((id) => id !== candidate.id)
+                                    : [...prev, candidate.id]
+                                )
+                              }
+                            />
+                            <span className="flex-1">
+                              <span className="block">{candidate.fileName}</span>
+                              <span className="block text-[#6b7280]">
+                                {candidate.filePath}
+                                {" | "}
+                                {candidate.fileMillis
+                                  ? new Date(candidate.fileMillis).toLocaleString()
+                                  : "Unknown date"}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      className="cursor-pointer rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={handleFetchSelectedRepoFiles}
+                      disabled={selectedRepoCandidateIds.length === 0}
+                    >
+                      Fetch Selected Files
+                    </button>
+                    <div className="text-[12px] text-[#555]">
+                      {selectedRepoCandidateIds.length} of {repoCandidates.length} selected
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -504,7 +684,19 @@ export default function CreateProjectDialog({
           )}
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        {showScrollArrow ? (
+          <button
+            type="button"
+            aria-label="Scroll to actions"
+            title="Scroll to Continue"
+            onClick={scrollDialogToBottom}
+            className="absolute bottom-[72px] right-5 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-[#d0d5dd] bg-white shadow-md"
+          >
+            <KeyboardArrowDownIcon />
+          </button>
+        ) : null}
+
+        <div className="flex justify-end gap-2 border-t border-[#eee] bg-white px-5 py-4">
           <button
             onClick={onClose}
             className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3.5 py-2"

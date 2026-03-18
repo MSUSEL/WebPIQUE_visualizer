@@ -4,10 +4,14 @@ import CloseIcon from "@mui/icons-material/Close";
 
 type Props = {
   onClose: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 export default function ModalPopout({
   onClose,
+  actionLabel,
+  onAction,
   children,
 }: PropsWithChildren<Props>) {
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -37,7 +41,16 @@ export default function ModalPopout({
         className="relative flex h-[80vh] w-[90vw] max-h-[90vh] max-w-[1600px] flex-col overflow-hidden rounded-2xl bg-white p-[12px] pb-[18px] shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
         ref={contentRef}
       >
-        <div className="flex items-center justify-end pb-2">
+        <div className="flex items-center justify-end gap-2 pb-2">
+          {actionLabel && onAction ? (
+            <button
+              className="cursor-pointer rounded-md border border-[#d0d5dd] px-3 py-1 text-[13px]"
+              onClick={onAction}
+              type="button"
+            >
+              {actionLabel}
+            </button>
+          ) : null}
           <button
             className="cursor-pointer bg-transparent text-[20px] leading-none"
             onClick={onClose}

@@ -1,6 +1,12 @@
 // project sidebar - allows user to create project and add files
 import CIcon from "@coreui/icons-react";
-import { cilListRich, cilPlus, cilTrash, cilPencil } from "@coreui/icons";
+import {
+  cilListRich,
+  cilPlus,
+  cilTrash,
+  cilPencil,
+  cilReload,
+} from "@coreui/icons";
 import type { RepoProvider } from "../../Utilities/RepoAuto";
 
 export type RepoConnectionConfig = {
@@ -9,6 +15,9 @@ export type RepoConnectionConfig = {
   repoPath: string;
   ref: string;
   dir: string;
+  artifactJob?: string;
+  selectedIds?: string[];
+  selectedPaths?: string[];
 };
 
 export type Project = { id: string; name: string; repoConnection?: RepoConnectionConfig };
@@ -22,6 +31,7 @@ export default function ProjectSidebar({
   onSelectProject,
   onRemoveProject,
   onRenameProject,
+  onRefreshProject,
 }: {
   projects: Project[];
   activeProjectId: string | null;
@@ -31,6 +41,7 @@ export default function ProjectSidebar({
   onLogout?: () => void;
   onRemoveProject: (id: string) => void;
   onRenameProject: (id: string, name: string) => void;
+  onRefreshProject: (id: string) => void;
 }) {
   return (
     <aside className="w-[250px] min-h-[30vh] border-r border-[#d0d5dd] pt-[20px]">
@@ -93,6 +104,26 @@ export default function ProjectSidebar({
                     >
                       {p.name}
                     </span>
+
+                    <button
+                      type="button"
+                      aria-label={`Refresh ${p.name}`}
+                      title={
+                        p.repoConnection
+                          ? "Refresh remote files"
+                          : "No saved remote connection"
+                      }
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!p.repoConnection) return;
+                        onRefreshProject(p.id);
+                      }}
+                      disabled={!p.repoConnection}
+                      className="rounded-md p-1.5 hover:bg-[#f5f5f5] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <CIcon className="h-[18px] w-[18px]" icon={cilReload} />
+                    </button>
 
                     <button
                       type="button"

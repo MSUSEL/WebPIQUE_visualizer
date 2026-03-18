@@ -70,6 +70,7 @@ export type ProjectFileLoadHandle = {
 
 type ProjectFileLoadProps = {
   projectId: string | null;
+  scoresFromParent?: ProjectFileScore[];
   onScores: (projectId: string, scores: ProjectFileScore[]) => void;
   onSelectionChange?: (selectedIds: string[]) => void;
   viewMode?: ViewMode;
@@ -86,6 +87,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
   (
     {
       projectId,
+      scoresFromParent,
       onScores,
       onSelectionChange,
       viewMode: controlledMode,
@@ -118,6 +120,12 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
     /* HYDRATE + MIGRATE */
     useEffect(() => {
       if (!projectId) return;
+      if (scoresFromParent) {
+        setScores(scoresFromParent);
+        setSelected(new Set());
+        setHydrated(true);
+        return;
+      }
       const saved = localStorage.getItem(`wp_project_files:${projectId}`);
       if (saved) {
         type Legacy = ProjectFileScore & {
@@ -170,7 +178,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
 
       setSelected(new Set());
       setHydrated(true);
-    }, [projectId]);
+    }, [projectId, scoresFromParent]);
 
     /* BUBBLE UP SCORES TO PARENT */
     useEffect(() => {

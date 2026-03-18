@@ -14,7 +14,11 @@ import CreateProjectDialog from "../components/projectPage/CreateProjectDialog";
 import ModalPopout from "../components/projectPage/ModalPopout";
 import SingleFileComponent from "../components/nonProject/SingleFileComponent";
 import CompareComponent from "../components/nonProject/CompareComponent";
-import { fetchRecentRepoJsonFiles } from "../Utilities/RepoAuto";
+import {
+  fetchSelectedRepoJsonFiles,
+  listRecentRepoJsonFiles,
+  type RepoAutoCandidate,
+} from "../Utilities/RepoAuto";
 import { parseTQIQAScores } from "../Utilities/TQIQAScoreParser";
 import LZString from "lz-string";
 
@@ -55,9 +59,17 @@ export default function ProjectView() {
     Record<string, ProjectFileScore[]>
   >({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [projectRefreshNonce, setProjectRefreshNonce] = useState(0);
   const [refreshStatus, setRefreshStatus] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
+  const [remoteDialogLoading, setRemoteDialogLoading] = useState(false);
+  const [remoteDialogStatus, setRemoteDialogStatus] = useState("");
+  const [remoteDialogToken, setRemoteDialogToken] = useState("");
+  const [refreshProjectId, setRefreshProjectId] = useState<string | null>(null);
+  const [remoteCandidates, setRemoteCandidates] = useState<RepoAutoCandidate[]>([]);
+  const [selectedRemoteCandidateIds, setSelectedRemoteCandidateIds] = useState<
+    string[]
+  >([]);
 
   // selection for plot + viewers
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -90,6 +102,12 @@ export default function ProjectView() {
                   repoPath: p.repoConnection.repoPath,
                   ref: p.repoConnection.ref,
                   dir: p.repoConnection.dir,
+                  selectedIds: Array.isArray(p.repoConnection.selectedIds)
+                    ? p.repoConnection.selectedIds
+                    : undefined,
+                  selectedPaths: Array.isArray(p.repoConnection.selectedPaths)
+                    ? p.repoConnection.selectedPaths
+                    : undefined,
                 }
               : undefined;
             return { id: p.id, name: p.name, repoConnection: rc };
@@ -173,7 +191,6 @@ export default function ProjectView() {
 
   const handleSelectProject = useCallback((id: string) => {
     setActiveProjectId(id);
-    setProjectRefreshNonce((n) => n + 1);
     setRefreshStatus("");
   }, []);
 
@@ -182,6 +199,19 @@ export default function ProjectView() {
     () => (activeProjectId ? filesByProject[activeProjectId] ?? [] : []),
     [activeProjectId, filesByProject]
   );
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
+  const refreshProject = useMemo(
+    () => projects.find((p) => p.id === refreshProjectId) ?? null,
+    [projects, refreshProjectId]
+  );
+  const allRemoteCandidatesSelected =
+    remoteCandidates.length > 0 &&
+    remoteCandidates.every((candidate) =>
+      selectedRemoteCandidateIds.includes(candidate.id)
+    );
   const canAddMore = activeFiles.length < MAX_FILES;
 
   // ---------- project operations ----------
@@ -218,93 +248,183 @@ export default function ProjectView() {
     }
   }
 
-  useEffect(() => {
-    if (!projectsLoaded || !activeProjectId) return;
-    const activeProject = projects.find((p) => p.id === activeProjectId);
-    const repoCfg = activeProject?.repoConnection;
-    if (!repoCfg) return;
+  const updateProjectRepoSelection = useCallback(
+    (projectId: string, selectedCandidates: RepoAutoCandidate[]) => {
+      const selectedIds = selectedCandidates.map((candidate) => candidate.id);
+      const selectedPaths = selectedCandidates.map((candidate) => candidate.filePath);
+      setProjects((prev) =>
+        prev.map((project) => {
+          if (project.id !== projectId || !project.repoConnection) return project;
+          return {
+            ...project,
+            repoConnection: {
+              ...project.repoConnection,
+              selectedIds,
+              selectedPaths,
+            },
+          };
+        })
+      );
+    },
+    []
+  );
 
-    let cancelled = false;
-    (async () => {
-      setRefreshStatus(`Refreshing files from ${repoCfg.provider}...`);
-      const fetchEntries = async (token?: string) =>
-        fetchRecentRepoJsonFiles({
+  const handleOpenRefreshDialog = useCallback(
+    (projectId: string) => {
+      const project = projects.find((item) => item.id === projectId);
+      if (!project?.repoConnection) return;
+      setActiveProjectId(projectId);
+      setRefreshProjectId(projectId);
+      setRemoteDialogToken("");
+      setRemoteCandidates([]);
+      setSelectedRemoteCandidateIds([]);
+      setRemoteDialogStatus("");
+      setRemoteDialogLoading(false);
+      setRemoteDialogOpen(true);
+    },
+    [projects]
+  );
+
+  const loadRemoteSelectionDialog = useCallback(
+    async (project: Project, token?: string) => {
+      const repoCfg = project.repoConnection;
+      if (!repoCfg) return;
+
+      setRemoteDialogLoading(true);
+      setRemoteDialogStatus("Loading remote files...");
+
+      try {
+        const candidates = await listRecentRepoJsonFiles({
           ...repoCfg,
           token,
           maxFiles: MAX_FILES,
         });
 
-      try {
-        let entries;
-        try {
-          entries = await fetchEntries();
-        } catch (e: any) {
-          const msg = String(e?.message ?? "");
-          const authErr =
-            /\((401|403)\)/.test(msg) ||
-            (repoCfg.provider === "github" && /\(404\)/.test(msg));
-          if (!authErr) throw e;
-
-          const token =
-            window.prompt(
-              "This repository appears to require a personal access token. Enter token to refresh files:",
-              ""
-            ) ?? "";
-          if (!token.trim()) throw e;
-          entries = await fetchEntries(token.trim());
-        }
-        if (cancelled) return;
-
-        const nextFiles: ProjectFileScore[] = [];
-        for (const item of entries.slice(0, MAX_FILES)) {
-          const parsed: any = parseTQIQAScores(item.json);
-          const tqi: number | null =
-            parsed?.tqi ??
-            parsed?.tqiScore ??
-            parsed?.scores?.tqi ??
-            parsed?.scores?.tqiScore ??
-            null;
-          const aspects = normalizeAspects(
-            parsed?.aspects ?? parsed?.scores?.aspects ?? []
-          );
-          const fileMillis = Number(item.fileMillis) || Date.now();
-          const id = `${item.fileName}-${fileMillis}`;
-          const rawKey = `raw:${id}`;
-          try {
-            const comp = LZString.compressToUTF16(JSON.stringify(item.json));
-            localStorage.setItem(rawKey, comp);
-          } catch {
-            // ignore local storage failures
-          }
-          nextFiles.push({
-            id,
-            rawKey,
-            fileName: item.fileName,
-            fileDateISO: new Date(fileMillis).toISOString(),
-            tqi,
-            aspects,
-            needsRaw: false,
-          });
+        if (candidates.length === 0) {
+          throw new Error("No remote JSON files are currently available.");
         }
 
-        setFilesByProject((prev) => ({ ...prev, [activeProject.id]: nextFiles }));
-        setRefreshStatus(
-          `Refreshed ${nextFiles.length} file(s) from ${repoCfg.provider}.`
+        const savedPaths =
+          Array.isArray(repoCfg.selectedPaths) && repoCfg.selectedPaths.length > 0
+            ? new Set(repoCfg.selectedPaths)
+            : null;
+        const selectedIds =
+          savedPaths
+            ? candidates
+                .filter((candidate) => savedPaths.has(candidate.filePath))
+                .map((candidate) => candidate.id)
+            : candidates
+                .filter((candidate) =>
+                  (repoCfg.selectedIds ?? []).includes(candidate.id)
+                )
+                .map((candidate) => candidate.id);
+
+        setRemoteCandidates(candidates);
+        setSelectedRemoteCandidateIds(
+          selectedIds.length > 0
+            ? selectedIds
+            : candidates.map((candidate) => candidate.id)
+        );
+        setRemoteDialogStatus(
+          "Select which current remote files to fetch for this project."
         );
       } catch (e) {
-        console.warn("Repo auto-refresh failed:", e);
-        setRefreshStatus(
-          `Repo refresh failed${
-            e instanceof Error && e.message ? `: ${e.message}` : "."
-          }`
+        console.warn("Remote selection preload failed:", e);
+        setRemoteCandidates([]);
+        setSelectedRemoteCandidateIds([]);
+        setRemoteDialogStatus(
+          e instanceof Error && e.message
+            ? e.message
+            : "Failed to load remote files."
         );
+      } finally {
+        setRemoteDialogLoading(false);
       }
-    })();
+    },
+    []
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [projectsLoaded, activeProjectId, projects, projectRefreshNonce]);
+  const handleConfirmRemoteSelection = useCallback(async () => {
+    if (!refreshProject?.repoConnection || selectedRemoteCandidateIds.length === 0) {
+      return;
+    }
+
+    const repoCfg = refreshProject.repoConnection;
+    const selectedCandidates = remoteCandidates.filter((candidate) =>
+      selectedRemoteCandidateIds.includes(candidate.id)
+    );
+
+    setRemoteDialogLoading(true);
+    setRemoteDialogStatus(`Refreshing files from ${repoCfg.provider}...`);
+    setRefreshStatus(`Refreshing files from ${repoCfg.provider}...`);
+
+    const fetchEntries = async (token?: string) =>
+      fetchSelectedRepoJsonFiles({
+        ...repoCfg,
+        token,
+        selectedIds: selectedCandidates.map((candidate) => candidate.id),
+        maxFiles: MAX_FILES,
+      });
+
+    try {
+      const entries = await fetchEntries(remoteDialogToken.trim() || undefined);
+
+      const nextFiles: ProjectFileScore[] = [];
+      for (const item of entries.slice(0, MAX_FILES)) {
+        const parsed: any = parseTQIQAScores(item.json);
+        const tqi: number | null =
+          parsed?.tqi ??
+          parsed?.tqiScore ??
+          parsed?.scores?.tqi ??
+          parsed?.scores?.tqiScore ??
+          null;
+        const aspects = normalizeAspects(
+          parsed?.aspects ?? parsed?.scores?.aspects ?? []
+        );
+        const fileMillis = Number(item.fileMillis) || Date.now();
+        const id = `${item.fileName}-${fileMillis}`;
+        const rawKey = `raw:${id}`;
+        try {
+          const comp = LZString.compressToUTF16(JSON.stringify(item.json));
+          localStorage.setItem(rawKey, comp);
+        } catch {
+          // ignore local storage failures
+        }
+        nextFiles.push({
+          id,
+          rawKey,
+          fileName: item.fileName,
+          fileDateISO: new Date(fileMillis).toISOString(),
+          tqi,
+          aspects,
+          needsRaw: false,
+        });
+      }
+
+      setFilesByProject((prev) => ({ ...prev, [refreshProject.id]: nextFiles }));
+      updateProjectRepoSelection(refreshProject.id, selectedCandidates);
+      setRefreshStatus(
+        `Refreshed ${nextFiles.length} file(s) from ${repoCfg.provider}.`
+      );
+      setRemoteDialogOpen(false);
+      setRemoteDialogStatus("");
+      setRefreshProjectId(null);
+    } catch (e) {
+      console.warn("Repo refresh failed:", e);
+      const message =
+        e instanceof Error && e.message ? e.message : "Repo refresh failed.";
+      setRefreshStatus(`Repo refresh failed: ${message}`);
+      setRemoteDialogStatus(message);
+    } finally {
+      setRemoteDialogLoading(false);
+    }
+  }, [
+    refreshProject,
+    remoteCandidates,
+    remoteDialogToken,
+    selectedRemoteCandidateIds,
+    updateProjectRepoSelection,
+  ]);
 
   function handleRemoveProject(id: string) {
     if (
@@ -402,6 +522,7 @@ export default function ProjectView() {
           onSelectProject={handleSelectProject}
           onRemoveProject={handleRemoveProject}
           onRenameProject={handleRenameProject}
+          onRefreshProject={handleOpenRefreshDialog}
       />
 
       <CreateProjectDialog
@@ -414,6 +535,171 @@ export default function ProjectView() {
       />
 
       <main className="flex min-h-0 flex-1 items-start justify-start p-6">
+        {remoteDialogOpen ? (
+          <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-[rgba(0,0,0,0.35)]">
+            <div className="w-[560px] max-w-[92vw] rounded-[10px] bg-white p-5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]">
+              <div className="mb-3">
+                <h3 className="m-0">Refresh Remote Files</h3>
+                {refreshProject?.repoConnection ? (
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-[13px] text-[#555]">
+                    <div>
+                      <strong className="text-black">Source:</strong>{" "}
+                      {refreshProject.repoConnection.provider}
+                    </div>
+                    <div>
+                      <strong className="text-black">Base URL:</strong>{" "}
+                      {refreshProject.repoConnection.baseUrl}
+                    </div>
+                    <div>
+                      <strong className="text-black">Repo:</strong>{" "}
+                      {refreshProject.repoConnection.repoPath}
+                    </div>
+                    <div>
+                      <strong className="text-black">Ref:</strong>{" "}
+                      {refreshProject.repoConnection.ref}
+                    </div>
+                    <div>
+                      <strong className="text-black">Directory:</strong>{" "}
+                      {refreshProject.repoConnection.dir || "None"}
+                    </div>
+                    <label className="mt-1 block">
+                      <div className="mb-1 text-[12px] opacity-80">
+                        Token (if required)
+                      </div>
+                      <input
+                        type="password"
+                        value={remoteDialogToken}
+                        onChange={(e) => setRemoteDialogToken(e.target.value)}
+                        placeholder={
+                          refreshProject.repoConnection.provider === "github"
+                            ? "GitHub token"
+                            : "GitLab token"
+                        }
+                        className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
+                        disabled={remoteDialogLoading}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                {remoteDialogStatus ? (
+                  <div className="mt-2 text-[13px] text-[#555]">
+                    {remoteDialogStatus}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => {
+                    if (!refreshProject) return;
+                    loadRemoteSelectionDialog(
+                      refreshProject,
+                      remoteDialogToken.trim() || undefined
+                    );
+                  }}
+                  disabled={!refreshProject?.repoConnection || remoteDialogLoading}
+                >
+                  Connect to Remote
+                </button>
+                {remoteCandidates.length > 0 ? (
+                  <div className="text-[12px] text-[#555]">
+                    {selectedRemoteCandidateIds.length} of {remoteCandidates.length} selected
+                  </div>
+                ) : null}
+              </div>
+
+              {remoteCandidates.length > 0 ? (
+                <>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[13px] font-semibold">
+                      Select saved files to fetch
+                    </div>
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded border border-[#ddd] px-2 py-1 text-[12px]"
+                      onClick={() =>
+                        setSelectedRemoteCandidateIds(
+                          allRemoteCandidatesSelected
+                            ? []
+                            : remoteCandidates.map((candidate) => candidate.id)
+                        )
+                      }
+                      disabled={remoteDialogLoading}
+                    >
+                      {allRemoteCandidatesSelected ? "Clear all" : "Select all"}
+                    </button>
+                  </div>
+                  <ul className="max-h-[220px] space-y-1 overflow-auto">
+                    {remoteCandidates.map((candidate) => {
+                      const checked = selectedRemoteCandidateIds.includes(candidate.id);
+                      return (
+                        <li key={candidate.id}>
+                          <label className="flex cursor-pointer items-start gap-2 text-[12px]">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={remoteDialogLoading}
+                              onChange={() =>
+                                setSelectedRemoteCandidateIds((prev) =>
+                                  checked
+                                    ? prev.filter((id) => id !== candidate.id)
+                                    : [...prev, candidate.id]
+                                )
+                              }
+                            />
+                            <span className="flex-1">
+                              <span className="block">{candidate.fileName}</span>
+                              <span className="block text-[#6b7280]">
+                                {candidate.filePath}
+                                {" | "}
+                                {candidate.fileMillis
+                                  ? new Date(candidate.fileMillis).toLocaleString()
+                                  : "Unknown date"}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : null}
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-lg border border-[#ddd] bg-[#f7f7f7] px-3.5 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => {
+                    setRemoteDialogOpen(false);
+                    setRefreshProjectId(null);
+                    setRemoteDialogStatus("");
+                    setRemoteCandidates([]);
+                    setSelectedRemoteCandidateIds([]);
+                    setRemoteDialogToken("");
+                  }}
+                  disabled={remoteDialogLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-[#0d6efd] bg-[#0d6efd] px-3.5 py-2 text-white disabled:cursor-not-allowed disabled:bg-[#9bbcf9]"
+                  onClick={handleConfirmRemoteSelection}
+                  disabled={
+                    remoteDialogLoading ||
+                    remoteCandidates.length === 0 ||
+                    selectedRemoteCandidateIds.length === 0
+                  }
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {activeProjectId ? (
           <div className="min-h-[420px] h-full w-full">
               {/* top section: plot + file list */}
@@ -422,7 +708,8 @@ export default function ProjectView() {
                   <header className="mb-2 text-[20px]">
                     <h2>
                       <strong>TQI &amp; Quality Aspect Score Tracker for{" "}
-                        {projects.find((p) => p.id === activeProjectId)?.name}</strong>
+                        {activeProject?.name}
+                      </strong>
                     </h2>
                     {refreshStatus ? (
                       <div className="mt-1 text-[14px] text-[#555]">
@@ -437,6 +724,7 @@ export default function ProjectView() {
                   <ProjectFileLoad
                     ref={fileLoadRef}
                     projectId={activeProjectId}
+                    scoresFromParent={activeFiles}
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
                     onScores={handleScores}
