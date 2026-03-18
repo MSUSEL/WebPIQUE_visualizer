@@ -1,3 +1,5 @@
+import { strFromU8, unzipSync } from "fflate";
+
 export type RepoProvider = "gitlab" | "github" | "gitlab-artifacts";
 
 export type RepoAutoEntry = {
@@ -71,6 +73,53 @@ const decodeBase64Utf8 = (b64: string): string => {
     return "";
   }
 };
+
+const decodeArchivePath = (path: string) =>
+  path
+    .split("/")
+    .map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    })
+    .join("/");
+
+async function downloadGitLabArtifactArchive(
+  apiBase: string,
+  projectId: string,
+  jobId: number,
+  headers: Record<string, string>
+) {
+  const archiveUrl = `${apiBase}/projects/${projectId}/jobs/${jobId}/artifacts`;
+  const resp = await fetch(archiveUrl, { headers });
+  if (!resp.ok) {
+    throw new Error(
+      `GitLab artifact archive request failed (${resp.status}) at ${archiveUrl}.`
+    );
+  }
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  return unzipSync(bytes);
+}
+
+function listArchiveJsonPaths(
+  archive: Record<string, Uint8Array>,
+  dirPath: string
+): string[] {
+  const normalizedDir = cleanPath(dirPath);
+  return Object.keys(archive)
+    .map((path) => decodeArchivePath(path))
+    .filter((path) => {
+      const clean = cleanPath(path);
+      return (
+        clean &&
+        !path.endsWith("/") &&
+        clean.toLowerCase().endsWith(".json") &&
+        (!normalizedDir || clean.startsWith(`${normalizedDir}/`) || clean === normalizedDir)
+      );
+    });
+}
 
 const toFileId = (provider: RepoProvider, path: string, sha?: string) =>
   `${provider}:${path}:${sha ?? ""}`;
@@ -406,13 +455,38 @@ async function listGitLabArtifactFiles(
         artifactJob
       )}${pathQuery}`;
       const browseResp = await fetch(browseUrl, { headers });
-      if (!browseResp.ok) {
-        throw new Error(
-          `GitLab artifact browse request failed (${browseResp.status}) at ${browseUrl}. The job artifact tree endpoint also failed at ${treeUrl}. Check ref, token, and access.`
+      if (browseResp.ok) {
+        const browseJson = await browseResp.json();
+        items = Array.isArray(browseJson) ? browseJson : [];
+      } else {
+        const archive = await downloadGitLabArtifactArchive(
+          apiBase,
+          projectId,
+          artifactJobId,
+          headers
         );
+        const archivePaths = listArchiveJsonPaths(archive, path);
+        const refLabel = String(pipeline?.ref ?? job?.ref ?? resolved.ref).trim();
+        const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
+          .trim()
+          .slice(0, 8);
+        const dateLabel = jobMillis
+          ? new Date(jobMillis).toLocaleString()
+          : "Unknown date";
+        return archivePaths.map((archivePath) => {
+          const fileName = archivePath.split("/").pop() ?? archivePath;
+          return {
+            id: `${toFileId(opts.provider, archivePath)}:${artifactJob}`,
+            fileName,
+            filePath: `${artifactJob} | ${archivePath}`,
+            fileMillis: jobMillis,
+            details: `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`,
+            artifactJob,
+            artifactPath: archivePath,
+            artifactJobId,
+          };
+        });
       }
-      const browseJson = await browseResp.json();
-      items = Array.isArray(browseJson) ? browseJson : [];
     }
     if (!Array.isArray(items)) return [];
 
@@ -670,8 +744,24 @@ export async function fetchSelectedRepoJsonFiles(
       .join("/");
     const rawUrl = `${apiBase}/projects/${projectId}/jobs/${artifactJobId}/artifacts/${rawPath}`;
     const resp = await fetch(rawUrl, { headers });
-    if (!resp.ok) continue;
-    const text = await resp.text();
+    let text = "";
+    if (resp.ok) {
+      text = await resp.text();
+    } else {
+      try {
+        const archive = await downloadGitLabArtifactArchive(
+          apiBase,
+          projectId,
+          artifactJobId,
+          headers
+        );
+        const extracted = archive[artifactPath] ?? archive[encodeURIComponent(artifactPath)];
+        if (!extracted) continue;
+        text = strFromU8(extracted);
+      } catch {
+        continue;
+      }
+    }
     try {
       out.push({
         fileName: f.fileName,
