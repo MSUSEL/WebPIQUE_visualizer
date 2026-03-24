@@ -24,7 +24,6 @@ export type RepoAutoOptions = {
   dir: string;
   token?: string;
   maxFiles?: number;
-  artifactJob?: string;
   selectedIds?: string[];
   onProgress?: (value: number) => void;
 };
@@ -34,7 +33,6 @@ type GitLabResolved = {
   projectPath: string;
   ref: string;
   dirPath: string;
-  artifactJobId?: number;
 };
 
 type GitHubResolved = {
@@ -95,14 +93,11 @@ const isEvalResultsJsonPath = (path: string) => {
 
 const formatArtifactDetails = (
   job: any,
-  pipeline: any,
   fallbackRef: string,
   fileMillis: number
 ) => {
-  const refLabel = String(pipeline?.ref ?? job?.ref ?? fallbackRef).trim();
-  const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
-    .trim()
-    .slice(0, 8);
+  const refLabel = String(job?.ref ?? fallbackRef).trim();
+  const shortSha = String(job?.commit?.id ?? "").trim().slice(0, 8);
   const dateLabel = fileMillis
     ? new Date(fileMillis).toLocaleString()
     : "Unknown date";
@@ -150,6 +145,7 @@ async function downloadGitLabArtifactArchive(
   jobId: number,
   headers: Record<string, string>
 ) {
+  // GitLab artifact downloads require the numeric project id here, not group/project.
   if (!/^\d+$/.test(String(projectId).trim())) {
     throw new Error(
       `GitLab artifact request expected a numeric project id but got "${projectId}".`
@@ -223,9 +219,6 @@ const resolveGitLabInput = (
 
     if (dashIdx >= 0) {
       const projectPath = cleanPath(segs.slice(0, dashIdx).join("/"));
-      const jobsIdx = segs.findIndex((s, i) => i > dashIdx && s === "jobs");
-      const artifactJobIdRaw =
-        jobsIdx >= 0 && jobsIdx + 1 < segs.length ? Number(segs[jobsIdx + 1]) : NaN;
       const artifactsIdx = segs.findIndex((s, i) => i > dashIdx && s === "artifacts");
       const mode =
         artifactsIdx >= 0 && artifactsIdx + 1 < segs.length
@@ -243,7 +236,6 @@ const resolveGitLabInput = (
         projectPath,
         ref: fallbackRef,
         dirPath: fallbackDir || dirFromArtifacts,
-        artifactJobId: Number.isFinite(artifactJobIdRaw) ? artifactJobIdRaw : undefined,
       };
     }
 
@@ -260,7 +252,6 @@ const resolveGitLabInput = (
     projectPath: cleanPath(raw),
     ref: fallbackRef,
     dirPath: fallbackDir,
-    artifactJobId: undefined,
   };
 };
 
@@ -549,7 +540,7 @@ async function listGitLabArtifactFiles(
           fileName,
           filePath: `${artifactJob} | ${archivePath}`,
           fileMillis: jobMillis,
-          details: formatArtifactDetails(job, null, resolved.ref, jobMillis),
+          details: formatArtifactDetails(job, resolved.ref, jobMillis),
           artifactJob,
           artifactPath: archivePath,
           artifactJobId,
