@@ -112,6 +112,13 @@ const formatArtifactDetails = (
 const isPiqueArtifactJob = (job: any) =>
   String(job?.name ?? "").trim().toLowerCase() === "pique";
 
+const getArtifactJobMillis = (job: any) => {
+  const raw = Date.parse(
+    String(job?.finished_at ?? job?.created_at ?? job?.started_at ?? 0)
+  );
+  return Number.isFinite(raw) ? raw : 0;
+};
+
 async function resolveGitLabProjectId(
   apiBase: string,
   projectPath: string,
@@ -475,9 +482,10 @@ async function listGitLabArtifactFiles(
     resolved.projectPath,
     headers
   );
-  const jobsById = new Map<number, { job: any; pipeline?: any }>();
+  const jobsById = new Map<number, any>();
   const perPage = 100;
   const maxPages = 10;
+  const maxArtifactJobs = 12;
   for (let page = 1; page <= maxPages; page += 1) {
     const jobsUrl = `${apiBase}/projects/${projectId}/jobs?scope[]=success&per_page=${perPage}&page=${page}`;
     const jobsResp = await fetch(jobsUrl, { headers });
@@ -499,14 +507,18 @@ async function listGitLabArtifactFiles(
       if (String(job?.status ?? "").toLowerCase() !== "success") return;
       if (!isPiqueArtifactJob(job)) return;
       if (!hasArtifactsZip) return;
-      if (!jobsById.has(jobId)) jobsById.set(jobId, { job });
+      if (!jobsById.has(jobId)) jobsById.set(jobId, job);
     });
 
-    if (jobs.length < perPage) break;
+    if (jobsById.size >= maxArtifactJobs || jobs.length < perPage) break;
   }
 
+  const recentArtifactJobs = Array.from(jobsById.values())
+    .sort((a, b) => getArtifactJobMillis(b) - getArtifactJobMillis(a))
+    .slice(0, maxArtifactJobs);
+
   const filesNested = await Promise.all(
-    Array.from(jobsById.values()).map(async ({ job, pipeline }) => {
+    recentArtifactJobs.map(async (job) => {
       const artifactJobId = Number(job?.id);
       const artifactJob = String(job?.name ?? "").trim() || `job-${artifactJobId}`;
       if (!Number.isFinite(artifactJobId)) return [];
@@ -523,10 +535,7 @@ async function listGitLabArtifactFiles(
         return [];
       }
 
-      const jobMillisRaw = Date.parse(
-        String(job?.finished_at ?? job?.created_at ?? job?.started_at ?? 0)
-      );
-      const jobMillis = Number.isFinite(jobMillisRaw) ? jobMillisRaw : 0;
+      const jobMillis = getArtifactJobMillis(job);
       const archivePaths = listArchiveJsonPaths(archive, resolved.dirPath);
       return archivePaths.map((archivePath) => {
         const fileName = archivePath.split("/").pop() ?? archivePath;
@@ -535,7 +544,7 @@ async function listGitLabArtifactFiles(
           fileName,
           filePath: `${artifactJob} | ${archivePath}`,
           fileMillis: jobMillis,
-          details: formatArtifactDetails(job, pipeline, resolved.ref, jobMillis),
+          details: formatArtifactDetails(job, null, resolved.ref, jobMillis),
           artifactJob,
           artifactPath: archivePath,
           artifactJobId,
