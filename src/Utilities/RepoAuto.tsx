@@ -34,6 +34,7 @@ type GitLabResolved = {
   projectPath: string;
   ref: string;
   dirPath: string;
+  artifactJobId?: number;
 };
 
 type GitHubResolved = {
@@ -85,6 +86,28 @@ const decodeArchivePath = (path: string) =>
       }
     })
     .join("/");
+
+const isEvalResultsJsonPath = (path: string) => {
+  const clean = cleanPath(path);
+  const lower = clean.toLowerCase();
+  return clean && lower.endsWith(".json") && lower.includes("_evalresults");
+};
+
+const formatArtifactDetails = (
+  job: any,
+  pipeline: any,
+  fallbackRef: string,
+  fileMillis: number
+) => {
+  const refLabel = String(pipeline?.ref ?? job?.ref ?? fallbackRef).trim();
+  const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
+    .trim()
+    .slice(0, 8);
+  const dateLabel = fileMillis
+    ? new Date(fileMillis).toLocaleString()
+    : "Unknown date";
+  return `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`;
+};
 
 async function resolveGitLabProjectId(
   apiBase: string,
@@ -140,7 +163,7 @@ function listArchiveJsonPaths(
       return (
         clean &&
         !path.endsWith("/") &&
-        clean.toLowerCase().endsWith(".json") &&
+        isEvalResultsJsonPath(clean) &&
         (!normalizedDir || clean.startsWith(`${normalizedDir}/`) || clean === normalizedDir)
       );
     });
@@ -185,6 +208,9 @@ const resolveGitLabInput = (
 
     if (dashIdx >= 0) {
       const projectPath = cleanPath(segs.slice(0, dashIdx).join("/"));
+      const jobsIdx = segs.findIndex((s, i) => i > dashIdx && s === "jobs");
+      const artifactJobIdRaw =
+        jobsIdx >= 0 && jobsIdx + 1 < segs.length ? Number(segs[jobsIdx + 1]) : NaN;
       const artifactsIdx = segs.findIndex((s, i) => i > dashIdx && s === "artifacts");
       const mode =
         artifactsIdx >= 0 && artifactsIdx + 1 < segs.length
@@ -202,6 +228,7 @@ const resolveGitLabInput = (
         projectPath,
         ref: fallbackRef,
         dirPath: fallbackDir || dirFromArtifacts,
+        artifactJobId: Number.isFinite(artifactJobIdRaw) ? artifactJobIdRaw : undefined,
       };
     }
 
@@ -218,6 +245,7 @@ const resolveGitLabInput = (
     projectPath: cleanPath(raw),
     ref: fallbackRef,
     dirPath: fallbackDir,
+    artifactJobId: undefined,
   };
 };
 
@@ -444,165 +472,81 @@ async function listGitLabArtifactFiles(
     resolved.projectPath,
     headers
   );
-  const refEnc = encodeURIComponent(resolved.ref);
+  const jobsById = new Map<number, { job: any; pipeline?: any }>();
+  const perPage = 100;
+  const maxPages = 10;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const jobsUrl = `${apiBase}/projects/${projectId}/jobs?scope[]=success&per_page=${perPage}&page=${page}`;
+    const jobsResp = await fetch(jobsUrl, { headers });
+    if (!jobsResp.ok) {
+      throw new Error(
+        `GitLab jobs request failed (${jobsResp.status}) at ${jobsUrl}. Check repo path, token, and access.`
+      );
+    }
+    const jobsJson = await jobsResp.json();
+    const jobs = Array.isArray(jobsJson) ? jobsJson : [];
+    if (jobs.length === 0) break;
 
-  const pipelinesUrl = `${apiBase}/projects/${projectId}/pipelines?status=success&ref=${refEnc}&per_page=20`;
-  const pipelinesResp = await fetch(pipelinesUrl, { headers });
-  if (!pipelinesResp.ok) {
-    throw new Error(
-      `GitLab pipelines request failed (${pipelinesResp.status}) at ${pipelinesUrl}. Check repo path, ref, token, and access.`
-    );
+    jobs.forEach((job: any) => {
+      const jobId = Number(job?.id);
+      const artifactFile = String(job?.artifacts_file?.filename ?? "").trim();
+      const hasArtifactsZip =
+        artifactFile.toLowerCase() === "artifacts.zip" ||
+        Array.isArray(job?.artifacts) ||
+        String(job?.artifacts_expire_at ?? "").trim() !== "";
+      if (!Number.isFinite(jobId)) return;
+      if (String(job?.status ?? "").toLowerCase() !== "success") return;
+      if (!hasArtifactsZip) return;
+      if (!jobsById.has(jobId)) jobsById.set(jobId, { job });
+    });
+
+    if (jobs.length < perPage) break;
   }
-  const pipelinesJson = await pipelinesResp.json();
-  const pipelines = Array.isArray(pipelinesJson) ? pipelinesJson : [];
-  if (pipelines.length === 0) {
-    throw new Error(
-      `No successful GitLab pipelines were found for ref "${resolved.ref}".`
-    );
-  }
 
-  const browseJobPath = async (
-    job: any,
-    pipeline: any,
-    path: string
-  ): Promise<RemoteFile[]> => {
-    const artifactJob = String(job?.name ?? "").trim();
-    const artifactJobId = Number(job?.id);
-    if (!artifactJob) return [];
-    const jobMillisRaw = Date.parse(
-      String(job?.finished_at ?? job?.created_at ?? job?.started_at ?? 0)
-    );
-    const jobMillis = Number.isFinite(jobMillisRaw) ? jobMillisRaw : 0;
-    if (!Number.isFinite(artifactJobId)) return [];
+  const filesNested = await Promise.all(
+    Array.from(jobsById.values()).map(async ({ job, pipeline }) => {
+      const artifactJobId = Number(job?.id);
+      const artifactJob = String(job?.name ?? "").trim() || `job-${artifactJobId}`;
+      if (!Number.isFinite(artifactJobId)) return [];
 
-    const treePathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
-    const treeUrl = `${apiBase}/projects/${projectId}/jobs/${artifactJobId}/artifacts/tree?recursive=true${treePathQuery}`;
-    let items: any[] = [];
-    const treeResp = await fetch(treeUrl, { headers });
-    if (treeResp.ok) {
-      const treeJson = await treeResp.json();
-      items = Array.isArray(treeJson) ? treeJson : [];
-    } else {
-      const pathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
-      const browseUrl = `${apiBase}/projects/${projectId}/jobs/artifacts/${refEnc}/browse?job=${encodeURIComponent(
-        artifactJob
-      )}${pathQuery}`;
-      const browseResp = await fetch(browseUrl, { headers });
-      if (browseResp.ok) {
-        const browseJson = await browseResp.json();
-        items = Array.isArray(browseJson) ? browseJson : [];
-      } else {
-        const archive = await downloadGitLabArtifactArchive(
+      let archive: Record<string, Uint8Array>;
+      try {
+        archive = await downloadGitLabArtifactArchive(
           apiBase,
           projectId,
           artifactJobId,
           headers
         );
-        const archivePaths = listArchiveJsonPaths(archive, path);
-        const refLabel = String(pipeline?.ref ?? job?.ref ?? resolved.ref).trim();
-        const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
-          .trim()
-          .slice(0, 8);
-        const dateLabel = jobMillis
-          ? new Date(jobMillis).toLocaleString()
-          : "Unknown date";
-        return archivePaths.map((archivePath) => {
-          const fileName = archivePath.split("/").pop() ?? archivePath;
-          return {
-            id: `${toFileId(opts.provider, archivePath)}:${artifactJob}`,
-            fileName,
-            filePath: `${artifactJob} | ${archivePath}`,
-            fileMillis: jobMillis,
-            details: `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`,
-            artifactJob,
-            artifactPath: archivePath,
-            artifactJobId,
-          };
-        });
+      } catch {
+        return [];
       }
-    }
-    if (!Array.isArray(items)) return [];
 
-    const nested = await Promise.all(
-      items.map(async (item: any) => {
-        const itemPath = cleanPath(String(item?.path ?? ""));
-        const fileName =
-          String(item?.name ?? "").trim() || itemPath.split("/").pop() || "";
-        const itemType = String(item?.type ?? "").toLowerCase();
-        if (!itemPath) return [];
-        if (
-          !treeResp.ok &&
-          (itemType === "directory" || itemType === "tree" || itemType === "dir")
-        ) {
-          return browseJobPath(job, pipeline, itemPath);
-        }
-        if (!fileName.toLowerCase().endsWith(".json")) return [];
-        const modifiedRaw = Date.parse(
-          String(
-            item?.modified_at ??
-              item?.updated_at ??
-              item?.commit?.committed_date ??
-              job?.finished_at ??
-              job?.created_at ??
-              0
-          )
-        );
-        const fileMillis = Number.isFinite(modifiedRaw) ? modifiedRaw : jobMillis;
-        const refLabel = String(pipeline?.ref ?? job?.ref ?? resolved.ref).trim();
-        const shortSha = String(pipeline?.sha ?? job?.commit?.id ?? "")
-          .trim()
-          .slice(0, 8);
-        const dateLabel = fileMillis
-          ? new Date(fileMillis).toLocaleString()
-          : "Unknown date";
-        return [
-          {
-            id: `${toFileId(opts.provider, itemPath)}:${artifactJob}`,
-            fileName,
-            filePath: `${artifactJob} | ${itemPath}`,
-            fileMillis,
-            details: `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`,
-            artifactJob,
-            artifactPath: itemPath,
-            artifactJobId,
-          },
-        ];
-      })
-    );
-
-    return nested.flat();
-  };
-
-  const nestedJobs = await Promise.all(
-    pipelines.map(async (pipeline: any) => {
-      const pipelineId = Number(pipeline?.id);
-      if (!Number.isFinite(pipelineId)) return [];
-      const jobsUrl = `${apiBase}/projects/${projectId}/pipelines/${pipelineId}/jobs?scope[]=success&per_page=100`;
-      const jobsResp = await fetch(jobsUrl, { headers });
-      if (!jobsResp.ok) {
-        throw new Error(
-          `GitLab pipeline jobs request failed (${jobsResp.status}) at ${jobsUrl}. Check repo path, ref, token, and access.`
-        );
-      }
-      const jobsJson = await jobsResp.json();
-      const jobs = Array.isArray(jobsJson) ? jobsJson : [];
-      return jobs
-        .filter(
-          (job: any) =>
-            (job?.artifacts_file?.filename || job?.artifacts?.length) &&
-            String(job?.status ?? "").toLowerCase() === "success"
-        )
-        .map((job: any) => ({ job, pipeline }));
+      const jobMillisRaw = Date.parse(
+        String(job?.finished_at ?? job?.created_at ?? job?.started_at ?? 0)
+      );
+      const jobMillis = Number.isFinite(jobMillisRaw) ? jobMillisRaw : 0;
+      const archivePaths = listArchiveJsonPaths(archive, resolved.dirPath);
+      return archivePaths.map((archivePath) => {
+        const fileName = archivePath.split("/").pop() ?? archivePath;
+        return {
+          id: `${toFileId(opts.provider, archivePath)}:${artifactJobId}`,
+          fileName,
+          filePath: `${artifactJob} | ${archivePath}`,
+          fileMillis: jobMillis,
+          details: formatArtifactDetails(job, pipeline, resolved.ref, jobMillis),
+          artifactJob,
+          artifactPath: archivePath,
+          artifactJobId,
+        };
+      });
     })
   );
-  const nestedFiles = await Promise.all(
-    nestedJobs
-      .flat()
-      .map(({ job, pipeline }) => browseJobPath(job, pipeline, resolved.dirPath))
-  );
-  const files = nestedFiles.flat();
+
+  const files = filesNested.flat();
   if (files.length === 0) {
-    throw new Error("No JSON files were found in the selected GitLab build artifacts.");
+    throw new Error(
+      'No artifact JSON files containing "_evalResults" were found across project jobs.'
+    );
   }
   return files.sort((a, b) => b.fileMillis - a.fileMillis);
 }
@@ -771,7 +715,6 @@ export async function fetchSelectedRepoJsonFiles(
     resolved.projectPath,
     headers
   );
-  const refEnc = encodeURIComponent(resolved.ref);
 
   const out: RepoAutoEntry[] = [];
   for (let i = 0; i < targetFiles.length; i += 1) {
@@ -779,29 +722,22 @@ export async function fetchSelectedRepoJsonFiles(
     const artifactPath = String(f.artifactPath ?? f.filePath).trim();
     const artifactJobId = Number(f.artifactJobId);
     if (!artifactPath || !Number.isFinite(artifactJobId)) continue;
-    const rawPath = artifactPath
-      .split("/")
-      .map((part) => encodeURIComponent(part))
-      .join("/");
-    const rawUrl = `${apiBase}/projects/${projectId}/jobs/${artifactJobId}/artifacts/${rawPath}`;
-    const resp = await fetch(rawUrl, { headers });
     let text = "";
-    if (resp.ok) {
-      text = await resp.text();
-    } else {
-      try {
-        const archive = await downloadGitLabArtifactArchive(
-          apiBase,
-          projectId,
-          artifactJobId,
-          headers
-        );
-        const extracted = archive[artifactPath] ?? archive[encodeURIComponent(artifactPath)];
-        if (!extracted) continue;
-        text = strFromU8(extracted);
-      } catch {
-        continue;
-      }
+    try {
+      const archive = await downloadGitLabArtifactArchive(
+        apiBase,
+        projectId,
+        artifactJobId,
+        headers
+      );
+      const decodedPath = decodeArchivePath(artifactPath);
+      const matchedEntry = Object.entries(archive).find(
+        ([archivePath]) => decodeArchivePath(archivePath) === decodedPath
+      );
+      if (!matchedEntry) continue;
+      text = strFromU8(matchedEntry[1]);
+    } catch {
+      continue;
     }
     try {
       out.push({
