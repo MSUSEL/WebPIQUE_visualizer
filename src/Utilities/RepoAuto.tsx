@@ -86,6 +86,31 @@ const decodeArchivePath = (path: string) =>
     })
     .join("/");
 
+async function resolveGitLabProjectId(
+  apiBase: string,
+  projectPath: string,
+  headers: Record<string, string>
+): Promise<string> {
+  const normalized = cleanPath(projectPath);
+  if (!normalized) throw new Error("Repository path is required.");
+  if (/^\d+$/.test(normalized)) return normalized;
+
+  const projectUrl = `${apiBase}/projects/${encodeURIComponent(normalized)}`;
+  const resp = await fetch(projectUrl, { headers });
+  if (!resp.ok) {
+    throw new Error(
+      `GitLab project lookup failed (${resp.status}) at ${projectUrl}. Check repo path, token, and access.`
+    );
+  }
+
+  const project = await resp.json();
+  const projectId = String(project?.id ?? "").trim();
+  if (!projectId) {
+    throw new Error(`GitLab project lookup returned no id for "${normalized}".`);
+  }
+  return projectId;
+}
+
 async function downloadGitLabArtifactArchive(
   apiBase: string,
   projectId: string,
@@ -263,7 +288,11 @@ async function listGitLabRepoFiles(opts: RepoAutoOptions): Promise<RemoteFile[]>
   if (opts.token?.trim()) headers["PRIVATE-TOKEN"] = opts.token.trim();
 
   const apiBase = `${resolved.host.replace(/\/+$/, "")}/api/v4`;
-  const projectId = encodeURIComponent(resolved.projectPath);
+  const projectId = await resolveGitLabProjectId(
+    apiBase,
+    resolved.projectPath,
+    headers
+  );
   const refEnc = encodeURIComponent(resolved.ref);
   const dirPart = resolved.dirPath
     ? `&path=${encodeURIComponent(resolved.dirPath)}`
@@ -410,7 +439,11 @@ async function listGitLabArtifactFiles(
   if (opts.token?.trim()) headers["PRIVATE-TOKEN"] = opts.token.trim();
 
   const apiBase = `${resolved.host.replace(/\/+$/, "")}/api/v4`;
-  const projectId = encodeURIComponent(resolved.projectPath);
+  const projectId = await resolveGitLabProjectId(
+    apiBase,
+    resolved.projectPath,
+    headers
+  );
   const refEnc = encodeURIComponent(resolved.ref);
 
   const pipelinesUrl = `${apiBase}/projects/${projectId}/pipelines?status=success&ref=${refEnc}&per_page=20`;
@@ -621,7 +654,11 @@ export async function fetchSelectedRepoJsonFiles(
     const headers: Record<string, string> = {};
     if (opts.token?.trim()) headers["PRIVATE-TOKEN"] = opts.token.trim();
     const apiBase = `${resolved.host.replace(/\/+$/, "")}/api/v4`;
-    const projectId = encodeURIComponent(resolved.projectPath);
+    const projectId = await resolveGitLabProjectId(
+      apiBase,
+      resolved.projectPath,
+      headers
+    );
     const refEnc = encodeURIComponent(resolved.ref);
 
     const out: RepoAutoEntry[] = [];
@@ -729,7 +766,11 @@ export async function fetchSelectedRepoJsonFiles(
   const headers: Record<string, string> = {};
   if (opts.token?.trim()) headers["PRIVATE-TOKEN"] = opts.token.trim();
   const apiBase = `${resolved.host.replace(/\/+$/, "")}/api/v4`;
-  const projectId = encodeURIComponent(resolved.projectPath);
+  const projectId = await resolveGitLabProjectId(
+    apiBase,
+    resolved.projectPath,
+    headers
+  );
   const refEnc = encodeURIComponent(resolved.ref);
 
   const out: RepoAutoEntry[] = [];
