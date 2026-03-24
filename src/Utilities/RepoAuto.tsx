@@ -150,6 +150,11 @@ async function downloadGitLabArtifactArchive(
   jobId: number,
   headers: Record<string, string>
 ) {
+  if (!/^\d+$/.test(String(projectId).trim())) {
+    throw new Error(
+      `GitLab artifact request expected a numeric project id but got "${projectId}".`
+    );
+  }
   const archiveUrl = `${apiBase}/projects/${projectId}/jobs/${jobId}/artifacts`;
   const resp = await fetch(archiveUrl, { headers });
   if (!resp.ok) {
@@ -228,8 +233,8 @@ const resolveGitLabInput = (
           : "";
       const dirFromArtifacts =
         artifactsIdx >= 0 &&
-        (mode === "browse" || mode === "file" || mode === "raw") &&
-        artifactsIdx + 2 < segs.length
+          (mode === "browse" || mode === "file" || mode === "raw") &&
+          artifactsIdx + 2 < segs.length
           ? cleanPath(segs.slice(artifactsIdx + 2).join("/"))
           : "";
 
