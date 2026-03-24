@@ -109,6 +109,9 @@ const formatArtifactDetails = (
   return `${refLabel || "unknown-ref"} : ${shortSha || "unknown-sha"} : ${dateLabel}`;
 };
 
+const isPiqueArtifactJob = (job: any) =>
+  String(job?.name ?? "").trim().toLowerCase() === "pique";
+
 async function resolveGitLabProjectId(
   apiBase: string,
   projectPath: string,
@@ -491,11 +494,10 @@ async function listGitLabArtifactFiles(
       const jobId = Number(job?.id);
       const artifactFile = String(job?.artifacts_file?.filename ?? "").trim();
       const hasArtifactsZip =
-        artifactFile.toLowerCase() === "artifacts.zip" ||
-        Array.isArray(job?.artifacts) ||
-        String(job?.artifacts_expire_at ?? "").trim() !== "";
+        artifactFile.toLowerCase() === "artifacts.zip";
       if (!Number.isFinite(jobId)) return;
       if (String(job?.status ?? "").toLowerCase() !== "success") return;
+      if (!isPiqueArtifactJob(job)) return;
       if (!hasArtifactsZip) return;
       if (!jobsById.has(jobId)) jobsById.set(jobId, { job });
     });
@@ -545,7 +547,7 @@ async function listGitLabArtifactFiles(
   const files = filesNested.flat();
   if (files.length === 0) {
     throw new Error(
-      'No artifact JSON files containing "_evalResults" were found across project jobs.'
+      'No "_evalResults" JSON files were found in PIQUE artifacts.zip archives.'
     );
   }
   return files.sort((a, b) => b.fileMillis - a.fileMillis);
