@@ -63,7 +63,7 @@ export default function CreateProjectDialog({
   const [progress, setProgress] = useState(0);
 
   const [repoPanelOpen, setRepoPanelOpen] = useState(false);
-  const [repoProvider, setRepoProvider] = useState<RepoProvider>("gitlab");
+  const [repoProvider, setRepoProvider] = useState<RepoProvider>("gitlab-artifacts");
   const [repoBaseUrl, setRepoBaseUrl] = useState("https://gitlab.com");
   const [repoPath, setRepoPath] = useState("");
   const [repoRef, setRepoRef] = useState("main");
@@ -83,7 +83,7 @@ export default function CreateProjectDialog({
       setName("");
       setFiles([]);
       setRepoPanelOpen(false);
-      setRepoProvider("gitlab");
+      setRepoProvider("gitlab-artifacts");
       setRepoBaseUrl("https://gitlab.com");
       setRepoPath("");
       setRepoRef("main");
@@ -392,7 +392,6 @@ export default function CreateProjectDialog({
   const content = (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-[rgba(0,0,0,0.35)]"
-      onClick={onClose}
     >
       <div
         className="relative flex max-h-[92vh] w-[560px] max-w-[92vw] flex-col overflow-hidden rounded-[10px] bg-white shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
@@ -468,9 +467,9 @@ export default function CreateProjectDialog({
                     }}
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                   >
+                    <option value="gitlab-artifacts">GitLab Build Artifacts</option>
                     <option value="gitlab">GitLab Repo</option>
                     <option value="github">GitHub Repo</option>
-                    <option value="gitlab-artifacts">GitLab Build Artifacts</option>
                   </select>
                   <input
                     type="text"
