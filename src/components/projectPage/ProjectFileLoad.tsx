@@ -99,6 +99,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
     const [scores, setScores] = useState<ProjectFileScore[]>([]);
     const [hydrated, setHydrated] = useState(false);
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const hydratedProjectIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const localMode = useState<ViewMode>("single");
     const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -119,10 +120,13 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
 
     /* HYDRATE + MIGRATE */
     useEffect(() => {
+      hydratedProjectIdRef.current = null;
+      setHydrated(false);
       if (!projectId) return;
       if (scoresFromParent) {
         setScores(scoresFromParent);
         setSelected(new Set());
+        hydratedProjectIdRef.current = projectId;
         setHydrated(true);
         return;
       }
@@ -177,13 +181,21 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
       }
 
       setSelected(new Set());
+      hydratedProjectIdRef.current = projectId;
       setHydrated(true);
     }, [projectId, scoresFromParent]);
 
     /* BUBBLE UP SCORES TO PARENT */
     useEffect(() => {
-      if (projectId && hydrated) onScores(projectId, scores);
-    }, [projectId, hydrated, scores, onScores]);
+      if (
+        projectId &&
+        hydrated &&
+        (!scoresFromParent || scores === scoresFromParent) &&
+        hydratedProjectIdRef.current === projectId
+      ) {
+        onScores(projectId, scores);
+      }
+    }, [projectId, hydrated, scores, scoresFromParent, onScores]);
 
     /* SELECTION -> VIEWER PAYLOAD (inflate via rawKey) */
     useEffect(() => {

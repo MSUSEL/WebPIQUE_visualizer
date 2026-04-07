@@ -50,6 +50,7 @@ type RemoteFile = {
   fileMillis: number;
   details?: string;
   sha?: string;
+  sourceRef?: string;
   artifactJob?: string;
   artifactPath?: string;
   artifactJobId?: number;
@@ -183,6 +184,15 @@ function listArchiveJsonPaths(
 const toFileId = (provider: RepoProvider, path: string, sha?: string) =>
   `${provider}:${path}:${sha ?? ""}`;
 
+const uniqueRemoteFiles = (files: RemoteFile[]) => {
+  const seen = new Set<string>();
+  return files.filter((file) => {
+    if (seen.has(file.id)) return false;
+    seen.add(file.id);
+    return true;
+  });
+};
+
 const resolveGitLabInput = (
   repoPathInput: string,
   baseUrlInput: string,
@@ -190,7 +200,7 @@ const resolveGitLabInput = (
   dirInput: string
 ): GitLabResolved => {
   const fallbackHost = (baseUrlInput || "https://gitlab.com").replace(/\/+$/, "");
-  const fallbackRef = refInput.trim() || "main";
+  const fallbackRef = refInput.trim();
   const fallbackDir = cleanPath(dirInput);
   const raw = repoPathInput.trim();
   if (!raw) throw new Error("Repository path is required.");
@@ -212,7 +222,7 @@ const resolveGitLabInput = (
       return {
         host,
         projectPath,
-        ref: refInput.trim() || refFromUrl || "main",
+        ref: refInput.trim() || refFromUrl || "",
         dirPath: fallbackDir || dirFromUrl,
       };
     }
@@ -265,7 +275,7 @@ const resolveGitHubInput = (
     /\/+$/,
     ""
   );
-  const fallbackRef = refInput.trim() || "main";
+  const fallbackRef = refInput.trim();
   const fallbackDir = cleanPath(dirInput);
   const raw = repoPathInput.trim();
   if (!raw) throw new Error("Repository path is required.");
@@ -311,6 +321,189 @@ const resolveGitHubInput = (
   };
 };
 
+async function listGitLabBranches(
+  apiBase: string,
+  projectId: string,
+  headers: Record<string, string>
+): Promise<string[]> {
+  const out: string[] = [];
+  const perPage = 100;
+  const maxPages = 10;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const branchesUrl = `${apiBase}/projects/${projectId}/repository/branches?per_page=${perPage}&page=${page}`;
+    const resp = await fetch(branchesUrl, { headers });
+    if (!resp.ok) {
+      throw new Error(
+        `GitLab branch request failed (${resp.status}). Check repo path, token, and access.`
+      );
+    }
+    const items = await resp.json();
+    const branches = Array.isArray(items) ? items : [];
+    if (branches.length === 0) break;
+    branches.forEach((branch: any) => {
+      const name = String(branch?.name ?? "").trim();
+      if (name) out.push(name);
+    });
+    if (branches.length < perPage) break;
+  }
+  return Array.from(new Set(out));
+}
+
+async function listGitLabRepoFilesForRef(
+  provider: RepoProvider,
+  apiBase: string,
+  projectId: string,
+  headers: Record<string, string>,
+  dirPath: string,
+  branchName: string
+): Promise<RemoteFile[]> {
+  const refEnc = encodeURIComponent(branchName);
+  const dirPart = dirPath ? `&path=${encodeURIComponent(dirPath)}` : "";
+  const blobs: { fileName: string; filePath: string; sha: string }[] = [];
+  const perPage = 100;
+  const maxPages = 5;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const treeUrl = `${apiBase}/projects/${projectId}/repository/tree?ref=${refEnc}${dirPart}&recursive=true&per_page=${perPage}&page=${page}`;
+    const treeResp = await fetch(treeUrl, { headers });
+    if (!treeResp.ok) {
+      throw new Error(
+        `GitLab tree request failed (${treeResp.status}). Check repo path, branch, token, and access.`
+      );
+    }
+    const pageItems = await treeResp.json();
+    if (!Array.isArray(pageItems) || pageItems.length === 0) break;
+    pageItems.forEach((it: any) => {
+      if (it?.type !== "blob") return;
+      const filePath = String(it?.path ?? "").trim();
+      const fileName = String(it?.name ?? "").trim();
+      const sha = String(it?.id ?? "").trim();
+      if (!filePath || !fileName || !fileName.toLowerCase().endsWith(".json")) return;
+      blobs.push({ fileName, filePath, sha });
+    });
+    if (pageItems.length < perPage) break;
+  }
+
+  return Promise.all(
+    blobs.map(async (file) => {
+      const commitsUrl = `${apiBase}/projects/${projectId}/repository/commits?ref_name=${refEnc}&path=${encodeURIComponent(
+        file.filePath
+      )}&per_page=1`;
+      const resp = await fetch(commitsUrl, { headers });
+      if (!resp.ok) {
+        return {
+          ...file,
+          id: toFileId(provider, file.filePath, file.sha),
+          fileMillis: 0,
+          sourceRef: branchName,
+          details: branchName,
+        };
+      }
+      const list = await resp.json();
+      const iso = Array.isArray(list) ? list[0]?.committed_date : null;
+      const millis = iso ? Date.parse(String(iso)) : 0;
+      return {
+        ...file,
+        id: toFileId(provider, file.filePath, file.sha),
+        fileMillis: Number.isFinite(millis) ? millis : 0,
+        sourceRef: branchName,
+        details: branchName,
+      };
+    })
+  );
+}
+
+async function listGitHubBranches(
+  apiBase: string,
+  repoFull: string,
+  headers: Record<string, string>
+): Promise<string[]> {
+  const out: string[] = [];
+  const perPage = 100;
+  const maxPages = 10;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const branchesUrl = `${apiBase}/repos/${repoFull}/branches?per_page=${perPage}&page=${page}`;
+    const resp = await fetch(branchesUrl, { headers });
+    if (!resp.ok) {
+      throw new Error(
+        `GitHub branch request failed (${resp.status}). Check repo path, token, and access.`
+      );
+    }
+    const items = await resp.json();
+    const branches = Array.isArray(items) ? items : [];
+    if (branches.length === 0) break;
+    branches.forEach((branch: any) => {
+      const name = String(branch?.name ?? "").trim();
+      if (name) out.push(name);
+    });
+    if (branches.length < perPage) break;
+  }
+  return Array.from(new Set(out));
+}
+
+async function listGitHubRepoFilesForRef(
+  provider: RepoProvider,
+  apiBase: string,
+  repoFull: string,
+  headers: Record<string, string>,
+  dirPath: string,
+  branchName: string
+): Promise<RemoteFile[]> {
+  const contentsPath = dirPath ? `${dirPath}/` : "";
+  const refEnc = encodeURIComponent(branchName);
+  const treeUrl = `${apiBase}/repos/${repoFull}/git/trees/${refEnc}?recursive=1`;
+  const treeResp = await fetch(treeUrl, { headers });
+  if (!treeResp.ok) {
+    throw new Error(
+      `GitHub tree request failed (${treeResp.status}). Check repo path, branch, token, and access.`
+    );
+  }
+  const treeObj = await treeResp.json();
+  const treeItems = Array.isArray(treeObj?.tree) ? treeObj.tree : [];
+  const files: { fileName: string; filePath: string; sha: string }[] = treeItems
+    .filter(
+      (it: any) =>
+        String(it?.type ?? "") === "blob" &&
+        String(it?.path ?? "").toLowerCase().endsWith(".json") &&
+        (!contentsPath || String(it?.path ?? "").startsWith(contentsPath))
+    )
+    .map((it: any) => ({
+      fileName: String(it.path ?? "").split("/").pop() ?? "",
+      filePath: String(it.path ?? ""),
+      sha: String(it.sha ?? ""),
+    }));
+
+  return Promise.all(
+    files.map(async (file) => {
+      const commitsUrl = `${apiBase}/repos/${repoFull}/commits?sha=${refEnc}&path=${encodeURIComponent(
+        file.filePath
+      )}&per_page=1`;
+      const resp = await fetch(commitsUrl, { headers });
+      if (!resp.ok) {
+        return {
+          ...file,
+          id: toFileId(provider, file.filePath, file.sha),
+          fileMillis: 0,
+          sourceRef: branchName,
+          details: branchName,
+        };
+      }
+      const list = await resp.json();
+      const iso = Array.isArray(list)
+        ? list[0]?.commit?.committer?.date ?? list[0]?.commit?.author?.date
+        : null;
+      const millis = iso ? Date.parse(String(iso)) : 0;
+      return {
+        ...file,
+        id: toFileId(provider, file.filePath, file.sha),
+        fileMillis: Number.isFinite(millis) ? millis : 0,
+        sourceRef: branchName,
+        details: branchName,
+      };
+    })
+  );
+}
+
 async function listGitLabRepoFiles(opts: RepoAutoOptions): Promise<RemoteFile[]> {
   const resolved = resolveGitLabInput(
     opts.repoPath,
@@ -327,63 +520,28 @@ async function listGitLabRepoFiles(opts: RepoAutoOptions): Promise<RemoteFile[]>
     resolved.projectPath,
     headers
   );
-  const refEnc = encodeURIComponent(resolved.ref);
-  const dirPart = resolved.dirPath
-    ? `&path=${encodeURIComponent(resolved.dirPath)}`
-    : "";
-
-  const blobs: { fileName: string; filePath: string; sha: string }[] = [];
-  const perPage = 100;
-  const maxPages = 5;
-  for (let page = 1; page <= maxPages; page += 1) {
-    const treeUrl = `${apiBase}/projects/${projectId}/repository/tree?ref=${refEnc}${dirPart}&recursive=true&per_page=${perPage}&page=${page}`;
-    const treeResp = await fetch(treeUrl, { headers });
-    if (!treeResp.ok) {
-      throw new Error(
-        `GitLab tree request failed (${treeResp.status}). Check repo path, ref, token, and access.`
-      );
-    }
-    const pageItems = await treeResp.json();
-    if (!Array.isArray(pageItems) || pageItems.length === 0) break;
-    pageItems.forEach((it: any) => {
-      if (it?.type !== "blob") return;
-      const filePath = String(it?.path ?? "").trim();
-      const fileName = String(it?.name ?? "").trim();
-      const sha = String(it?.id ?? "").trim();
-      if (!filePath || !fileName || !fileName.toLowerCase().endsWith(".json")) return;
-      blobs.push({ fileName, filePath, sha });
-    });
-    if (pageItems.length < perPage) break;
-  }
-  if (blobs.length === 0) {
+  const branchNames = resolved.ref
+    ? [resolved.ref]
+    : await listGitLabBranches(apiBase, projectId, headers);
+  const filesNested = await Promise.all(
+    branchNames.map((branchName) =>
+      listGitLabRepoFilesForRef(
+        opts.provider,
+        apiBase,
+        projectId,
+        headers,
+        resolved.dirPath,
+        branchName
+      )
+    )
+  );
+  const files = uniqueRemoteFiles(filesNested.flat()).sort(
+    (a, b) => b.fileMillis - a.fileMillis
+  );
+  if (files.length === 0) {
     throw new Error("No JSON files found in the target repo directory.");
   }
-
-  const dated = await Promise.all(
-    blobs.map(async (f) => {
-      const commitsUrl = `${apiBase}/projects/${projectId}/repository/commits?ref_name=${refEnc}&path=${encodeURIComponent(
-        f.filePath
-      )}&per_page=1`;
-      const resp = await fetch(commitsUrl, { headers });
-      if (!resp.ok) {
-        return {
-          ...f,
-          id: toFileId(opts.provider, f.filePath, f.sha),
-          fileMillis: 0,
-        };
-      }
-      const list = await resp.json();
-      const iso = Array.isArray(list) ? list[0]?.committed_date : null;
-      const millis = iso ? Date.parse(String(iso)) : 0;
-      return {
-        ...f,
-        id: toFileId(opts.provider, f.filePath, f.sha),
-        fileMillis: Number.isFinite(millis) ? millis : 0,
-      };
-    })
-  );
-
-  return dated.sort((a, b) => b.fileMillis - a.fileMillis);
+  return files;
 }
 
 async function listGitHubRepoFiles(opts: RepoAutoOptions): Promise<RemoteFile[]> {
@@ -404,60 +562,28 @@ async function listGitHubRepoFiles(opts: RepoAutoOptions): Promise<RemoteFile[]>
   const repoFull = `${encodeURIComponent(resolved.owner)}/${encodeURIComponent(
     resolved.repo
   )}`;
-  const contentsPath = resolved.dirPath ? `${resolved.dirPath}/` : "";
-  const refEnc = encodeURIComponent(resolved.ref);
-  const treeUrl = `${apiBase}/repos/${repoFull}/git/trees/${refEnc}?recursive=1`;
-  const treeResp = await fetch(treeUrl, { headers });
-  if (!treeResp.ok) {
-    throw new Error(
-      `GitHub tree request failed (${treeResp.status}). Check repo path, ref, token, and access.`
-    );
-  }
-  const treeObj = await treeResp.json();
-  const treeItems = Array.isArray(treeObj?.tree) ? treeObj.tree : [];
-  const files: { fileName: string; filePath: string; sha: string }[] = treeItems
-    .filter(
-      (it: any) =>
-        String(it?.type ?? "") === "blob" &&
-        String(it?.path ?? "").toLowerCase().endsWith(".json") &&
-        (!contentsPath || String(it?.path ?? "").startsWith(contentsPath))
+  const branchNames = resolved.ref
+    ? [resolved.ref]
+    : await listGitHubBranches(apiBase, repoFull, headers);
+  const filesNested = await Promise.all(
+    branchNames.map((branchName) =>
+      listGitHubRepoFilesForRef(
+        opts.provider,
+        apiBase,
+        repoFull,
+        headers,
+        resolved.dirPath,
+        branchName
+      )
     )
-    .map((it: any) => ({
-      fileName: String(it.path ?? "").split("/").pop() ?? "",
-      filePath: String(it.path ?? ""),
-      sha: String(it.sha ?? ""),
-    }));
+  );
+  const files = uniqueRemoteFiles(filesNested.flat()).sort(
+    (a, b) => b.fileMillis - a.fileMillis
+  );
   if (files.length === 0) {
     throw new Error("No JSON files found in the target repo directory.");
   }
-
-  const dated = await Promise.all(
-    files.map(async (f) => {
-      const commitsUrl = `${apiBase}/repos/${repoFull}/commits?sha=${refEnc}&path=${encodeURIComponent(
-        f.filePath
-      )}&per_page=1`;
-      const resp = await fetch(commitsUrl, { headers });
-      if (!resp.ok) {
-        return {
-          ...f,
-          id: toFileId(opts.provider, f.filePath, f.sha),
-          fileMillis: 0,
-        };
-      }
-      const list = await resp.json();
-      const iso = Array.isArray(list)
-        ? list[0]?.commit?.committer?.date ?? list[0]?.commit?.author?.date
-        : null;
-      const millis = iso ? Date.parse(String(iso)) : 0;
-      return {
-        ...f,
-        id: toFileId(opts.provider, f.filePath, f.sha),
-        fileMillis: Number.isFinite(millis) ? millis : 0,
-      };
-    })
-  );
-
-  return dated.sort((a, b) => b.fileMillis - a.fileMillis);
+  return files;
 }
 
 async function listGitLabArtifactFiles(
@@ -610,7 +736,6 @@ export async function fetchSelectedRepoJsonFiles(
       resolved.projectPath,
       headers
     );
-    const refEnc = encodeURIComponent(resolved.ref);
 
     const out: RepoAutoEntry[] = [];
     for (let i = 0; i < targetFiles.length; i += 1) {
@@ -635,9 +760,11 @@ export async function fetchSelectedRepoJsonFiles(
       }
 
       if (!text) {
+        const rawRef = String(f.sourceRef ?? resolved.ref).trim();
+        if (!rawRef) continue;
         const rawUrl = `${apiBase}/projects/${projectId}/repository/files/${encodeURIComponent(
           f.filePath
-        )}/raw?ref=${refEnc}`;
+        )}/raw?ref=${encodeURIComponent(rawRef)}`;
         const rawResp = await fetch(rawUrl, { headers });
         if (!rawResp.ok) continue;
         text = await rawResp.text();
@@ -681,19 +808,40 @@ export async function fetchSelectedRepoJsonFiles(
     const out: RepoAutoEntry[] = [];
     for (let i = 0; i < targetFiles.length; i += 1) {
       const f = targetFiles[i];
-      const blobUrl = `${apiBase}/repos/${repoFull}/git/blobs/${encodeURIComponent(
-        String(f.sha ?? "")
-      )}`;
-      const blobResp = await fetch(blobUrl, { headers });
-      if (!blobResp.ok) continue;
       let text = "";
-      try {
-        const meta = await blobResp.json();
-        const enc = String((meta as any)?.encoding ?? "").toLowerCase();
-        const content = String((meta as any)?.content ?? "");
-        if (enc === "base64" && content) text = decodeBase64Utf8(content);
-      } catch {
-        text = "";
+      const sha = String(f.sha ?? "").trim();
+      if (sha) {
+        const blobUrl = `${apiBase}/repos/${repoFull}/git/blobs/${encodeURIComponent(
+          sha
+        )}`;
+        const blobResp = await fetch(blobUrl, { headers });
+        if (blobResp.ok) {
+          try {
+            const meta = await blobResp.json();
+            const enc = String((meta as any)?.encoding ?? "").toLowerCase();
+            const content = String((meta as any)?.content ?? "");
+            if (enc === "base64" && content) text = decodeBase64Utf8(content);
+          } catch {
+            text = "";
+          }
+        }
+      }
+      if (!text) {
+        const rawRef = String(f.sourceRef ?? resolved.ref).trim();
+        if (!rawRef) continue;
+        const contentsUrl = `${apiBase}/repos/${repoFull}/contents/${encodeURIComponent(
+          f.filePath
+        )}?ref=${encodeURIComponent(rawRef)}`;
+        const contentsResp = await fetch(contentsUrl, { headers });
+        if (!contentsResp.ok) continue;
+        try {
+          const meta = await contentsResp.json();
+          const enc = String((meta as any)?.encoding ?? "").toLowerCase();
+          const content = String((meta as any)?.content ?? "");
+          if (enc === "base64" && content) text = decodeBase64Utf8(content);
+        } catch {
+          text = "";
+        }
       }
       if (!text) continue;
       try {

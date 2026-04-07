@@ -556,7 +556,7 @@ export default function ProjectView() {
                     </div>
                     <div>
                       <strong className="text-black">Ref:</strong>{" "}
-                      {refreshProject.repoConnection.ref}
+                      {refreshProject.repoConnection.ref || "All branches"}
                     </div>
                     <div>
                       <strong className="text-black">Directory:</strong>{" "}

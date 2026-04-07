@@ -66,7 +66,7 @@ export default function CreateProjectDialog({
   const [repoProvider, setRepoProvider] = useState<RepoProvider>("gitlab-artifacts");
   const [repoBaseUrl, setRepoBaseUrl] = useState("https://gitlab.com");
   const [repoPath, setRepoPath] = useState("");
-  const [repoRef, setRepoRef] = useState("main");
+  const [repoRef, setRepoRef] = useState("");
   const [repoDir, setRepoDir] = useState("");
   const [repoToken, setRepoToken] = useState("");
   const [repoStatus, setRepoStatus] = useState("");
@@ -86,7 +86,7 @@ export default function CreateProjectDialog({
       setRepoProvider("gitlab-artifacts");
       setRepoBaseUrl("https://gitlab.com");
       setRepoPath("");
-      setRepoRef("main");
+      setRepoRef("");
       setRepoDir("");
       setRepoToken("");
       setRepoStatus("");
@@ -360,7 +360,7 @@ export default function CreateProjectDialog({
             provider: repoProvider,
             baseUrl: repoBaseUrl.trim(),
             repoPath: repoPath.trim(),
-            ref: repoRef.trim() || "main",
+            ref: repoRef.trim(),
             dir: repoDir.trim(),
             selectedIds:
               selectedRepoCandidateIds.length > 0
@@ -508,7 +508,7 @@ export default function CreateProjectDialog({
                       setRepoRef(e.target.value);
                       resetRepoSelection();
                     }}
-                    placeholder="Ref/branch (default: main)"
+                    placeholder="Branch (optional, blank = all branches)"
                     className="w-full rounded-md border border-[#ddd] px-2.5 py-2 text-[13px]"
                   />
                   <input
