@@ -1,5 +1,6 @@
 // project page
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Provider, createStore } from "jotai";
 import ProjectSidebar, {
   Project,
 } from "../components/projectPage/ProjectSidebar";
@@ -202,6 +203,10 @@ export default function ProjectView() {
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) ?? null,
     [projects, activeProjectId]
+  );
+  const singleViewerStore = useMemo(
+    () => createStore(),
+    [isModalOpen, modalMode, singlePayload?.filename]
   );
   const refreshProject = useMemo(
     () => projects.find((p) => p.id === refreshProjectId) ?? null,
@@ -776,7 +781,9 @@ export default function ProjectView() {
         {isModalOpen && (
           <ModalPopout onClose={() => setModalOpen(false)}>
             {modalMode === "single" ? (
-              <SingleFileComponent jsonData={singlePayload} embedded />
+              <Provider store={singleViewerStore}>
+                <SingleFileComponent jsonData={singlePayload} embedded />
+              </Provider>
             ) : (
               <CompareComponent
                 file1={comparePayload?.file1}

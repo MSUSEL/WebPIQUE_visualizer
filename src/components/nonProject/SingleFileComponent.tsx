@@ -206,10 +206,11 @@ const SingleFileVisualizer: React.FC<Props> = (props) => {
   // ------- handlers (write atoms unless controlled) -------
   const handleAspectClick = useCallback(
     (a: string | null) => {
-      if (props.controlledAspect === undefined) setAspect(a);
-      props.onAspectChange?.(a);
+      const nextAspect = a === selectedAspect ? null : a;
+      if (props.controlledAspect === undefined) setAspect(nextAspect);
+      props.onAspectChange?.(nextAspect);
     },
-    [props.controlledAspect, props.onAspectChange, setAspect]
+    [props.controlledAspect, props.onAspectChange, selectedAspect, setAspect]
   );
 
   const handleTabChange = useCallback(
