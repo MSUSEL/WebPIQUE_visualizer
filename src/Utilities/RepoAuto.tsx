@@ -6,6 +6,10 @@ export type RepoAutoEntry = {
   fileName: string;
   fileMillis: number;
   json: any;
+  provider?: RepoProvider | "local";
+  sourceRef?: string;
+  sourcePath?: string;
+  details?: string;
 };
 
 export type RepoAutoCandidate = {
@@ -14,6 +18,9 @@ export type RepoAutoCandidate = {
   filePath: string;
   fileMillis: number;
   details?: string;
+  provider?: RepoProvider;
+  sourceRef?: string;
+  sourcePath?: string;
 };
 
 export type RepoAutoOptions = {
@@ -54,6 +61,7 @@ type RemoteFile = {
   artifactJob?: string;
   artifactPath?: string;
   artifactJobId?: number;
+  provider: RepoProvider;
 };
 
 const cleanPath = (s: string) =>
@@ -395,6 +403,7 @@ async function listGitLabRepoFilesForRef(
           ...file,
           id: toFileId(provider, file.filePath, file.sha),
           fileMillis: 0,
+          provider,
           sourceRef: branchName,
           details: branchName,
         };
@@ -406,6 +415,7 @@ async function listGitLabRepoFilesForRef(
         ...file,
         id: toFileId(provider, file.filePath, file.sha),
         fileMillis: Number.isFinite(millis) ? millis : 0,
+        provider,
         sourceRef: branchName,
         details: branchName,
       };
@@ -484,6 +494,7 @@ async function listGitHubRepoFilesForRef(
           ...file,
           id: toFileId(provider, file.filePath, file.sha),
           fileMillis: 0,
+          provider,
           sourceRef: branchName,
           details: branchName,
         };
@@ -497,6 +508,7 @@ async function listGitHubRepoFilesForRef(
         ...file,
         id: toFileId(provider, file.filePath, file.sha),
         fileMillis: Number.isFinite(millis) ? millis : 0,
+        provider,
         sourceRef: branchName,
         details: branchName,
       };
@@ -666,7 +678,9 @@ async function listGitLabArtifactFiles(
           fileName,
           filePath: `${artifactJob} | ${archivePath}`,
           fileMillis: jobMillis,
+          provider: opts.provider,
           details: formatArtifactDetails(job, resolved.ref, jobMillis),
+          sourceRef: String(job?.ref ?? resolved.ref).trim(),
           artifactJob,
           artifactPath: archivePath,
           artifactJobId,
@@ -701,6 +715,9 @@ export async function listRecentRepoJsonFiles(
     filePath: f.filePath,
     fileMillis: f.fileMillis,
     details: f.details,
+    provider: f.provider,
+    sourceRef: f.sourceRef,
+    sourcePath: f.artifactPath ?? f.filePath,
   }));
 }
 
@@ -775,6 +792,10 @@ export async function fetchSelectedRepoJsonFiles(
           fileName: f.fileName,
           fileMillis: f.fileMillis || Date.now() - i,
           json: JSON.parse(text),
+          provider: f.provider,
+          sourceRef: f.sourceRef,
+          sourcePath: f.filePath,
+          details: f.details,
         });
       } catch {
         // ignore malformed files
@@ -849,6 +870,10 @@ export async function fetchSelectedRepoJsonFiles(
           fileName: f.fileName,
           fileMillis: f.fileMillis || Date.now() - i,
           json: JSON.parse(text),
+          provider: f.provider,
+          sourceRef: f.sourceRef,
+          sourcePath: f.filePath,
+          details: f.details,
         });
       } catch {
         // ignore malformed files
@@ -899,6 +924,10 @@ export async function fetchSelectedRepoJsonFiles(
         fileName: f.fileName,
         fileMillis: f.fileMillis || Date.now() - i,
         json: JSON.parse(text),
+        provider: f.provider,
+        sourceRef: f.sourceRef,
+        sourcePath: f.artifactPath ?? f.filePath,
+        details: f.details,
       });
     } catch {
       // ignore malformed files

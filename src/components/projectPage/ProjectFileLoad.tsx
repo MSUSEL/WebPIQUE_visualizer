@@ -9,6 +9,8 @@ import {
 } from "react";
 import LZString from "lz-string";
 import { parseTQIQAScores } from "../../Utilities/TQIQAScoreParser";
+import { buildProjectFileMetadataTitle } from "../../Utilities/projectFileMetadata";
+import type { RepoProvider } from "../../Utilities/RepoAuto";
 
 export type AspectItem = { name: string; value: number };
 
@@ -18,6 +20,10 @@ export type ProjectFileScore = {
   fileDateISO: string; // lastModified ISO
   tqi: number | null;
   aspects: AspectItem[];
+  sourceProvider?: RepoProvider | "local";
+  sourceRef?: string;
+  sourcePath?: string;
+  sourceDetails?: string;
   rawKey?: string;
   raw?: any;
   needsRaw?: boolean;
@@ -319,6 +325,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
             fileDateISO: new Date(file.lastModified).toISOString(),
             tqi,
             aspects,
+            sourceProvider: "local",
             needsRaw: false,
           };
 
@@ -403,6 +410,10 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
             fileDateISO: new Date(file.lastModified).toISOString(),
             tqi,
             aspects,
+            sourceProvider: "local",
+            sourceRef: undefined,
+            sourcePath: undefined,
+            sourceDetails: undefined,
             rawKey,
             needsRaw: false,
           };
@@ -561,9 +572,7 @@ const ProjectFileLoad = forwardRef<ProjectFileLoadHandle, ProjectFileLoadProps>(
 
                     <span
                       className="max-w-[18rem] flex-none overflow-hidden text-ellipsis whitespace-nowrap"
-                      title={`${s.fileName}\n${new Date(
-                        s.fileDateISO
-                      ).toLocaleString()}`}
+                      title={buildProjectFileMetadataTitle(s.fileName, s)}
                     >
                       {label}
                     </span>

@@ -9,7 +9,9 @@ import {
   listRecentRepoJsonFiles,
   type RepoAutoCandidate,
   type RepoProvider,
+  type RepoAutoEntry,
 } from "../../Utilities/RepoAuto";
+import { formatSourceProviderLabel } from "../../Utilities/projectFileMetadata";
 import type { RepoConnectionConfig } from "./ProjectSidebar";
 
 const MAX_FILES = 12;
@@ -142,7 +144,7 @@ export default function CreateProjectDialog({
   }
 
   async function upsertParsedEntries(
-    entries: { fileName: string; fileMillis: number; json: any }[]
+    entries: RepoAutoEntry[]
   ) {
     setLoading(true);
     setProgress(0);
@@ -233,6 +235,10 @@ export default function CreateProjectDialog({
           fileDateISO: new Date(fileMillis).toISOString(),
           tqi,
           aspects,
+          sourceProvider: item.provider ?? "local",
+          sourceRef: item.sourceRef,
+          sourcePath: item.sourcePath,
+          sourceDetails: item.details,
           needsRaw: false,
         };
 
@@ -253,7 +259,7 @@ export default function CreateProjectDialog({
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList) return;
-    const parsedEntries: { fileName: string; fileMillis: number; json: any }[] = [];
+    const parsedEntries: RepoAutoEntry[] = [];
 
     for (const f of Array.from(fileList)) {
       if (!f.name.toLowerCase().endsWith(".json")) {
@@ -265,6 +271,7 @@ export default function CreateProjectDialog({
           fileName: f.name,
           fileMillis: f.lastModified,
           json: JSON.parse(await f.text()),
+          provider: "local",
         });
       } catch {
         alert(`Invalid JSON: ${f.name}`);
@@ -594,6 +601,16 @@ export default function CreateProjectDialog({
                               <span className="block">{candidate.fileName}</span>
                               <span className="block text-[#6b7280]">
                                 {candidate.filePath}
+                              </span>
+                              <span className="block text-[#6b7280]">
+                                {[
+                                  formatSourceProviderLabel(candidate.provider),
+                                  candidate.sourceRef
+                                    ? `Branch: ${candidate.sourceRef}`
+                                    : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" | ")}
                               </span>
                               <span className="block text-[#6b7280]">
                                 {candidate.details ??

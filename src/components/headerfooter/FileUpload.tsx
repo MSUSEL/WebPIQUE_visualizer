@@ -157,19 +157,28 @@ const FileUpload: React.FC<Props> = ({ onJsonLoaded, variant = "default" }) => {
         {isDragActive ? (
           <p className="mb-2 text-[18px]">Drop the JSON file here...</p>
         ) : (
-          <p className="mb-2 text-[18px]">
-            Drag JSON file here
-            <br />
-            or
-            <br />
-            <button
-              type="button"
-              className="mt-4 rounded-[10px] border border-[grey] bg-[#f2f2f2] px-5 py-2 text-[16px]"
-              onClick={() => open()}
-            >
-              Browse Files
-            </button>
-          </p>
+          <div>
+            <p className="mb-5 max-w-[920px] text-[18px] font-bold leading-[1.5] text-[#222]">
+              Use the file load features below to quickly visualize a single
+              PIQUE output file, or use the menu in the top left to visualize a
+              single file via &quot;New File Upload,&quot; compare two files via
+              &quot;Compare,&quot; or create a project via &quot;Project&quot; to
+              track TQI/QA scores over time and visualize files.
+            </p>
+            <p className="mb-2 text-[18px]">
+              Drag JSON file here
+              <br />
+              or
+              <br />
+              <button
+                type="button"
+                className="mt-4 rounded-[10px] border border-[grey] bg-[#f2f2f2] px-5 py-2 text-[16px]"
+                onClick={() => open()}
+              >
+                Browse Files
+              </button>
+            </p>
+          </div>
         )}
       </div>
       {status === "uploading" && (

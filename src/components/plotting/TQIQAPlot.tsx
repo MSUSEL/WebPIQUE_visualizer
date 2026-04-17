@@ -12,6 +12,7 @@ import {
   ReferenceArea,
 } from "recharts";
 import type { ProjectFileScore } from "../projectPage/ProjectFileLoad";
+import { buildProjectFileMetadataLines } from "../../Utilities/projectFileMetadata";
 
 export default function TQIQAPlot({
   files,
@@ -33,6 +34,10 @@ export default function TQIQAPlot({
         fileId: f.id,
         dateMs,
         fileName: f.fileName,
+        sourceProvider: f.sourceProvider,
+        sourceRef: f.sourceRef,
+        sourcePath: f.sourcePath,
+        sourceDetails: f.sourceDetails,
         TQI: typeof f.tqi === "number" ? f.tqi : null,
       };
       f.aspects.forEach((a) => {
@@ -59,7 +64,21 @@ export default function TQIQAPlot({
     const s = new Set<string>();
     data.forEach((row) => {
       Object.keys(row).forEach((k) => {
-        if (!["x", "dateMs", "fileId", "fileName", "TQI"].includes(k)) s.add(k);
+        if (
+          ![
+            "x",
+            "dateMs",
+            "fileId",
+            "fileName",
+            "sourceProvider",
+            "sourceRef",
+            "sourcePath",
+            "sourceDetails",
+            "TQI",
+          ].includes(k)
+        ) {
+          s.add(k);
+        }
       });
     });
     return Array.from(s);
@@ -83,13 +102,25 @@ export default function TQIQAPlot({
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
     const row = payload[0].payload as any;
-    const when = new Date(row.dateMs).toLocaleString();
+    const metadataLines = buildProjectFileMetadataLines({
+      fileName: row.fileName,
+      fileDateISO: new Date(row.dateMs).toISOString(),
+      sourceProvider: row.sourceProvider,
+      sourceRef: row.sourceRef,
+      sourcePath: row.sourcePath,
+      sourceDetails: row.sourceDetails,
+    });
     return (
       <div
         className="rounded-md border border-[#ddd] bg-white p-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
       >
         <div className="mb-0.5 font-semibold">{row.fileName}</div>
-        <div className="mb-1.5 opacity-80">{when}</div>
+        {metadataLines.map((line: string, index: number) => (
+          <div key={`${line}-${index}`} className="opacity-80">
+            {line}
+          </div>
+        ))}
+        <div className="mb-1.5" />
         <div className="flex items-center gap-1.5">
           <span
             className="h-2.5 w-2.5 rounded-full"
