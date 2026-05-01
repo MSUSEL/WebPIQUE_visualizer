@@ -37,7 +37,7 @@ jobs:
             const fs = require('fs');
             const report = fs.readFileSync('audit-report.txt', 'utf8');
             const body = [
-              '@HastingsY',
+              '@ErnestoOrtiz3',
               '',
               'npm audit report uploaded as artifact: `npm-audit-report`.',
               '',
