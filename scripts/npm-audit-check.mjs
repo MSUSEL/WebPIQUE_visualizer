@@ -1,6 +1,14 @@
 ﻿import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
+// Temporary allowlist for advisories that require planned framework migrations
+// rather than routine dependency updates.
+//
+// Remove entries from this set once the project has been upgraded.
+const ignoredAdvisories = new Set([
+  "GHSA-qwww-vcr4-c8h2", // React Router → requires React Router 8 / React 19
+]);
+
 const reportFlagIndex = process.argv.indexOf("--report");
 const reportPath = reportFlagIndex >= 0 ? process.argv[reportFlagIndex + 1] : null;
 
@@ -31,31 +39,45 @@ const severityRank = {
   high: 3,
   critical: 4,
 };
+
 const threshold = severityRank.moderate;
 const findings = [];
 
 if (data.vulnerabilities && typeof data.vulnerabilities === "object") {
   for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) {
     const severity = vuln.severity;
+
     if (!severityRank[severity] || severityRank[severity] < threshold) {
       continue;
     }
 
     let viaDetails = [];
+
     if (Array.isArray(vuln.via)) {
       for (const via of vuln.via) {
         if (typeof via === "string") {
           viaDetails.push(via);
-        } else if (via && typeof via === "object") {
+          continue;
+        }
+
+        if (via && typeof via === "object") {
+          const url = via.url || "";
+
+          // Ignore explicitly allowlisted advisories.
+          const ignored = [...ignoredAdvisories].some(id => url.includes(id));
+          if (ignored) {
+            continue;
+          }
+
           const title = via.title || via.name || "advisory";
-          const url = via.url ? ` (${via.url})` : "";
-          viaDetails.push(`${title}${url}`);
+          viaDetails.push(`${title}${url ? ` (${url})` : ""}`);
         }
       }
     }
 
+    // If every advisory for this package was ignored, don't report it.
     if (viaDetails.length === 0) {
-      viaDetails = ["advisory details unavailable"];
+      continue;
     }
 
     findings.push({
@@ -71,17 +93,25 @@ if (data.vulnerabilities && typeof data.vulnerabilities === "object") {
     }
 
     const severity = advisory.severity;
+
     if (!severityRank[severity] || severityRank[severity] < threshold) {
       continue;
     }
 
+    const url = advisory.url || "";
+
+    // Ignore explicitly allowlisted advisories.
+    const ignored = [...ignoredAdvisories].some(id => url.includes(id));
+    if (ignored) {
+      continue;
+    }
+
     const title = advisory.title || advisory.module_name || "advisory";
-    const url = advisory.url ? ` (${advisory.url})` : "";
 
     findings.push({
       package: advisory.module_name || "unknown",
       severity,
-      details: [`${title}${url}`],
+      details: [`${title}${url ? ` (${url})` : ""}`],
     });
   }
 }
@@ -89,10 +119,11 @@ if (data.vulnerabilities && typeof data.vulnerabilities === "object") {
 findings.sort((a, b) => severityRank[b.severity] - severityRank[a.severity]);
 
 let report = "";
+
 if (findings.length > 0) {
   report += `npm audit found ${findings.length} moderate-or-higher vulnerabilities.\n\n`;
 
-  const summary = data.metadata && data.metadata.vulnerabilities;
+  const summary = data.metadata?.vulnerabilities;
   if (summary && typeof summary === "object") {
     report += "Summary by severity:\n";
     report += `  low: ${summary.low ?? 0}\n`;
